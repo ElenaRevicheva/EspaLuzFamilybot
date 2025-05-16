@@ -2132,10 +2132,12 @@ if __name__ == "__main__":
     try:
         print("🤖 Espaluz starting in webhook mode...")
         bot.remove_webhook()
-        webhook_url = "https://espa-luz-familybot-elenarevicheva2.replit.app/" + TELEGRAM_TOKEN
+        # Get the Replit URL from environment 
+        replit_url = os.getenv('REPLIT_URL', 'https://espa-luz-familybot-elenarevicheva2.replit.app')
+        webhook_url = f"{replit_url}/{TELEGRAM_TOKEN}"
         bot.set_webhook(webhook_url)
         print(f"✅ Webhook set to: {webhook_url}")
-        app.run(host='0.0.0.0', port=8080)
+        app.run(host='0.0.0.0', port=8080, debug=False)
     except Exception as e:
         print(f"❌ Error starting bot: {e}")
 
