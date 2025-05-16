@@ -2098,6 +2098,10 @@ import threading
 import telebot
 import os
 
+# === Initialize core components ===
+app = Flask(__name__)
+bot = telebot.TeleBot(TELEGRAM_TOKEN)
+
 # === Register custom bot commands ===
 custom_commands = [
     BotCommand("start", "Start Espaluz"),
@@ -2106,14 +2110,11 @@ custom_commands = [
     BotCommand("family", "Switch family member"),
     BotCommand("help", "Help and instructions")
 ]
-bot.set_my_commands(custom_commands)
 
-# Initialize Flask app first
-from flask import Flask, request
-app = Flask(__name__)
-
-# Initialize bot once
-bot = telebot.TeleBot(TELEGRAM_TOKEN)
+try:
+    bot.set_my_commands(custom_commands)
+except Exception as e:
+    print(f"Warning: Could not set commands: {e}")
 
 @app.route('/' + TELEGRAM_TOKEN, methods=['POST'])
 def webhook():
@@ -2123,11 +2124,15 @@ def webhook():
 
 # === Start the Flask app with webhook mode ===
 if __name__ == "__main__":
-    print("🤖 Espaluz starting in webhook mode on port 8080...")
-    bot.remove_webhook()
-    webhook_url = f"https://espa-luz-familybot-elenarevicheva2.replit.app/{TELEGRAM_TOKEN}"
-    bot.set_webhook(webhook_url)
-    app.run(host='0.0.0.0', port=8080)
+    try:
+        print("🤖 Espaluz starting in webhook mode...")
+        bot.remove_webhook()
+        webhook_url = f"https://{request.host}/{TELEGRAM_TOKEN}"
+        bot.set_webhook(webhook_url)
+        print(f"✅ Webhook set to: {webhook_url}")
+        app.run(host='0.0.0.0', port=8080)
+    except Exception as e:
+        print(f"❌ Error starting bot: {e}")
 
 
 
