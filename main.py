@@ -2144,9 +2144,13 @@ def home():
 
 @app.route('/' + TELEGRAM_TOKEN, methods=['POST'])
 def webhook():
-    update = telebot.types.Update.de_json(request.stream.read().decode('utf-8'))
-    bot.process_new_updates([update])
-    return "OK"
+    if request.headers.get('content-type') == 'application/json':
+        json_string = request.get_data().decode('utf-8')
+        update = telebot.types.Update.de_json(json_string)
+        bot.process_new_updates([update])
+        return "OK"
+    else:
+        return "Bad Request - Wrong content type", 400
 
 # === Start the Flask app with webhook mode ===
 if __name__ == "__main__":
