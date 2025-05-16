@@ -2175,7 +2175,7 @@ if __name__ == "__main__":
                 print("❌ Failed to set webhook")
         except Exception as e:
             print(f"❌ Webhook error: {e}")
-            return
+            raise  # Raise the exception instead of return
             
         print("🚀 Starting Flask server...")
         app.run(host='0.0.0.0', port=8080, debug=False, threaded=True)
