@@ -2108,17 +2108,14 @@ custom_commands = [
 ]
 bot.set_my_commands(custom_commands)
 
-# ✅ Load bot token from environment
-TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
-
-# ✅ Initialize Telebot
-bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
-
-# Initialize Flask app
+# Initialize Flask app first
 from flask import Flask, request
 app = Flask(__name__)
 
-@app.route('/' + TELEGRAM_BOT_TOKEN, methods=['POST'])
+# Initialize bot once
+bot = telebot.TeleBot(TELEGRAM_TOKEN)
+
+@app.route('/' + TELEGRAM_TOKEN, methods=['POST'])
 def webhook():
     update = telebot.types.Update.de_json(request.stream.read().decode('utf-8'))
     bot.process_new_updates([update])
@@ -2127,14 +2124,9 @@ def webhook():
 # === Start the Flask app with webhook mode ===
 if __name__ == "__main__":
     print("🤖 Espaluz starting in webhook mode on port 8080...")
-    # Remove existing webhook
     bot.remove_webhook()
-    
-    # Set new webhook
-    webhook_url = f"https://espa-luz-familybot-elenarevicheva2.replit.app/{TELEGRAM_BOT_TOKEN}"
+    webhook_url = f"https://espa-luz-familybot-elenarevicheva2.replit.app/{TELEGRAM_TOKEN}"
     bot.set_webhook(webhook_url)
-    
-    # Start Flask app
     app.run(host='0.0.0.0', port=8080)
 
 
