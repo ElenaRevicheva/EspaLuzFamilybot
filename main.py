@@ -2144,13 +2144,19 @@ def home():
 
 @app.route('/' + TELEGRAM_TOKEN, methods=['POST'])
 def webhook():
-    if request.headers.get('content-type') == 'application/json':
-        json_string = request.get_data().decode('utf-8')
-        update = telebot.types.Update.de_json(json_string)
-        bot.process_new_updates([update])
-        return "OK"
-    else:
-        return "Bad Request - Wrong content type", 400
+    try:
+        if request.headers.get('content-type') == 'application/json':
+            json_string = request.get_data().decode('utf-8')
+            print(f"Received webhook data: {json_string[:100]}...")  # Log first 100 chars
+            update = telebot.types.Update.de_json(json_string)
+            bot.process_new_updates([update])
+            return "OK"
+        else:
+            print(f"Received invalid content-type: {request.headers.get('content-type')}")
+            return "Bad Request - Wrong content type", 400
+    except Exception as e:
+        print(f"Webhook processing error: {e}")
+        return "Internal error", 500
 
 # === Start the Flask app with webhook mode ===
 if __name__ == "__main__":
@@ -2167,15 +2173,17 @@ if __name__ == "__main__":
         # Remove and set webhook with proper error handling
         try:
             bot.remove_webhook()
-            time.sleep(1)
-            status = bot.set_webhook(webhook_url)
-            if status:
-                print(f"✅ Webhook set successfully to: {webhook_url}")
+            time.sleep(2)  # Increased delay
+            print("Attempting to set webhook...")
+            bot.set_webhook(url=webhook_url)
+            webhook_info = bot.get_webhook_info()
+            if webhook_info.url == webhook_url:
+                print(f"✅ Webhook set and verified at: {webhook_url}")
             else:
-                print("❌ Failed to set webhook")
+                print("❌ Webhook verification failed")
         except Exception as e:
             print(f"❌ Webhook error: {e}")
-            raise  # Raise the exception instead of return
+            # Don't raise, let's keep running
             
         print("🚀 Starting Flask server...")
         app.run(host='0.0.0.0', port=8080, debug=False, threaded=True)
