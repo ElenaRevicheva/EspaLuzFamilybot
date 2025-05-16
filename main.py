@@ -2112,19 +2112,27 @@ custom_commands = [
     BotCommand("help", "Help and instructions")
 ]
 
-def register_commands_with_retry(max_retries=3, delay=5):
-    """Register bot commands with retry logic and longer delays"""
+def register_commands_with_retry(max_retries=5, initial_delay=10):
+    """Register bot commands with more aggressive exponential backoff"""
     for attempt in range(max_retries):
         try:
-            time.sleep(delay * (attempt + 1))  # Exponential backoff
+            # Exponential backoff with longer initial delay
+            current_delay = initial_delay * (2 ** attempt)
+            time.sleep(current_delay)
+            
             bot.set_my_commands(custom_commands)
             print("✅ Bot commands registered successfully")
             return
         except Exception as e:
             print(f"Warning: Could not set commands (attempt {attempt + 1}/{max_retries}): {e}")
             if "Too Many Requests" in str(e):
-                retry_after = int(str(e).split("retry after ")[1].split()[0])
-                time.sleep(retry_after)  # Honor Telegram's retry-after
+                try:
+                    # Extract retry time and add buffer
+                    retry_after = int(str(e).split("retry after ")[1].split()[0])
+                    time.sleep(retry_after + 5)
+                except:
+                    # Fallback if can't parse retry time
+                    time.sleep(current_delay * 2)
     print("❌ Failed to register commands after all retries")
 
 # Register commands with retry
@@ -2145,25 +2153,17 @@ if __name__ == "__main__":
     try:
         print("🤖 Espaluz starting in webhook mode...")
         
-        # Start Flask app in a separate thread to have request context
-        from threading import Thread
-        server = Thread(target=lambda: app.run(host='0.0.0.0', port=8080, debug=False))
-        server.daemon = True
-        server.start()
-
-        # Configure webhook with longer delays
-        time.sleep(2)  # Increased delay
+        # Configure webhook first
+        time.sleep(2)
         bot.remove_webhook()
-        time.sleep(2)  # Increased delay
+        time.sleep(2)
         
-        # Use direct URL without environment lookup
         webhook_url = "https://espa-luz-familybot-elenarevicheva2.replit.app/" + TELEGRAM_TOKEN
         bot.set_webhook(webhook_url)
         print(f"✅ Webhook set to: {webhook_url}")
         
-        # Keep main thread alive
-        while True:
-            time.sleep(60)
+        # Start Flask app in main thread
+        app.run(host='0.0.0.0', port=8080, debug=False, threaded=True)
             
     except Exception as e:
         print(f"❌ Error starting bot: {e}")
