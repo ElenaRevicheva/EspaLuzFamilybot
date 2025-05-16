@@ -2162,15 +2162,27 @@ if __name__ == "__main__":
         bot.remove_webhook()
         time.sleep(2)
         
-        webhook_url = "https://espa-luz-familybot-elenarevicheva2.replit.app/" + TELEGRAM_TOKEN
-        bot.set_webhook(webhook_url)
-        print(f"✅ Webhook set to: {webhook_url}")
+        webhook_url = f"https://espa-luz-familybot-elenarevicheva2.replit.app/{TELEGRAM_TOKEN}"
         
-        # Start Flask app in main thread
+        # Remove and set webhook with proper error handling
+        try:
+            bot.remove_webhook()
+            time.sleep(1)
+            status = bot.set_webhook(webhook_url)
+            if status:
+                print(f"✅ Webhook set successfully to: {webhook_url}")
+            else:
+                print("❌ Failed to set webhook")
+        except Exception as e:
+            print(f"❌ Webhook error: {e}")
+            return
+            
+        print("🚀 Starting Flask server...")
         app.run(host='0.0.0.0', port=8080, debug=False, threaded=True)
             
     except Exception as e:
         print(f"❌ Error starting bot: {e}")
+        raise  # Re-raise to see full error stack
 
 
 

@@ -6,14 +6,25 @@ token = os.environ["TELEGRAM_BOT_TOKEN"]
 url = f"https://espa-luz-familybot-elenarevicheva2.replit.app/{token}"
 
 # First remove any existing webhook
-requests.get(f"https://api.telegram.org/bot{token}/deleteWebhook")
+response = requests.get(f"https://api.telegram.org/bot{token}/deleteWebhook")
+print("Delete webhook response:", response.text)
+
+# Wait a moment
+time.sleep(2)
 
 # Set new webhook with proper parameters
-r = requests.get(
+webhook_data = {
+    "url": url,
+    "allowed_updates": ["message", "edited_message", "callback_query"],
+    "drop_pending_updates": True
+}
+
+response = requests.post(
     f"https://api.telegram.org/bot{token}/setWebhook",
-    params={
-        "url": url,
-        "allowed_updates": ["message", "edited_message", "callback_query"]
-    }
+    json=webhook_data
 )
-print(r.text)
+print("Set webhook response:", response.text)
+
+# Verify webhook info
+info_response = requests.get(f"https://api.telegram.org/bot{token}/getWebhookInfo")
+print("Webhook info:", info_response.text)
