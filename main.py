@@ -2114,10 +2114,17 @@ TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 # ✅ Initialize Telebot
 bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
 
-# === Start the bot in polling mode ===
+# === Start the Flask app with webhook mode ===
 if __name__ == "__main__":
-    print("🤖 Espaluz is running in polling mode...")
-    bot.infinity_polling(timeout=60, long_polling_timeout=60)
+    print("🤖 Espaluz starting in webhook mode on port 8080...")
+    # Remove any existing webhook
+    bot.remove_webhook()
+    time.sleep(1)
+    # Set webhook
+    webhook_url = f"https://espa-luz-familybot-elenarevicheva2.replit.app/{TELEGRAM_BOT_TOKEN}"
+    bot.set_webhook(url=webhook_url)
+    # Start Flask app
+    app.run(host='0.0.0.0', port=8080)
 
 
 
