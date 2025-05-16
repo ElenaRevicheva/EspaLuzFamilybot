@@ -2128,7 +2128,7 @@ if __name__ == "__main__":
     try:
         print("🤖 Espaluz starting in webhook mode...")
         bot.remove_webhook()
-        webhook_url = f"https://{request.host}/{TELEGRAM_TOKEN}"
+        webhook_url = "https://espa-luz-familybot-elenarevicheva2.replit.app/" + TELEGRAM_TOKEN
         bot.set_webhook(webhook_url)
         print(f"✅ Webhook set to: {webhook_url}")
         app.run(host='0.0.0.0', port=8080)
