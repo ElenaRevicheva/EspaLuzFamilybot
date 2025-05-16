@@ -2144,13 +2144,22 @@ def home():
 
 @app.route('/' + TELEGRAM_TOKEN, methods=['POST'])
 def webhook():
-    if request.headers.get('content-type') == 'application/json':
-        json_string = request.get_data().decode('utf-8')
-        update = telebot.types.Update.de_json(json_string)
-        bot.process_new_updates([update])
-        return '', 200
-    else:
-        return '', 403
+    try:
+        if request.headers.get('content-type') == 'application/json':
+            json_string = request.get_data().decode('utf-8')
+            update = telebot.types.Update.de_json(json_string)
+            if update:
+                bot.process_new_updates([update])
+                return '', 200
+            else:
+                print("Failed to parse update")
+                return "Failed to parse update", 400
+        else:
+            print(f"Invalid content-type: {request.headers.get('content-type')}")
+            return '', 403
+    except Exception as e:
+        print(f"Webhook error: {str(e)}")
+        return "Internal error", 500
 
 # === Start the Flask app with webhook mode ===
 if __name__ == "__main__":
