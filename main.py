@@ -2117,6 +2117,10 @@ try:
 except Exception as e:
     print(f"Warning: Could not set commands: {e}")
 
+@app.route('/')
+def home():
+    return "Espaluz Bot is running!"
+
 @app.route('/' + TELEGRAM_TOKEN, methods=['POST'])
 def webhook():
     update = telebot.types.Update.de_json(request.stream.read().decode('utf-8'))
