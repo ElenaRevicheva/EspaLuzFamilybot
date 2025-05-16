@@ -2114,10 +2114,19 @@ TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 # ✅ Initialize Telebot
 bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
 
-# === Start the bot in polling mode ===
+# Initialize Flask app
+app = Flask(__name__)
+
+@app.route('/' + TELEGRAM_BOT_TOKEN, methods=['POST'])
+def webhook():
+    update = telebot.types.Update.de_json(request.stream.read().decode('utf-8'))
+    bot.process_new_updates([update])
+    return "OK"
+
+# === Start the Flask app with webhook mode ===
 if __name__ == "__main__":
-    print("🤖 Espaluz is running in polling mode...")
-    bot.infinity_polling(timeout=60, long_polling_timeout=60)
+    print("🤖 Espaluz starting in webhook mode on port 8080...")
+
 
 
 
