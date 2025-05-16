@@ -2165,14 +2165,20 @@ def webhook():
 if __name__ == "__main__":
     try:
         print("🤖 Espaluz starting in polling mode...")
-        # Remove webhook with proper delay
+        # Remove webhook and wait
         bot.remove_webhook()
-        time.sleep(2)  # Give time for webhook to be removed
+        time.sleep(1)
         
-        # Configure polling with good defaults
-        bot.infinity_polling(timeout=20, long_polling_timeout=5)
+        # Start polling with optimized parameters
+        bot.infinity_polling(
+            timeout=10,
+            long_polling_timeout=5,
+            logger_level=None,
+            allowed_updates=["message", "edited_message", "callback_query"]
+        )
     except Exception as e:
         print(f"❌ Bot error: {e}")
+        raise e  # Show full error
 
 
 
