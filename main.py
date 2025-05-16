@@ -2172,14 +2172,18 @@ if __name__ == "__main__":
         time.sleep(2)
         
         webhook_url = f"https://espa-luz-familybot-elenarevicheva2.replit.app/{TELEGRAM_TOKEN}"
-bot.remove_webhook()
-time.sleep(2)
-bot.set_webhook(url=webhook_url, allowed_updates=["message", "edited_message", "callback_query"])
-webhook_info = bot.get_webhook_info()
-print(f"Webhook info after setup: {webhook_info}")
-        
-        # Remove and set webhook with proper error handling
-        try:
+
+try:
+    bot.remove_webhook()
+    time.sleep(2)
+    bot.set_webhook(url=webhook_url, allowed_updates=["message", "edited_message", "callback_query"])
+    webhook_info = bot.get_webhook_info()
+    print(f"Webhook info after setup: {webhook_info}")
+except Exception as e:
+    print(f"Error setting webhook: {e}")
+
+# Remove and set webhook with proper error handling
+try:
             bot.remove_webhook()
             time.sleep(2)  # Increased delay
             print("Attempting to set webhook...")
