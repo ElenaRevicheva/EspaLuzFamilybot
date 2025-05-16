@@ -2161,34 +2161,14 @@ def webhook():
         print(f"Webhook error: {str(e)}")
         return "Internal error", 500
 
-# === Start the Flask app with webhook mode ===
+# === Start the bot with polling mode ===
 if __name__ == "__main__":
     try:
-        print("🤖 Espaluz starting in webhook mode...")
-        
-        # Configure webhook first
-        time.sleep(2)
+        print("🤖 Espaluz starting in polling mode...")
         bot.remove_webhook()
-        time.sleep(2)
-        
-        webhook_url = f"https://espa-luz-familybot-elenarevicheva2.replit.app/{TELEGRAM_TOKEN}"
-
-try:
-    bot.remove_webhook()
-    time.sleep(2)  # Increased delay
-    print("Attempting to set webhook...")
-    bot.set_webhook(url=webhook_url)
-    webhook_info = bot.get_webhook_info()
-    if webhook_info.url == webhook_url:
-        print(f"✅ Webhook set and verified at: {webhook_url}")
-    else:
-        print("❌ Webhook verification failed")
-except Exception as e:
-    print(f"❌ Webhook error: {e}")
-    # Don't raise, let's keep running
-
-print("🚀 Starting Flask server...")
-app.run(host='0.0.0.0', port=8080, debug=False, threaded=True)
+        bot.infinity_polling()
+    except Exception as e:
+        print(f"❌ Bot error: {e}")
 
 
 
