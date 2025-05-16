@@ -2099,6 +2099,7 @@ import telebot
 import os
 
 # === Initialize core components ===
+from flask import Flask, request
 app = Flask(__name__)
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
