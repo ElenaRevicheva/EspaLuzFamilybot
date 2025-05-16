@@ -2098,6 +2098,11 @@ import threading
 import telebot
 import os
 
+# === Initialize core components ===
+from flask import Flask, request
+app = Flask(__name__)
+bot = telebot.TeleBot(TELEGRAM_TOKEN)
+
 # === Register custom bot commands ===
 custom_commands = [
     BotCommand("start", "Start Espaluz"),
@@ -2106,26 +2111,80 @@ custom_commands = [
     BotCommand("family", "Switch family member"),
     BotCommand("help", "Help and instructions")
 ]
-bot.set_my_commands(custom_commands)
 
-# ✅ Load bot token from environment
-TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
+def register_commands_with_retry(max_retries=5, initial_delay=10):
+    """Register bot commands with more aggressive exponential backoff"""
+    for attempt in range(max_retries):
+        try:
+            # Exponential backoff with longer initial delay
+            current_delay = initial_delay * (2 ** attempt)
+            time.sleep(current_delay)
+            
+            bot.set_my_commands(custom_commands)
+            print("✅ Bot commands registered successfully")
+            return
+        except Exception as e:
+            print(f"Warning: Could not set commands (attempt {attempt + 1}/{max_retries}): {e}")
+            if "Too Many Requests" in str(e):
+                try:
+                    # Extract retry time and add buffer
+                    retry_after = int(str(e).split("retry after ")[1].split()[0])
+                    time.sleep(retry_after + 5)
+                except:
+                    # Fallback if can't parse retry time
+                    time.sleep(current_delay * 2)
+    print("❌ Failed to register commands after all retries")
 
-# ✅ Initialize Telebot
-bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN)
+# Register commands with retry
+register_commands_with_retry()
 
-# Initialize Flask app
-app = Flask(__name__)
+@app.route('/')
+def home():
+    return "Espaluz Bot is running!"
 
-@app.route('/' + TELEGRAM_BOT_TOKEN, methods=['POST'])
+@app.route('/' + TELEGRAM_TOKEN, methods=['POST'])
 def webhook():
-    update = telebot.types.Update.de_json(request.stream.read().decode('utf-8'))
-    bot.process_new_updates([update])
-    return "OK"
+    if request.headers.get('content-type') == 'application/json':
+        json_string = request.get_data().decode('utf-8')
+        update = telebot.types.Update.de_json(json_string)
+        bot.process_new_updates([update])
+        return '', 200
+    else:
+        return '', 403
 
 # === Start the Flask app with webhook mode ===
 if __name__ == "__main__":
-    print("🤖 Espaluz starting in webhook mode on port 8080...")
+    try:
+        print("🤖 Espaluz starting in webhook mode...")
+        
+        # Configure webhook first
+        time.sleep(2)
+        bot.remove_webhook()
+        time.sleep(2)
+        
+        webhook_url = f"https://espa-luz-familybot-elenarevicheva2.replit.app/{TELEGRAM_TOKEN}"
+        
+        # Remove and set webhook with proper error handling
+        try:
+            bot.remove_webhook()
+            time.sleep(2)  # Increased delay
+            print("Attempting to set webhook...")
+            bot.set_webhook(url=webhook_url)
+            webhook_info = bot.get_webhook_info()
+            if webhook_info.url == webhook_url:
+                print(f"✅ Webhook set and verified at: {webhook_url}")
+            else:
+                print("❌ Webhook verification failed")
+        except Exception as e:
+            print(f"❌ Webhook error: {e}")
+            # Don't raise, let's keep running
+            
+        print("🚀 Starting Flask server...")
+        app.run(host='0.0.0.0', port=8080, debug=False, threaded=True)
+            
+    except Exception as e:
+        print(f"❌ Error starting bot: {e}")
+        raise  # Re-raise to see full error stack
 
 
 
