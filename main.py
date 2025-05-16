@@ -2144,35 +2144,13 @@ def home():
 
 @app.route('/' + TELEGRAM_TOKEN, methods=['POST'])
 def webhook():
-    try:
-        print("Webhook received")
-        content_type = request.headers.get('content-type')
-        print(f"Content-Type: {content_type}")
-        
-        if content_type == 'application/json':
-            json_string = request.get_data().decode('utf-8')
-            print(f"Request data: {json_string[:200]}...")  # Log more data
-            
-            update = telebot.types.Update.de_json(json_string)
-            print(f"Update object created: {update}")
-            
-            if update:
-                print(f"Processing update type: {update.message and 'message' or 'other'}")
-                bot.process_new_updates([update])
-                print("Update processed successfully")
-                return "OK", 200
-            else:
-                print("Failed to create Update object")
-                return "Failed to parse update", 400
-        else:
-            print(f"Invalid content-type received: {content_type}")
-            return "Bad Request - Wrong content type", 400
-            
-    except Exception as e:
-        import traceback
-        print(f"Webhook error: {e}")
-        print(f"Traceback: {traceback.format_exc()}")
-        return "Internal error", 500
+    if request.headers.get('content-type') == 'application/json':
+        json_string = request.get_data().decode('utf-8')
+        update = telebot.types.Update.de_json(json_string)
+        bot.process_new_updates([update])
+        return '', 200
+    else:
+        return '', 403
 
 # === Start the Flask app with webhook mode ===
 if __name__ == "__main__":
