@@ -2175,34 +2175,20 @@ if __name__ == "__main__":
 
 try:
     bot.remove_webhook()
-    time.sleep(2)
-    bot.set_webhook(url=webhook_url, allowed_updates=["message", "edited_message", "callback_query"])
+    time.sleep(2)  # Increased delay
+    print("Attempting to set webhook...")
+    bot.set_webhook(url=webhook_url)
     webhook_info = bot.get_webhook_info()
-    print(f"Webhook info after setup: {webhook_info}")
+    if webhook_info.url == webhook_url:
+        print(f"✅ Webhook set and verified at: {webhook_url}")
+    else:
+        print("❌ Webhook verification failed")
 except Exception as e:
-    print(f"Error setting webhook: {e}")
+    print(f"❌ Webhook error: {e}")
+    # Don't raise, let's keep running
 
-# Remove and set webhook with proper error handling
-try:
-            bot.remove_webhook()
-            time.sleep(2)  # Increased delay
-            print("Attempting to set webhook...")
-            bot.set_webhook(url=webhook_url)
-            webhook_info = bot.get_webhook_info()
-            if webhook_info.url == webhook_url:
-                print(f"✅ Webhook set and verified at: {webhook_url}")
-            else:
-                print("❌ Webhook verification failed")
-        except Exception as e:
-            print(f"❌ Webhook error: {e}")
-            # Don't raise, let's keep running
-            
-        print("🚀 Starting Flask server...")
-        app.run(host='0.0.0.0', port=8080, debug=False, threaded=True)
-            
-    except Exception as e:
-        print(f"❌ Error starting bot: {e}")
-        raise  # Re-raise to see full error stack
+print("🚀 Starting Flask server...")
+app.run(host='0.0.0.0', port=8080, debug=False, threaded=True)
 
 
 
