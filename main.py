@@ -2112,10 +2112,20 @@ custom_commands = [
     BotCommand("help", "Help and instructions")
 ]
 
-try:
-    bot.set_my_commands(custom_commands)
-except Exception as e:
-    print(f"Warning: Could not set commands: {e}")
+def register_commands_with_retry(max_retries=3, delay=2):
+    """Register bot commands with retry logic"""
+    for attempt in range(max_retries):
+        try:
+            time.sleep(delay)  # Wait before attempting
+            bot.set_my_commands(custom_commands)
+            print("✅ Bot commands registered successfully")
+            return
+        except Exception as e:
+            print(f"Warning: Could not set commands (attempt {attempt + 1}/{max_retries}): {e}")
+    print("❌ Failed to register commands after all retries")
+
+# Register commands with retry
+register_commands_with_retry()
 
 @app.route('/')
 def home():
@@ -2131,12 +2141,17 @@ def webhook():
 if __name__ == "__main__":
     try:
         print("🤖 Espaluz starting in webhook mode...")
+        # Add delay to avoid rate limiting
+        time.sleep(1)
         bot.remove_webhook()
-        # Get the Replit URL from environment 
-        replit_url = os.getenv('REPLIT_URL', 'https://espa-luz-familybot-elenarevicheva2.replit.app')
-        webhook_url = f"{replit_url}/{TELEGRAM_TOKEN}"
+        time.sleep(1)  # Add delay between API calls
+        
+        # Use direct URL without environment lookup
+        webhook_url = "https://espa-luz-familybot-elenarevicheva2.replit.app/" + TELEGRAM_TOKEN
         bot.set_webhook(webhook_url)
         print(f"✅ Webhook set to: {webhook_url}")
+        
+        # Run Flask app
         app.run(host='0.0.0.0', port=8080, debug=False)
     except Exception as e:
         print(f"❌ Error starting bot: {e}")
