@@ -1805,19 +1805,24 @@ def handle_start(message):
     family_member = user_sessions[user_id]["context"]["user"]["preferences"]["family_role"]
     member_info = FAMILY_MEMBERS.get(family_member, FAMILY_MEMBERS["elena"])
 
-    welcome_msg = "👋 ¡Hola! Soy Espaluz, tu asistente de idiomas. / Hello! I'm Espaluz, your language assistant."
+    welcome_msg = (
+        "👋 ¡Hola! Soy Espaluz, tu asistente de idiomas. / Hello! I'm Espaluz, your language assistant.\n\n"
+        "☕ *If you enjoy Espaluz and want to support this project,*\n"
+        "👉 [Buy me a coffee](https://buymeacoffee.com/aideazz)\n\n"
+        "Your support helps families learn Spanish with emotional, intelligent AI 💛\n\n"
+    )
 
     if family_member == "alisa":
-        welcome_msg += "\n\n🎮 ¡Vamos a aprender español y inglés jugando! / Let's learn Spanish and English while playing!"
+        welcome_msg += "🎮 ¡Vamos a aprender español y inglés jugando! / Let's learn Spanish and English while playing!"
     elif family_member == "marina":
-        welcome_msg += "\n\n📚 Estoy aquí para ayudarte a aprender español e inglés a tu ritmo. / I'm here to help you learn Spanish and English at your own pace."
+        welcome_msg += "📚 Estoy aquí para ayudarte a aprender español e inglés a tu ritmo. / I'm here to help you learn Spanish and English at your own pace."
     else:
-        welcome_msg += "\n\n🗣️ Estoy aquí para ayudarte con tus necesidades de idiomas. / I'm here to help with your language needs."
+        welcome_msg += "🗣️ Estoy aquí para ayudarte con tus necesidades de idiomas. / I'm here to help with your language needs."
 
     welcome_msg += "\n\nEnvíame un mensaje de voz o texto para comenzar. / Send me a voice or text message to begin."
     welcome_msg += "\n\n📸 ¡También puedes enviarme fotos de texto para traducirlo! / You can also send me photos of text to translate it!"
 
-    bot.reply_to(message, welcome_msg)
+    bot.reply_to(message, welcome_msg, parse_mode="Markdown")
 
 @bot.message_handler(commands=["reset"])
 def handle_reset(message):
@@ -2095,13 +2100,7 @@ debug_files_and_env()
 
 from telebot.types import BotCommand
 import threading
-import telebot
 import os
-
-# === Initialize core components ===
-from flask import Flask, request
-app = Flask(__name__)
-bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
 # === Register custom bot commands ===
 custom_commands = [
@@ -2119,7 +2118,7 @@ def register_commands_with_retry(max_retries=5, initial_delay=10):
             # Exponential backoff with longer initial delay
             current_delay = initial_delay * (2 ** attempt)
             time.sleep(current_delay)
-            
+
             bot.set_my_commands(custom_commands)
             print("✅ Bot commands registered successfully")
             return
@@ -2138,58 +2137,145 @@ def register_commands_with_retry(max_retries=5, initial_delay=10):
 # Register commands with retry
 register_commands_with_retry()
 
-@app.route('/')
-def home():
-    return "Espaluz Bot is running!"
-
-@app.route('/' + TELEGRAM_TOKEN, methods=['POST'])
-def webhook():
+# Fix photo handler - make it more resilient to errors
+@bot.message_handler(content_types=["photo"])
+def handle_photo(message):
+    """Handle photo message with text recognition and translation"""
     try:
-        if request.headers.get('content-type') == 'application/json':
-            json_string = request.get_data().decode('utf-8')
-            update = telebot.types.Update.de_json(json_string)
-            if update:
-                bot.process_new_updates([update])
-                return '', 200
-            else:
-                print("Failed to parse update")
-                return "Failed to parse update", 400
-        else:
-            print(f"Invalid content-type: {request.headers.get('content-type')}")
-            return '', 403
+        # Step 1: Send processing message
+        processing_msg = bot.send_message(message.chat.id, "🔍 Procesando imagen... / Processing image...")
+
+        # Step 2: Download the photo - with error handling
+        try:
+            file_id = message.photo[-1].file_id
+            file_info = bot.get_file(file_id)
+            photo_file = bot.download_file(file_info.file_path)
+        except Exception as e:
+            bot.edit_message_text(f"❌ Error downloading photo: {str(e)}",
+                                  chat_id=message.chat.id,
+                                  message_id=processing_msg.message_id)
+            return
+
+        # Step 3: Notify user we're analyzing
+        bot.edit_message_text("🔍 Analizando texto... / Analyzing text...",
+                              chat_id=message.chat.id,
+                              message_id=processing_msg.message_id)
+
+        # Step 4: Extract text from photo
+        try:
+            result = process_photo(photo_file)
+
+            if not result or "Error processing image" in result or "No text found" in result:
+                bot.edit_message_text(f"❌ {result or 'No se detectó texto en la imagen. / No text detected in the image.'}",
+                                      chat_id=message.chat.id,
+                                      message_id=processing_msg.message_id)
+                return
+        except Exception as e:
+            bot.edit_message_text(f"❌ Error processing image: {str(e)}",
+                                  chat_id=message.chat.id,
+                                  message_id=processing_msg.message_id)
+            return
+
+        # Step 5: Show extracted translation result
+        bot.edit_message_text("📷 Resultado / Result:\n\n" + result,
+                              chat_id=message.chat.id,
+                              message_id=processing_msg.message_id)
+
+        # Step 6: Enhance learning
+        try:
+            user_id = str(message.from_user.id)
+            if user_id in user_sessions:
+                family_member = user_sessions[user_id]["context"]["user"]["preferences"]["family_role"]
+                learned_items = identify_language_learning_content(result, family_member)
+                user_sessions[user_id] = update_session_learning(user_sessions[user_id], learned_items)
+        except Exception as e:
+            print(f"Warning: Could not update learning data: {e}")
+
+        # Step 7: Ask Claude for an explanation - with error handling
+        try:
+            explanation_prompt = f"""The user sent a photo with text, and I extracted the following information:
+
+{result}
+
+Please provide a brief educational explanation about this text that could be helpful for a Russian expat in Panama. 
+Focus on any cultural context, vocabulary insights, or practical usage tips that would help them understand and remember this content.
+Keep your response concise and helpful."""
+
+            if user_id in user_sessions:
+                session = user_sessions[user_id]
+                session["messages"].append({"role": "user", "content": explanation_prompt})
+                full_reply, short_reply, thinking_process = ask_claude_with_mcp(session, None)
+
+                # 🧹 Remove [VIDEO SCRIPT] block safely
+                full_reply_cleaned = re.sub(r"\[VIDEO SCRIPT START\](.*?)\[VIDEO SCRIPT END\]", "", full_reply, flags=re.DOTALL).strip()
+
+                # ✅ Safe chunking into 4096-character messages
+                MAX_LENGTH = 4096
+                intro = "💡 Explicación / Explanation:\n\n"
+                chunks = []
+
+                while full_reply_cleaned:
+                    chunk = full_reply_cleaned[:MAX_LENGTH - len(intro if not chunks else "")]
+                    split_at = chunk.rfind('\n')
+                    if split_at == -1 or split_at < len(chunk) * 0.5:
+                        split_at = chunk.rfind('.')
+                    if split_at != -1:
+                        chunk = chunk[:split_at + 1]
+                    chunks.append((intro if not chunks else "") + chunk.strip())
+                    full_reply_cleaned = full_reply_cleaned[len(chunk):].strip()
+
+                for chunk in chunks:
+                    bot.send_message(message.chat.id, chunk)
+
+                # Save explanation
+                session["messages"].append({"role": "assistant", "content": full_reply})
+                learned_items = enhance_language_learning_detection(full_reply_cleaned, family_member, session)
+                user_sessions[user_id] = update_session_learning(user_sessions[user_id], learned_items)
+        except Exception as e:
+            bot.send_message(message.chat.id, f"❌ Error getting explanation: {str(e)}")
+
     except Exception as e:
-        print(f"Webhook error: {str(e)}")
-        return "Internal error", 500
+        try:
+            bot.send_message(message.chat.id, f"❌ Error general procesando la imagen: {str(e)}")
+        except:
+            print(f"Failed to send error message: {e}")
+
+print("✅ Espaluz is running THIS UPDATED VERSION: v1.5-emotions (Polling Mode)")
 
 # === Start the bot with polling mode ===
 if __name__ == "__main__":
     try:
         print("🤖 Espaluz starting in polling mode...")
-        
-        # Force remove webhook and wait
+
+        # Optional: Remove any previous webhook set
         bot.remove_webhook()
         time.sleep(2)
-        
-        # Initialize polling with error handling
-        print("Starting polling...")
+
+        # Start polling
+        print("📡 Starting polling...")
         bot.infinity_polling(
-            timeout=20, 
+            timeout=20,
             long_polling_timeout=10,
-            restart_on_exception=True,
-            skip_pending=True,
-            allowed_updates=[
-                "message",
-                "edited_message",
-                "callback_query"
-            ]
+            allowed_updates=["message", "edited_message", "callback_query"]
         )
     except Exception as e:
         print(f"❌ Bot error: {e}")
         import traceback
-        print(traceback.format_exc())
+        traceback.print_exc()
 
+# === Replit-compatible keep-alive server for UptimeRobot ===
+from flask import Flask
+from threading import Thread
 
+keep_alive = Flask(__name__)
 
+@keep_alive.route("/")
+def home():
+    return "✅ Espaluz bot is alive!"
 
+def run():
+    keep_alive.run(host="0.0.0.0", port=8080)
+
+Thread(target=run).start()
 
 
