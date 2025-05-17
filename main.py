@@ -2244,51 +2244,46 @@ print("✅ Espaluz is running THIS UPDATED VERSION: v1.5-emotions (Polling Mode)
 
 # === Start the bot with polling mode ===
 if __name__ == "__main__":
+    import requests
+
     try:
         print("🤖 Espaluz starting in polling mode...")
 
-        # Remove any previous webhook set
+        # Step 1: Remove webhook using bot method
         try:
-            print("Removing webhook...")
-            webhook_removal = bot.remove_webhook()
-            print(f"Webhook removal result: {webhook_removal}")
+            print("Removing webhook with TeleBot...")
+            result = bot.remove_webhook()
+            print(f"✅ bot.remove_webhook() returned: {result}")
 
-            # Double check webhook status
-            webhook_info = bot.get_webhook_info()
-            print(f"Current webhook status: {webhook_info.url or 'No webhook'}")
+            # Step 2: Confirm status via getWebhookInfo
+            info = bot.get_webhook_info()
+            print(f"✅ Webhook URL after removal: {info.url or 'None'}")
 
-            if webhook_info.url:
-                print("WARNING: Webhook still exists, forcing removal again...")
-                import requests
-                TELEGRAM_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
-                response = requests.get(
-                    f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/deleteWebhook?drop_pending_updates=true"
+            if info.url:
+                print("⚠️ Webhook still active — forcing hard delete via API")
+                TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
+                force = requests.get(
+                    f"https://api.telegram.org/bot{TOKEN}/deleteWebhook?drop_pending_updates=true"
                 )
-                print(f"Forced webhook removal result: {response.json()}")
+                print(f"✅ Forced deleteWebhook result: {force.json()}")
 
-        except Exception as e:
-            print(f"❌ Warning: error during webhook removal: {e}")
+        except Exception as we:
+            print(f"❌ Webhook removal error: {we}")
 
-        # Wait to ensure Telegram registers the webhook removal
-        time.sleep(3)
+        # Wait before polling
+        time.sleep(2)
 
-        # Start polling with resilient configuration
-        print("📡 Starting polling with optimized settings...")
+        # Start polling
+        print("📡 Starting polling...")
         bot.infinity_polling(
-    timeout=60,
-    long_polling_timeout=30,
-    allowed_updates=["message", "edited_message", "callback_query"],
-    interval=1,
-    skip_pending=True
-)
-
+            timeout=60,
+            long_polling_timeout=30,
+            allowed_updates=["message", "edited_message", "callback_query"],
+            interval=1,
+            skip_pending=True
+        )
 
     except Exception as e:
-        print(f"❌ Bot critical error: {e}")
+        print(f"❌ CRITICAL ERROR in main: {e}")
         import traceback
         traceback.print_exc()
-
-
-
-
-
