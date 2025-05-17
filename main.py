@@ -2247,35 +2247,48 @@ if __name__ == "__main__":
     try:
         print("🤖 Espaluz starting in polling mode...")
 
-        # Optional: Remove any previous webhook set
-        bot.remove_webhook()
-        time.sleep(2)
+        # Remove any previous webhook set
+        try:
+            print("Removing webhook...")
+            webhook_removal = bot.remove_webhook()
+            print(f"Webhook removal result: {webhook_removal}")
 
-        # Start polling
-        print("📡 Starting polling...")
+            # Double check webhook status
+            webhook_info = bot.get_webhook_info()
+            print(f"Current webhook status: {webhook_info.url or 'No webhook'}")
+
+            if webhook_info.url:
+                print("WARNING: Webhook still exists, forcing removal again...")
+                import requests
+                TELEGRAM_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
+                response = requests.get(
+                    f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/deleteWebhook?drop_pending_updates=true"
+                )
+                print(f"Forced webhook removal result: {response.json()}")
+
+        except Exception as e:
+            print(f"❌ Warning: error during webhook removal: {e}")
+
+        # Wait to ensure Telegram registers the webhook removal
+        time.sleep(3)
+
+        # Start polling with resilient configuration
+        print("📡 Starting polling with optimized settings...")
         bot.infinity_polling(
-            timeout=20,
-            long_polling_timeout=10,
-            allowed_updates=["message", "edited_message", "callback_query"]
+            timeout=60,
+            long_polling_timeout=30,
+            allowed_updates=["message", "edited_message", "callback_query"],
+            non_stop=True,
+            interval=1,
+            skip_pending=True
         )
+
     except Exception as e:
-        print(f"❌ Bot error: {e}")
+        print(f"❌ Bot critical error: {e}")
         import traceback
         traceback.print_exc()
 
-# === Replit-compatible keep-alive server for UptimeRobot ===
-from flask import Flask
-from threading import Thread
 
-keep_alive = Flask(__name__)
 
-@keep_alive.route("/")
-def home():
-    return "✅ Espaluz bot is alive!"
-
-def run():
-    keep_alive.run(host="0.0.0.0", port=8080)
-
-Thread(target=run).start()
 
 
