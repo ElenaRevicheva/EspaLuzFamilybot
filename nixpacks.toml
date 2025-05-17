@@ -1,2 +1,6 @@
-[packages]
-ffmpeg = "*"
+[phases.setup]
+nixPkgs = ["ffmpeg", "python312"]
+
+[start]
+cmd = "python3 main.py"
+
