@@ -2275,13 +2275,13 @@ if __name__ == "__main__":
         # Start polling with resilient configuration
         print("📡 Starting polling with optimized settings...")
         bot.infinity_polling(
-            timeout=60,
-            long_polling_timeout=30,
-            allowed_updates=["message", "edited_message", "callback_query"],
-            non_stop=True,
-            interval=1,
-            skip_pending=True
-        )
+    timeout=60,
+    long_polling_timeout=30,
+    allowed_updates=["message", "edited_message", "callback_query"],
+    interval=1,
+    skip_pending=True
+)
+
 
     except Exception as e:
         print(f"❌ Bot critical error: {e}")
