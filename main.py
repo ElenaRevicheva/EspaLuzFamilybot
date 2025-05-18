@@ -1752,13 +1752,15 @@ def process_photo(photo_file):
 def ultimate_multimedia_generator(chat_id, full_reply, short_reply):
     """Generate both video and voice messages with proper error handling"""
     try:
-        # First attempt: Generate video with the short reply
+        # First, attempt to generate and send the video
+        print("🎬 Starting video generation...")
         video_success = bulletproof_video_generator(chat_id, full_reply)
         
-        # If video failed, send just a voice message with the full reply
-        if not video_success:
-            print("⚠️ Video generation failed, falling back to voice-only")
-            send_full_voice_message(chat_id, full_reply)
+        # Always generate voice message after video attempt, regardless of video success
+        print("🎙️ Starting voice message generation...")
+        send_full_voice_message(chat_id, full_reply)
+        
+        print(f"✅ Multimedia generation complete - Video: {'Success' if video_success else 'Failed'}, Voice: Sent")
             
     except Exception as e:
         print(f"❌ Critical error in multimedia generation: {e}")
