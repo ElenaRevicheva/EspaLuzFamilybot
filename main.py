@@ -1793,38 +1793,6 @@ def process_message(user_input, chat_id, user_id, message_obj):
     # Launch multimedia generation in a thread with clear separation
     print("Starting multimedia generation thread...")
 
-    def ultimate_multimedia_generator(chat_id, full_reply_text, short_reply_text):
-        print("Starting ultimate multimedia generation...")
-
-        # === STEP 1: Create video from short [VIDEO SCRIPT] reply ===
-        success = bulletproof_video_generator(chat_id, full_reply_text)  # 🔥 Fixed here
-        if success:
-            print("Video generation result: SUCCESS")
-        else:
-            print("Video generation result: ❌ FAILURE")
-
-        # === STEP 2: Create full voice message from full text ===
-        try:
-            print(f"Starting voice message generation with text length: {len(full_reply_text)}")
-            # Remove [VIDEO SCRIPT START] block from voice message
-            simplified_text = re.sub(r"\[VIDEO SCRIPT START\](.*?)\[VIDEO SCRIPT END\]", "", full_reply_text, flags=re.DOTALL).strip()
-            print(f"Generating simplified voice message with text length: {len(simplified_text)}")
-
-            tts = gTTS(text=simplified_text, lang="es")
-            voice_path = "simple_voice.mp3"
-            tts.save(voice_path)
-            print(f"Voice file created: {voice_path}, size: {os.path.getsize(voice_path)} bytes")
-
-            with open(voice_path, "rb") as voice_file:
-                bot.send_voice(chat_id, voice_file)
-                print("Voice message sent with ID: ✅")
-
-            os.remove(voice_path)
-            print("Voice message result: SUCCESS\nBoth video and voice completed successfully!")
-
-        except Exception as e:
-            print(f"❌ Error generating voice message: {e}")
-
     media_thread = threading.Thread(
     target=railway_optimized_multimedia,
     args=(chat_id, full_reply),
@@ -1832,16 +1800,17 @@ def process_message(user_input, chat_id, user_id, message_obj):
 )
 media_thread.start()
 
-    # Update learning data without waiting for multimedia to complete
-    print("Updating learning data...")
-    family_member = session["context"]["user"]["preferences"]["family_role"]
-    learned_items = enhance_language_learning_detection(full_reply, family_member, session)
-    session = update_session_learning(session, learned_items)
-    session = adapt_learning_path(session, user_input, full_reply)
-    print("Learning data updated")
+# Update learning data without waiting for multimedia to complete
+print("Updating learning data...")
+family_member = session["context"]["user"]["preferences"]["family_role"]
+learned_items = enhance_language_learning_detection(full_reply, family_member, session)
+session = update_session_learning(session, learned_items)
+session = adapt_learning_path(session, user_input, full_reply)
+print("Learning data updated")
 
 # === HANDLERS ===
 @bot.message_handler(commands=["start"])
+
 def handle_start(message):
     """Handle /start command"""
     user_id = str(message.from_user.id)
