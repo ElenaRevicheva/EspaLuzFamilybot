@@ -1,26 +1,25 @@
 #!/bin/bash
 
-echo "=== RAILWAY TELEGRAM BOT STARTUP ==="
+echo "====== STARTING BOT SERVICES ======="
 
-# First, aggressively clear the webhook with dedicated script
-echo "Step 1: Clearing webhook (forceful method)..."
-python webhook_deleter.py
-
-# If webhook deletion fails, try direct curl approach
-if [ $? -ne 0 ]; then
-    echo "Trying direct curl webhook deletion..."
-    curl -s "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/deleteWebhook?drop_pending_updates=true"
-    curl -s "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/getWebhookInfo"
-fi
-
-# Wait for webhook deletion to settle
-echo "Step 2: Waiting for Telegram API to process deletion..."
-sleep 10
-
-# Make one more verification
-echo "Step 3: Verifying webhook is gone..."
+# First, forcefully ensure webhook is removed
+echo "Initial webhook removal..."
+curl -s "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/deleteWebhook?drop_pending_updates=true"
 curl -s "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/getWebhookInfo"
 
-# Start the bot with polling
-echo "Step 4: Starting bot with polling..."
+# Wait to ensure changes propagate
+echo "Waiting for API changes to propagate..."
+sleep 5
+
+# Start bot-killer in background
+echo "Starting bot-killer monitoring service..."
+python bot-killer.py &
+BOT_KILLER_PID=$!
+echo "Bot killer started with PID: $BOT_KILLER_PID"
+
+# Wait a bit for bot-killer to initialize
+sleep 5
+
+# Start main bot
+echo "Starting main bot..."
 python main.py
