@@ -1790,83 +1790,22 @@ def process_message(user_input, chat_id, user_id, message_obj):
     # Update session with Claude's response
     session["messages"].append({"role": "assistant", "content": full_reply})
 
-    # Launch multimedia generation in a thread with clear separation
+    # Launch multimedia generation in a thread
     print("Starting multimedia generation thread...")
+    media_thread = threading.Thread(
+        target=ultimate_multimedia_generator,
+        args=(chat_id, full_reply, short_reply),
+        daemon=True
+    )
+    media_thread.start()
 
-def ultimate_multimedia_generator(chat_id, full_reply_text, short_reply_text):
-    print("Starting ultimate multimedia generation...")
-
-    # === STEP 1: Create video from short [VIDEO SCRIPT] reply ===
-    success = bulletproof_video_generator(chat_id, full_reply_text)
-    if success:
-        print("Video generation result: SUCCESS")
-    else:
-        print("Video generation result: ❌ FAILURE")
-
-    # === STEP 2: Create full voice message from full text ===
-    try:
-        print(f"Starting voice message generation with text length: {len(full_reply_text)}")
-        # Remove [VIDEO SCRIPT START] block from voice message
-        simplified_text = re.sub(r"\[VIDEO SCRIPT START\](.*?)\[VIDEO SCRIPT END\]", "", full_reply_text, flags=re.DOTALL).strip()
-        print(f"Generating simplified voice message with text length: {len(simplified_text)}")
-
-        # Prepare temp filename
-        timestamp = int(time.time())
-        voice_path = f"voice_{timestamp}.mp3"
-
-        voice_success = False
-        for attempt in range(3):
-            try:
-                print(f"🎤 Voice generation attempt {attempt+1}...")
-                tts = gTTS(text=simplified_text, lang="es", slow=False)
-                tts.save(voice_path)
-
-                if os.path.exists(voice_path) and os.path.getsize(voice_path) > 1000:
-                    with open(voice_path, "rb") as f:
-                        bot.send_voice(chat_id, f)
-                    print(f"✅ Voice sent successfully: {voice_path}")
-                    voice_success = True
-                    break
-                else:
-                    print("⚠️ Voice file too small or missing")
-            except Exception as e:
-                print(f"⚠️ Voice error attempt {attempt+1}: {e}")
-                time.sleep(2)
-
-        if not voice_success:
-            print("❌ Voice generation ultimately failed.")
-            try:
-                bot.send_message(chat_id, "❌ No pude generar mensaje de voz esta vez. / I couldn't generate a voice message this time.")
-            except:
-                pass
-
-        # Clean up
-        if os.path.exists(voice_path):
-            try:
-                os.remove(voice_path)
-                print(f"🧹 Deleted temporary voice file: {voice_path}")
-            except:
-                pass
-
-    except Exception as e:
-        print(f"❌ Fatal error generating voice message: {e}")
-
-
-# === LAUNCH MULTIMEDIA THREAD ===
-media_thread = threading.Thread(
-    target=ultimate_multimedia_generator,
-    args=(chat_id, full_reply, short_reply),
-    daemon=True  # Allow bot to continue if thread gets stuck
-)
-media_thread.start()
-
-# === UPDATE LEARNING DATA ===
-print("Updating learning data...")
-family_member = session["context"]["user"]["preferences"]["family_role"]
-learned_items = enhance_language_learning_detection(full_reply, family_member, session)
-session = update_session_learning(session, learned_items)
-session = adapt_learning_path(session, user_input, full_reply)
-print("Learning data updated")
+    # Update learning data without waiting for multimedia to complete
+    print("Updating learning data...")
+    family_member = session["context"]["user"]["preferences"]["family_role"]
+    learned_items = enhance_language_learning_detection(full_reply, family_member, session)
+    session = update_session_learning(session, learned_items)
+    session = adapt_learning_path(session, user_input, full_reply)
+    print("Learning data updated")
 
 # === HANDLERS ===
 @bot.message_handler(commands=["start"])
