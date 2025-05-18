@@ -1826,11 +1826,11 @@ def process_message(user_input, chat_id, user_id, message_obj):
             print(f"❌ Error generating voice message: {e}")
 
     media_thread = threading.Thread(
-        target=ultimate_multimedia_generator,
-        args=(chat_id, full_reply, short_reply),
-        daemon=True  # Allow bot to continue if thread gets stuck
-    )
-    media_thread.start()
+    target=railway_optimized_multimedia,
+    args=(chat_id, full_reply),
+    daemon=True
+)
+media_thread.start()
 
     # Update learning data without waiting for multimedia to complete
     print("Updating learning data...")
