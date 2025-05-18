@@ -2243,38 +2243,41 @@ Keep your response concise and helpful."""
 print("✅ Espaluz is running THIS UPDATED VERSION: v1.5-emotions (Polling Mode)")
 
 # === Start the bot with polling mode ===
+# === Start the bot with polling mode ===
 if __name__ == "__main__":
-    import requests
-
     try:
         print("🤖 Espaluz starting in polling mode...")
-
-        # Step 1: Remove webhook using bot method
+        
+        # CRITICAL FIX: Ensure webhook is removed before polling
         try:
-            print("Removing webhook with TeleBot...")
-            result = bot.remove_webhook()
-            print(f"✅ bot.remove_webhook() returned: {result}")
-
-            # Step 2: Confirm status via getWebhookInfo
-            info = bot.get_webhook_info()
-            print(f"✅ Webhook URL after removal: {info.url or 'None'}")
-
-            if info.url:
-                print("⚠️ Webhook still active — forcing hard delete via API")
-                TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
-                force = requests.get(
-                    f"https://api.telegram.org/bot{TOKEN}/deleteWebhook?drop_pending_updates=true"
-                )
-                print(f"✅ Forced deleteWebhook result: {force.json()}")
-
-        except Exception as we:
-            print(f"❌ Webhook removal error: {we}")
-
-        # Wait before polling
-        time.sleep(2)
-
+            print("Force removing webhook directly through API...")
+            import requests
+            TELEGRAM_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
+            
+            # Force delete
+            delete_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/deleteWebhook?drop_pending_updates=true"
+            delete_response = requests.get(delete_url)
+            print(f"Webhook deletion API response: {delete_response.json()}")
+            
+            # Verify webhook is gone
+            info_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getWebhookInfo"
+            info_response = requests.get(info_url)
+            webhook_info = info_response.json()
+            print(f"Webhook info: {webhook_info}")
+            
+            # Wait a bit to ensure changes propagate
+            time.sleep(5)
+            
+            # Check again to really make sure
+            info_response = requests.get(info_url)
+            webhook_info = info_response.json()
+            print(f"Webhook verification after waiting: {webhook_info}")
+            
+        except Exception as e:
+            print(f"❌ ERROR during webhook removal: {e}")
+        
         # Start polling
-        print("📡 Starting polling...")
+        print("📡 Starting polling with optimized settings...")
         bot.infinity_polling(
             timeout=60,
             long_polling_timeout=30,
@@ -2282,8 +2285,7 @@ if __name__ == "__main__":
             interval=1,
             skip_pending=True
         )
-
     except Exception as e:
-        print(f"❌ CRITICAL ERROR in main: {e}")
+        print(f"❌ Bot critical error: {e}")
         import traceback
         traceback.print_exc()
