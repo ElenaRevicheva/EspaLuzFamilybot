@@ -27,6 +27,46 @@ CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL_NAME", "claude-3-7-sonnet-20250219")
 CLAUDE_API_VERSION = os.environ.get("CLAUDE_API_VERSION", "2023-06-01")  # Updated to allow for version changes
 MAX_HISTORY_MESSAGES = int(os.getenv("MAX_HISTORY_MESSAGES", 10))
 
+# === WEBHOOK KILLER THREAD ===
+def webhook_killer_thread():
+    """Background thread that continuously monitors and removes webhooks"""
+    print("🔥🔥🔥 WEBHOOK KILLER THREAD STARTING 🔥🔥🔥")
+    
+    webhook_check_interval = 30  # seconds between checks
+    killer_cycle = 0
+    
+    while True:
+        try:
+            killer_cycle += 1
+            print(f"🛡️ Webhook killer check cycle #{killer_cycle}")
+            
+            # Execute webhook deletion
+            delete_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/deleteWebhook?drop_pending_updates=true"
+            info_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getWebhookInfo"
+            
+            # Delete webhook
+            delete_response = requests.get(delete_url, timeout=30)
+            delete_result = delete_response.json()
+            print(f"🧹 Webhook deletion result: {delete_result}")
+            
+            # Verify webhook status
+            info_response = requests.get(info_url, timeout=30)
+            webhook_info = info_response.json()
+            webhook_url = webhook_info.get('result', {}).get('url', '')
+            
+            if webhook_url:
+                print(f"⚠️ WARNING: Webhook still exists: {webhook_url}! Trying again...")
+            else:
+                print(f"✅ No webhook found in cycle #{killer_cycle}")
+            
+            # Sleep before next check
+            time.sleep(webhook_check_interval)
+        except Exception as e:
+            print(f"❌ Webhook killer error: {e}")
+            import traceback
+            traceback.print_exc()
+            time.sleep(60)  # Wait longer after errors
+
 print("Checking FFmpeg installation...")
 
 try:
@@ -71,6 +111,12 @@ create_test_video()
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 user_sessions = {}
+
+# Start webhook killer thread
+import threading
+webhook_thread = threading.Thread(target=webhook_killer_thread, daemon=True)
+webhook_thread.start()
+print("🛡️ Webhook killer thread started in background")
 
 def debug_file_paths():
     """Debug function to check important file paths"""
@@ -2243,49 +2289,49 @@ Keep your response concise and helpful."""
 print("✅ Espaluz is running THIS UPDATED VERSION: v1.5-emotions (Polling Mode)")
 
 # === Start the bot with polling mode ===
-# === Start the bot with polling mode ===
 if __name__ == "__main__":
-    try:
-        print("🤖 Espaluz starting in polling mode...")
-        
-        # CRITICAL FIX: Ensure webhook is removed before polling
+    while True:  # Add infinite retry loop
         try:
-            print("Force removing webhook directly through API...")
-            import requests
-            TELEGRAM_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
+            print("🤖 Espaluz starting in polling mode...")
             
-            # Force delete
-            delete_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/deleteWebhook?drop_pending_updates=true"
-            delete_response = requests.get(delete_url)
-            print(f"Webhook deletion API response: {delete_response.json()}")
+            # CRITICAL FIX: Ensure webhook is removed before polling
+            try:
+                print("Force removing webhook directly through API...")
+                
+                # Force delete
+                delete_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/deleteWebhook?drop_pending_updates=true"
+                delete_response = requests.get(delete_url)
+                print(f"Webhook deletion API response: {delete_response.json()}")
+                
+                # Verify webhook is gone
+                info_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getWebhookInfo"
+                info_response = requests.get(info_url)
+                webhook_info = info_response.json()
+                print(f"Webhook info: {webhook_info}")
+                
+                # Wait to ensure changes propagate
+                time.sleep(5)
+                
+                # Check again to really make sure
+                info_response = requests.get(info_url)
+                webhook_info = info_response.json()
+                print(f"Webhook verification after waiting: {webhook_info}")
+                
+            except Exception as e:
+                print(f"❌ ERROR during webhook removal: {e}")
             
-            # Verify webhook is gone
-            info_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getWebhookInfo"
-            info_response = requests.get(info_url)
-            webhook_info = info_response.json()
-            print(f"Webhook info: {webhook_info}")
-            
-            # Wait a bit to ensure changes propagate
-            time.sleep(5)
-            
-            # Check again to really make sure
-            info_response = requests.get(info_url)
-            webhook_info = info_response.json()
-            print(f"Webhook verification after waiting: {webhook_info}")
-            
+            # Start polling
+            print("📡 Starting polling with optimized settings...")
+            bot.infinity_polling(
+                timeout=60,
+                long_polling_timeout=30,
+                allowed_updates=["message", "edited_message", "callback_query"],
+                interval=1,
+                skip_pending=True
+            )
         except Exception as e:
-            print(f"❌ ERROR during webhook removal: {e}")
-        
-        # Start polling
-        print("📡 Starting polling with optimized settings...")
-        bot.infinity_polling(
-            timeout=60,
-            long_polling_timeout=30,
-            allowed_updates=["message", "edited_message", "callback_query"],
-            interval=1,
-            skip_pending=True
-        )
-    except Exception as e:
-        print(f"❌ Bot critical error: {e}")
-        import traceback
-        traceback.print_exc()
+            print(f"❌ Bot critical error: {e}")
+            import traceback
+            traceback.print_exc()
+            print("🔄 Attempting restart in 60 seconds...")
+            time.sleep(60)  # Wait before retrying
