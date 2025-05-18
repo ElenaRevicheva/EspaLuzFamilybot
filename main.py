@@ -1749,6 +1749,25 @@ def process_photo(photo_file):
         return "❌ Error processing the image with GPT-4o. Please try again later."
 
 # === MAIN LOGIC ===
+def ultimate_multimedia_generator(chat_id, full_reply, short_reply):
+    """Generate both video and voice messages with proper error handling"""
+    try:
+        # First attempt: Generate video with the short reply
+        video_success = bulletproof_video_generator(chat_id, full_reply)
+        
+        # If video failed, send just a voice message with the full reply
+        if not video_success:
+            print("⚠️ Video generation failed, falling back to voice-only")
+            send_full_voice_message(chat_id, full_reply)
+            
+    except Exception as e:
+        print(f"❌ Critical error in multimedia generation: {e}")
+        # Final fallback - just send a simple message
+        try:
+            bot.send_message(chat_id, "❌ Lo siento, no pude generar contenido multimedia / Sorry, I couldn't generate multimedia content")
+        except:
+            print("💔 Failed to send error notification")
+
 def process_message(user_input, chat_id, user_id, message_obj):
     """Process incoming message with ultimate multimedia generation"""
     print(f"⭐️ Processing message from user {user_id}: {user_input[:30]}...")
