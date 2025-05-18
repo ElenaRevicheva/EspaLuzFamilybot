@@ -1793,52 +1793,86 @@ def process_message(user_input, chat_id, user_id, message_obj):
     # Launch multimedia generation in a thread with clear separation
     print("Starting multimedia generation thread...")
 
-    def ultimate_multimedia_generator(chat_id, full_reply_text, short_reply_text):
-        print("Starting ultimate multimedia generation...")
+def ultimate_multimedia_generator(chat_id, full_reply_text, short_reply_text):
+    print("Starting ultimate multimedia generation...")
 
-        # === STEP 1: Create video from short [VIDEO SCRIPT] reply ===
-        success = bulletproof_video_generator(chat_id, full_reply_text)  # 🔥 Fixed here
-        if success:
-            print("Video generation result: SUCCESS")
-        else:
-            print("Video generation result: ❌ FAILURE")
+    # === STEP 1: Create video from short [VIDEO SCRIPT] reply ===
+    success = bulletproof_video_generator(chat_id, full_reply_text)
+    if success:
+        print("Video generation result: SUCCESS")
+    else:
+        print("Video generation result: ❌ FAILURE")
 
-        # === STEP 2: Create full voice message from full text ===
-        try:
-            print(f"Starting voice message generation with text length: {len(full_reply_text)}")
-            # Remove [VIDEO SCRIPT START] block from voice message
-            simplified_text = re.sub(r"\[VIDEO SCRIPT START\](.*?)\[VIDEO SCRIPT END\]", "", full_reply_text, flags=re.DOTALL).strip()
-            print(f"Generating simplified voice message with text length: {len(simplified_text)}")
+    # === STEP 2: Create full voice message from full text ===
+    try:
+        print(f"Starting voice message generation with text length: {len(full_reply_text)}")
+        # Remove [VIDEO SCRIPT START] block from voice message
+        simplified_text = re.sub(r"\[VIDEO SCRIPT START\](.*?)\[VIDEO SCRIPT END\]", "", full_reply_text, flags=re.DOTALL).strip()
+        print(f"Generating simplified voice message with text length: {len(simplified_text)}")
 
-            tts = gTTS(text=simplified_text, lang="es")
-            voice_path = "simple_voice.mp3"
-            tts.save(voice_path)
-            print(f"Voice file created: {voice_path}, size: {os.path.getsize(voice_path)} bytes")
+        # Prepare temp filename
+        timestamp = int(time.time())
+        voice_path = f"voice_{timestamp}.mp3"
 
-            with open(voice_path, "rb") as voice_file:
-                bot.send_voice(chat_id, voice_file)
-                print("Voice message sent with ID: ✅")
+        voice_success = False
+        for attempt in range(3):
+            try:
+                print(f"🎤 Voice generation attempt {attempt+1}...")
+                tts = gTTS(text=simplified_text, lang="es", slow=False)
+                tts.save(voice_path)
 
-            os.remove(voice_path)
-            print("Voice message result: SUCCESS\nBoth video and voice completed successfully!")
+                if os.path.exists(voice_path) and os.path.getsize(voice_path) > 1000:
+                    with open(voice_path, "rb") as f:
+                        bot.send_voice(chat_id, f)
+                    print(f"✅ Voice sent successfully: {voice_path}")
+                    voice_success = True
+                    break
+                else:
+                    print("⚠️ Voice file too small or missing")
+            except Exception as e:
+                print(f"⚠️ Voice error attempt {attempt+1}: {e}")
+                time.sleep(2)
 
-        except Exception as e:
-            print(f"❌ Error generating voice message: {e}")
+        if not voice_success:
+            print("❌ Voice generation ultimately failed.")
+            try:
+                bot.send_message(chat_id, "❌ No pude generar mensaje de voz esta vez. / I couldn't generate a voice message this time.")
+            except:
+                pass
 
-    media_thread = threading.Thread(
-        target=ultimate_multimedia_generator,
-        args=(chat_id, full_reply, short_reply),
-        daemon=True  # Allow bot to continue if thread gets stuck
-    )
-    media_thread.start()
+        # Clean up
+        if os.path.exists(voice_path):
+            try:
+                os.remove(voice_path)
+                print(f"🧹 Deleted temporary voice file: {voice_path}")
+            except:
+                pass
 
-    # Update learning data without waiting for multimedia to complete
-    print("Updating learning data...")
-    family_member = session["context"]["user"]["preferences"]["family_role"]
-    learned_items = enhance_language_learning_detection(full_reply, family_member, session)
-    session = update_session_learning(session, learned_items)
-    session = adapt_learning_path(session, user_input, full_reply)
-    print("Learning data updated")
+    except Exception as e:
+        print(f"❌ Fatal error generating voice message: {e}")
+
+
+# === LAUNCH MULTIMEDIA THREAD ===
+media_thread = threading.Thread(
+    target=ultimate_multimedia_generator,
+    args=(chat_id, full_reply, short_reply),
+    daemon=True  # Allow bot to continue if thread gets stuck
+)
+media_thread.start()
+
+# === UPDATE LEARNING DATA ===
+print("Updating learning data...")
+family_member = session["context"]["user"]["preferences"]["family_role"]
+learned_items = enhance_language_learning_detection(full_reply, family_member, session)
+session = update_session_learning(session, learned_items)
+session = adapt_learning_path(session, user_input, full_reply)
+print("Learning data updated")
+
+# === HANDLERS ===
+@bot.message_handler(commands=["start"])
+def handle_start(message):
+    """Handle /start command"""
+    # ...
 
 # === HANDLERS ===
 @bot.message_handler(commands=["start"])
