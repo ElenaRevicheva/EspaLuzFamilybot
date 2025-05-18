@@ -11,10 +11,13 @@ import sys
 import traceback
 from dotenv import load_dotenv
 
-# Configure logging
+# Extremely visible logging for debugging
+print("🔥🔥🔥 BOT-KILLER.PY LOADED 🔥🔥🔥")
+
+# Configure logging with emojis for visibility
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - [BOT-KILLER] %(message)s'
+    format='%(asctime)s - 🛡️ BOT-KILLER - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger('bot-killer')
 
