@@ -23,4 +23,11 @@ sleep 5
 
 # Start main bot
 echo "🤖 Starting main bot from start.sh..."
-python main.py
+python main.py &
+
+# ✅ Start Gumroad polling in background
+echo "💸 Starting Gumroad subscription poller..."
+while true; do
+  python poll_subscriptions.py
+  sleep 3600
+done

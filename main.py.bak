@@ -83,19 +83,6 @@ except Exception as e:
     print(f"❌ FFmpeg check failed: {str(e)}")
     FFMPEG_AVAILABLE = False
 
-import json
-
-def is_subscribed(user_id):
-    try:
-        with open("subscribers.json", "r") as f:
-            subscribers = json.load(f)
-        for email, info in subscribers.items():
-            if str(info.get("telegram_id")) == str(user_id) and info.get("status") == "active":
-                return True
-    except Exception as e:
-        print(f"❌ Error checking subscription: {e}")
-    return False
-
 # Create a simple test video file if needed (can add before Flask app runs)
 def create_test_video():
     """Create a simple test video file if the base video doesn't exist"""
@@ -1762,27 +1749,6 @@ def process_photo(photo_file):
         return "❌ Error processing the image with GPT-4o. Please try again later."
 
 # === MAIN LOGIC ===
-def ultimate_multimedia_generator(chat_id, full_reply, short_reply):
-    """Generate both video and voice messages with proper error handling"""
-    try:
-        # First, attempt to generate and send the video
-        print("🎬 Starting video generation...")
-        video_success = bulletproof_video_generator(chat_id, full_reply)
-        
-        # Always generate voice message after video attempt, regardless of video success
-        print("🎙️ Starting voice message generation...")
-        send_full_voice_message(chat_id, full_reply)
-        
-        print(f"✅ Multimedia generation complete - Video: {'Success' if video_success else 'Failed'}, Voice: Sent")
-            
-    except Exception as e:
-        print(f"❌ Critical error in multimedia generation: {e}")
-        # Final fallback - just send a simple message
-        try:
-            bot.send_message(chat_id, "❌ Lo siento, no pude generar contenido multimedia / Sorry, I couldn't generate multimedia content")
-        except:
-            print("💔 Failed to send error notification")
-
 def process_message(user_input, chat_id, user_id, message_obj):
     """Process incoming message with ultimate multimedia generation"""
     print(f"⭐️ Processing message from user {user_id}: {user_input[:30]}...")
@@ -1824,19 +1790,51 @@ def process_message(user_input, chat_id, user_id, message_obj):
     # Update session with Claude's response
     session["messages"].append({"role": "assistant", "content": full_reply})
 
-    # Launch multimedia generation in a thread
+    # Launch multimedia generation in a thread with clear separation
     print("Starting multimedia generation thread...")
+
+    def ultimate_multimedia_generator(chat_id, full_reply_text, short_reply_text):
+        print("Starting ultimate multimedia generation...")
+
+        # === STEP 1: Create video from short [VIDEO SCRIPT] reply ===
+        success = bulletproof_video_generator(chat_id, full_reply_text)  # 🔥 Fixed here
+        if success:
+            print("Video generation result: SUCCESS")
+        else:
+            print("Video generation result: ❌ FAILURE")
+
+        # === STEP 2: Create full voice message from full text ===
+        try:
+            print(f"Starting voice message generation with text length: {len(full_reply_text)}")
+            # Remove [VIDEO SCRIPT START] block from voice message
+            simplified_text = re.sub(r"\[VIDEO SCRIPT START\](.*?)\[VIDEO SCRIPT END\]", "", full_reply_text, flags=re.DOTALL).strip()
+            print(f"Generating simplified voice message with text length: {len(simplified_text)}")
+
+            tts = gTTS(text=simplified_text, lang="es")
+            voice_path = "simple_voice.mp3"
+            tts.save(voice_path)
+            print(f"Voice file created: {voice_path}, size: {os.path.getsize(voice_path)} bytes")
+
+            with open(voice_path, "rb") as voice_file:
+                bot.send_voice(chat_id, voice_file)
+                print("Voice message sent with ID: ✅")
+
+            os.remove(voice_path)
+            print("Voice message result: SUCCESS\nBoth video and voice completed successfully!")
+
+        except Exception as e:
+            print(f"❌ Error generating voice message: {e}")
+
     media_thread = threading.Thread(
         target=ultimate_multimedia_generator,
         args=(chat_id, full_reply, short_reply),
-        daemon=True
+        daemon=True  # Allow bot to continue if thread gets stuck
     )
     media_thread.start()
 
     # Update learning data without waiting for multimedia to complete
     print("Updating learning data...")
-    profile = session.get("profile", {})
-    family_member = profile.get("role", "family_member")
+    family_member = session["context"]["user"]["preferences"]["family_role"]
     learned_items = enhance_language_learning_detection(full_reply, family_member, session)
     session = update_session_learning(session, learned_items)
     session = adapt_learning_path(session, user_input, full_reply)
@@ -1845,45 +1843,32 @@ def process_message(user_input, chat_id, user_id, message_obj):
 # === HANDLERS ===
 @bot.message_handler(commands=["start"])
 def handle_start(message):
+    """Handle /start command"""
+    user_id = str(message.from_user.id)
+    user_sessions[user_id] = create_initial_session(user_id, message.from_user, message.chat)
+
+    # Create personalized welcome based on detected family member
+    family_member = user_sessions[user_id]["context"]["user"]["preferences"]["family_role"]
+    member_info = FAMILY_MEMBERS.get(family_member, FAMILY_MEMBERS["elena"])
+
     welcome_msg = (
-        "👋 ¡Hola! Welcome to *Espaluz* — your AI-powered bilingual tutor for expat families 🇵🇦✨\n\n"
-        "🌟 *What Espaluz Offers:*\n"
-        "• Spanish + English learning for all ages\n"
-        "• Real-time emotional support\n"
-        "• Voice + video messages\n"
-        "• Photo translation\n\n"
-        "🔐 *To unlock access:*\n"
-        "1️⃣ Subscribe monthly here 👉 https://revicheva.gumroad.com/l/aideazzEspaLuz\n"
-        "2️⃣ Then send /profile to set your name, age, and learning role.\n"
+        "👋 ¡Hola! Soy Espaluz, tu asistente de idiomas. / Hello! I'm Espaluz, your language assistant.\n\n"
+        "☕ *If you enjoy Espaluz and want to support this project,*\n"
+        "👉 [Buy me a coffee](https://buymeacoffee.com/aideazz)\n\n"
+        "Your support helps families learn Spanish with emotional, intelligent AI 💛\n\n"
     )
-    welcome_msg += "\n\n🎙️ Envíame un mensaje de voz o texto para comenzar. / Send me a voice or text message to begin."
+
+    if family_member == "alisa":
+        welcome_msg += "🎮 ¡Vamos a aprender español y inglés jugando! / Let's learn Spanish and English while playing!"
+    elif family_member == "marina":
+        welcome_msg += "📚 Estoy aquí para ayudarte a aprender español e inglés a tu ritmo. / I'm here to help you learn Spanish and English at your own pace."
+    else:
+        welcome_msg += "🗣️ Estoy aquí para ayudarte con tus necesidades de idiomas. / I'm here to help with your language needs."
+
+    welcome_msg += "\n\nEnvíame un mensaje de voz o texto para comenzar. / Send me a voice or text message to begin."
     welcome_msg += "\n\n📸 ¡También puedes enviarme fotos de texto para traducirlo! / You can also send me photos of text to translate it!"
 
-    bot.send_message(message.chat.id, welcome_msg, parse_mode="Markdown")
-
-@bot.message_handler(commands=["link"])
-def handle_link(message):
-    bot.send_message(message.chat.id, "📩 Please reply with the email you used to subscribe on Gumroad.")
-
-@bot.message_handler(func=lambda m: "@" in m.text and "." in m.text and " " not in m.text)
-def handle_email_link(message):
-    user_email = message.text.strip().lower()
-    user_id = str(message.from_user.id)
-
-    try:
-        with open("subscribers.json", "r+") as f:
-            data = json.load(f)
-            if user_email in data:
-                data[user_email]["telegram_id"] = user_id
-                f.seek(0)
-                json.dump(data, f, indent=2)
-                f.truncate()
-                bot.send_message(message.chat.id, "✅ Email linked. You now have access to Espaluz!")
-            else:
-                bot.send_message(message.chat.id, "⚠️ Email not found. Did you subscribe yet?")
-    except Exception as e:
-        print(f"❌ Error linking email: {e}")
-        bot.send_message(message.chat.id, "⚠️ Something went wrong. Please try again.")
+    bot.reply_to(message, welcome_msg, parse_mode="Markdown")
 
 @bot.message_handler(commands=["reset"])
 def handle_reset(message):
@@ -1900,13 +1885,10 @@ def handle_progress(message):
         user_sessions[user_id] = create_initial_session(user_id, message.from_user, message.chat)
 
     session = user_sessions[user_id]
-    
-    # Get profile info
-    profile = session.get("profile", {})
-    name = profile.get("name", "Learner")
-    age = profile.get("age", "N/A")
-    role = profile.get("role", "family member")
-    gender = profile.get("gender", "")
+
+    # Get family member info
+    family_member = session["context"]["user"]["preferences"]["family_role"]
+    member_info = FAMILY_MEMBERS.get(family_member, FAMILY_MEMBERS["elena"])
 
     # Extract learning stats
     spanish_words = len(session["context"]["learning"]["progress"]["vocabulary"]["spanish"]["learned"])
@@ -1955,32 +1937,32 @@ def handle_progress(message):
 
     bot.reply_to(message, progress_msg, parse_mode="Markdown")
 
-@bot.message_handler(commands=["profile"])
-def handle_profile(message):
-    bot.send_message(
-        message.chat.id,
-        "✍️ Please send your profile in this format:\n\n" +
-        "`Name, Age, Role, Gender`\n\n" +
-        "Example:\n`Elena, 36, parent, female`",
-        parse_mode="Markdown"
-    )
-
-@bot.message_handler(func=lambda m: "," in m.text and m.text.count(",") == 3)
-def save_profile(message):
+@bot.message_handler(commands=["family"])
+def handle_family(message):
+    """Handle /family command to set family member identification"""
     user_id = str(message.from_user.id)
-    name, age, role, gender = [x.strip() for x in message.text.split(",")]
-
-    # Save to session
     if user_id not in user_sessions:
-        user_sessions[user_id] = {}
-    user_sessions[user_id]["profile"] = {
-        "name": name,
-        "age": age,
-        "role": role,
-        "gender": gender
-    }
+        user_sessions[user_id] = create_initial_session(user_id, message.from_user, message.chat)
 
-    bot.send_message(message.chat.id, f"✅ Profile saved: {name}, {age} y.o., {role}, {gender}")
+    # Extract family member name if provided
+    command_parts = message.text.split()
+    if len(command_parts) > 1:
+        member_name = command_parts[1].lower()
+        if member_name in FAMILY_MEMBERS:
+            user_sessions[user_id]["context"]["user"]["preferences"]["family_role"] = member_name
+            member_info = FAMILY_MEMBERS[member_name]
+            bot.reply_to(message, f"👪 Perfil cambiado a: {member_name.capitalize()} ({member_info['role']}, {member_info['age']} años) / Profile changed to: {member_name.capitalize()} ({member_info['role']}, {member_info['age']} years old)")
+            return
+
+    # If no valid name provided, show options
+    family_msg = """👪 *¿Quién eres? / Who are you?*
+
+Usa uno de estos comandos / Use one of these commands:
+- /family alisa - Para la niña / For the child (4)
+- /family marina - Para la abuela / For the grandmother (65)
+- /family elena - Para la madre / For the mother (39)"""
+
+    bot.reply_to(message, family_msg, parse_mode="Markdown")
 
 @bot.message_handler(commands=["help"])
 def handle_help(message):
@@ -1990,7 +1972,7 @@ def handle_help(message):
 /start - Iniciar el bot / Start the bot
 /reset - Reiniciar la conversación / Reset the conversation
 /progress - Ver tu progreso / View your progress
-/profile - Configura tu perfil / Set your learning profile
+/family - Cambiar miembro familiar / Change family member
 /help - Ver este mensaje / See this message
 
 💬 Puedes enviar mensajes de texto o voz en ruso, español o inglés.
@@ -2038,19 +2020,17 @@ def handle_voice(message):
         ], check=True)
 
         # Transcribe with Whisper or your preferred model
-        transcription = transcribe_audio(temp_mp3_path)
+        transcription = transcribe_audio(temp_mp3_path)  # This should use OpenAI Whisper or your existing logic
 
         if not transcription:
             bot.reply_to(message, "❌ No pude transcribir este mensaje de voz. / I couldn't transcribe this voice message.")
             return
 
-        transcription_cleaned = remove_numerals_and_asterisks(transcription)
-
-        print(f"📝 Voice transcription: {transcription_cleaned}")
-        bot.send_message(message.chat.id, f"🗣️ Transcripción:\n{transcription_cleaned}")
+        print(f"📝 Voice transcription: {transcription}")
+        bot.send_message(message.chat.id, f"🗣️ Transcripción:\n{transcription}")
 
         # Continue as a normal text message
-        process_message(transcription_cleaned, message.chat.id, str(message.from_user.id), message)
+        process_message(transcription, message.chat.id, str(message.from_user.id), message)
 
         # Cleanup
         os.remove(temp_ogg_path)
@@ -2059,15 +2039,6 @@ def handle_voice(message):
     except Exception as e:
         print(f"❌ Error processing voice message: {e}")
         bot.reply_to(message, "❌ Hubo un error al procesar tu mensaje de voz.")
-
-import re
-
-def remove_numerals_and_asterisks(text):
-    """Clean voice message content from numbers and asterisks."""
-    cleaned = re.sub(r'\b\d+[\.\):\-\s]*', '', text)  # Remove leading numbers like 1., 2), 3 -
-    cleaned = re.sub(r'\*+', '', cleaned)             # Remove asterisks
-    cleaned = re.sub(r'\s+', ' ', cleaned)            # Normalize whitespace
-    return cleaned.strip()
 
 @bot.message_handler(content_types=["text"])
 def handle_text(message):
