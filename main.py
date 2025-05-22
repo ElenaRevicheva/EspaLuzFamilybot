@@ -86,48 +86,71 @@ except Exception as e:
 import re
 
 def remove_numerals_and_asterisks(text):
-    """Clean text from numbers and asterisks — especially for TTS and transcription."""
-    cleaned = re.sub(r'\b\d+[\.\):\-\s]*', '', text)  # Remove numbered bullets like 1., 2)
-    cleaned = re.sub(r'\*+', '', cleaned)             # Remove asterisk markup
-    cleaned = re.sub(r'\s+', ' ', cleaned)            # Normalize whitespace
+    """Clean text from numbers, asterisks, and markdown — especially for TTS and transcription."""
+    # Remove numbered bullets like 1., 2), 1-, etc.
+    cleaned = re.sub(r'^\s*\d+[\.\):\-\s]+', '', text, flags=re.MULTILINE)
+    # Remove inline numbers that are list markers
+    cleaned = re.sub(r'\n\s*\d+[\.\):\-\s]+', '\n', cleaned)
+    # Remove markdown bold/italic markers
+    cleaned = re.sub(r'\*{1,2}([^\*]+)\*{1,2}', r'\1', cleaned)
+    # Remove other markdown elements
+    cleaned = re.sub(r'[#_`~]', '', cleaned)
+    # Remove emoji numbers like 1️⃣, 2️⃣
+    cleaned = re.sub(r'[0-9]️⃣', '', cleaned)
+    # Normalize whitespace
+    cleaned = re.sub(r'\s+', ' ', cleaned)
+    # Remove multiple newlines
+    cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
     return cleaned.strip()
 
 import re
 
 def clean_video_script_block(text, name_variants=None):
-    """Remove hardcoded greetings like 'Hola Elena' from video script blocks"""
+    """Remove hardcoded greetings like 'Hola [Name]' from video script blocks"""
+    # If no specific names provided, use a general pattern
     if not name_variants:
-        name_variants = ["elena", "alisa", "marina"]
-
-    def replacer(match):
-        script = match.group(1)
-        # Remove "Hola NAME!" or "Hola NAME." at start
-        cleaned_script = re.sub(
-            r"(?i)^\s*hola\s+(%s)[\.\!\:]?\s*" % "|".join(name_variants),
-            "Hola! ", script.strip()
-        )
-        return f"[VIDEO SCRIPT START]{cleaned_script.strip()}[VIDEO SCRIPT END]"
+        # This will match any word after "Hola"
+        def replacer(match):
+            script = match.group(1)
+            # Remove "Hola NAME!" or "Hola NAME." at start for ANY name
+            cleaned_script = re.sub(
+                r"(?i)^\s*hola\s+\w+[\.\!\:]?\s*",
+                "¡Hola! ", script.strip()
+            )
+            return f"[VIDEO SCRIPT START]{cleaned_script.strip()}[VIDEO SCRIPT END]"
+    else:
+        # Use specific name variants if provided
+        def replacer(match):
+            script = match.group(1)
+            # Remove "Hola NAME!" or "Hola NAME." at start
+            cleaned_script = re.sub(
+                r"(?i)^\s*hola\s+(%s)[\.\!\:]?\s*" % "|".join(name_variants),
+                "¡Hola! ", script.strip()
+            )
+            return f"[VIDEO SCRIPT START]{cleaned_script.strip()}[VIDEO SCRIPT END]"
 
     return re.sub(r"\[VIDEO SCRIPT START\](.*?)\[VIDEO SCRIPT END\]", replacer, text, flags=re.DOTALL)
 
 def get_user_greeting(session):
     """Return a dynamic greeting based on profile or fallback to 'Hola amig@'"""
+    if not session:
+        return "👋 ¡Hola!"
+    
     profile = session.get("profile", {})
     name = profile.get("name", "").strip()
 
-    if name:
+    if name and name.lower() not in ["alisa", "marina", "elena"]:
+        # Use actual user name if it's not one of the default test names
         return f"👋 ¡Hola {name}!"
     
-    # fallback based on gender
+    # fallback based on gender or neutral
     gender = profile.get("gender", "").lower()
     if gender == "female":
         return "👋 ¡Hola amiga!"
     elif gender == "male":
         return "👋 ¡Hola amigo!"
     else:
-        return "👋 ¡Hola amig@!"
-
-import json
+        return "👋 ¡Hola!"
 
 def is_subscribed(user_id):
     try:
@@ -921,11 +944,12 @@ I'll adjust my tone to be: {emotional_calibration.get('response_tone', 'supporti
        - Use both Spanish and English
        - Tone: warm, clear, and simple for spoken delivery
        - It will be spoken by an avatar on video, so make it suitable for audio (not robotic or boring!)
+       - DO NOT include the user's name in the video script greeting - just use "¡Hola!" or similar
        - Example:
 
     [VIDEO SCRIPT START]
-    ¡Hola Elena! Hoy es un gran día para aprender. 
-    Hello Elena! Today is a great day to learn.
+    ¡Hola! Hoy es un gran día para aprender español. 
+    Hello! Today is a great day to learn Spanish.
     [VIDEO SCRIPT END]
     """
 
@@ -1358,6 +1382,13 @@ def generate_video_with_audio(chat_id, text_content, max_duration=30):
     """Generate a video with audio that meets requirements (up to 30s, with voice)"""
     print(f"Generating proper video with text: {text_content[:50]}...")
 
+    # Clean the text content for TTS
+    cleaned_content = remove_numerals_and_asterisks(text_content)
+    # Remove any remaining "Hola [Name]" patterns
+    cleaned_content = re.sub(r"(?i)^\s*hola\s+\w+[\.\!\:]?\s*", "¡Hola! ", cleaned_content)
+    
+    print(f"Cleaned text for video: {cleaned_content[:50]}...")
+
     # Create unique filenames to avoid conflicts
     timestamp = int(time.time())
     audio_file = f"video_audio_{timestamp}.mp3"
@@ -1365,9 +1396,9 @@ def generate_video_with_audio(chat_id, text_content, max_duration=30):
     base_video = "espaluz_loop.mp4"
 
     try:
-        # 1. Create audio file with full text content
+        # 1. Create audio file with cleaned text content
         print("Generating audio for video...")
-        tts = gTTS(text=text_content, lang="es", slow=False)
+        tts = gTTS(text=cleaned_content, lang="es", slow=False)
         tts.save(audio_file)
 
         if not os.path.exists(audio_file):
@@ -1494,13 +1525,29 @@ def create_full_voice_message(chat_id, full_text, session=None):
     """Create a voice message with the complete text response"""
     print(f"Creating full voice message, text length: {len(full_text)} characters")
 
-    # Clean numerals, asterisks, and hardcoded greetings
-    cleaned_text = remove_numerals_and_asterisks(full_text)
-    cleaned_text = re.sub(r"(?i)\b(hola)\s+(elena|alisa|marina)[\.\!\:]?", "Hola", cleaned_text)
+    # First remove the video script block entirely
+    full_text_clean = re.sub(r"\[VIDEO SCRIPT START\](.*?)\[VIDEO SCRIPT END\]", "", full_text, flags=re.DOTALL).strip()
+    
+    # Then clean numerals, asterisks, and markdown formatting
+    cleaned_text = remove_numerals_and_asterisks(full_text_clean)
+    # Remove markdown bold markers
+    cleaned_text = re.sub(r'\*\*(.*?)\*\*', r'\1', cleaned_text)
+    # Remove other markdown symbols
+    cleaned_text = re.sub(r'[#_`]', '', cleaned_text)
+    
+    # Clean hardcoded greetings for any name
+    cleaned_text = re.sub(r"(?i)\b(hola)\s+\w+[\.\!\:]?", "Hola", cleaned_text)
 
-    # Add personalized greeting
-    greeting = get_user_greeting(session) if session else "👋 ¡Hola amig@!"
-    full_text_for_tts = f"{greeting} {cleaned_text}"
+    # Add personalized greeting only if we have a valid session
+    if session:
+        greeting = get_user_greeting(session)
+        # Only add greeting if it's not already in the text
+        if not cleaned_text.lower().startswith("hola"):
+            full_text_for_tts = f"{greeting} {cleaned_text}"
+        else:
+            full_text_for_tts = cleaned_text
+    else:
+        full_text_for_tts = cleaned_text
 
     # Create a unique filename
     timestamp = int(time.time())
@@ -1569,6 +1616,8 @@ def create_full_voice_message(chat_id, full_text, session=None):
         # Clean up
         try:
             cleanup_files = chunk_files + ([concat_file] if len(chunk_files) > 1 else [])
+            if voice_file != chunk_files[0]:  # Also clean up the combined file if it's not one of the chunks
+                cleanup_files.append(voice_file)
             for file in cleanup_files:
                 if os.path.exists(file):
                     os.remove(file)
@@ -1810,7 +1859,7 @@ def ultimate_multimedia_generator(chat_id, full_reply, short_reply, session=None
 
         # Now generate the video
         print("🎥 Creating avatar video with short script...")
-        video_success = create_video_from_script(chat_id, cleaned_short)
+        video_success = generate_video_with_audio(chat_id, cleaned_short)
         if not video_success:
             print("⚠️ Video generation failed")
 
@@ -2119,15 +2168,6 @@ def handle_voice(message):
         print(f"❌ Error processing voice message: {e}")
         bot.reply_to(message, "❌ Hubo un error al procesar tu mensaje de voz.")
 
-import re
-
-def remove_numerals_and_asterisks(text):
-    """Clean voice message content from numbers and asterisks."""
-    cleaned = re.sub(r'\b\d+[\.\):\-\s]*', '', text)  # Remove leading numbers like 1., 2), 3 -
-    cleaned = re.sub(r'\*+', '', cleaned)             # Remove asterisks
-    cleaned = re.sub(r'\s+', ' ', cleaned)            # Normalize whitespace
-    return cleaned.strip()
-
 @bot.message_handler(content_types=["text"])
 def handle_text(message):
     user_id = str(message.from_user.id)
@@ -2135,96 +2175,6 @@ def handle_text(message):
         bot.reply_to(message, "🔐 You are not an active subscriber.\nPlease subscribe at:\n👉 https://revicheva.gumroad.com/l/aideazzEspaLuz")
         return
     process_message(message.text, message.chat.id, user_id, message)
-
-@bot.message_handler(content_types=["photo"])
-def handle_photo(message):
-    """Handle photo message with text recognition and translation"""
-    user_id = str(message.from_user.id)
-    if not is_subscribed(user_id):
-        bot.reply_to(message, "🔐 You are not an active subscriber.\nPlease subscribe at:\n👉 https://revicheva.gumroad.com/l/aideazzEspaLuz")
-        return
-
-    processing_msg = bot.reply_to(message, "🔍 Procesando imagen... / Processing image...")
-
-
-    try:
-        # Step 1: Download the photo
-        file_id = message.photo[-1].file_id
-        file_info = bot.get_file(file_id)
-        photo_file = bot.download_file(file_info.file_path)
-
-        # Step 2: Notify user we're analyzing
-        bot.edit_message_text("🔍 Analizando texto... / Analyzing text...",
-                              chat_id=message.chat.id,
-                              message_id=processing_msg.message_id)
-
-        # Step 3: Extract text from photo
-        result = process_photo(photo_file)
-
-        if not result or "Error processing image" in result or "No text found" in result:
-            bot.edit_message_text(f"❌ {result or 'No se detectó texto en la imagen. / No text detected in the image.'}",
-                                  chat_id=message.chat.id,
-                                  message_id=processing_msg.message_id)
-            return
-
-        # Step 4: Show extracted translation result
-        bot.edit_message_text("📷 Resultado / Result:\n\n" + result,
-                              chat_id=message.chat.id,
-                              message_id=processing_msg.message_id)
-
-        # Step 5: Enhance learning
-        user_id = str(message.from_user.id)
-        if user_id in user_sessions:
-            family_member = user_sessions[user_id]["context"]["user"]["preferences"]["family_role"]
-            learned_items = identify_language_learning_content(result, family_member)
-            user_sessions[user_id] = update_session_learning(user_sessions[user_id], learned_items)
-
-        # Step 6: Ask Claude for an explanation
-        explanation_prompt = f"""The user sent a photo with text, and I extracted the following information:
-
-{result}
-
-Please provide a brief educational explanation about this text that could be helpful for a Russian expat in Panama. 
-Focus on any cultural context, vocabulary insights, or practical usage tips that would help them understand and remember this content.
-Keep your response concise and helpful."""
-
-        if user_id in user_sessions:
-            session = user_sessions[user_id]
-            session["messages"].append({"role": "user", "content": explanation_prompt})
-            full_reply, short_reply, thinking_process = ask_claude_with_mcp(session, None)
-
-            # 🧹 Remove [VIDEO SCRIPT] block safely
-            full_reply_cleaned = re.sub(r"\[VIDEO SCRIPT START\](.*?)\[VIDEO SCRIPT END\]", "", full_reply, flags=re.DOTALL).strip()
-
-            # ✅ Safe chunking into 4096-character messages
-            MAX_LENGTH = 4096
-            intro = "💡 Explicación / Explanation:\n\n"
-            chunks = []
-
-            while full_reply_cleaned:
-                chunk = full_reply_cleaned[:MAX_LENGTH - len(intro if not chunks else "")]
-                split_at = chunk.rfind('\n')
-                if split_at == -1 or split_at < len(chunk) * 0.5:
-                    split_at = chunk.rfind('.')
-                if split_at != -1:
-                    chunk = chunk[:split_at + 1]
-                chunks.append((intro if not chunks else "") + chunk.strip())
-                full_reply_cleaned = full_reply_cleaned[len(chunk):].strip()
-
-            for chunk in chunks:
-                bot.send_message(message.chat.id, chunk)
-
-            # Save explanation
-            session["messages"].append({"role": "assistant", "content": full_reply})
-            learned_items = enhance_language_learning_detection(full_reply_cleaned, family_member, session)
-            user_sessions[user_id] = update_session_learning(user_sessions[user_id], learned_items)
-
-        # 🚫 Skip voice and video for photo messages
-
-    except Exception as e:
-        bot.edit_message_text(f"❌ Error procesando la imagen: {str(e)}",
-                              chat_id=message.chat.id,
-                              message_id=processing_msg.message_id)
 
 def debug_files_and_env():
     """Print debugging info about environment and files"""
@@ -2283,6 +2233,12 @@ register_commands_with_retry()
 @bot.message_handler(content_types=["photo"])
 def handle_photo(message):
     """Handle photo message with text recognition and translation"""
+    # ADD SUBSCRIPTION CHECK
+    user_id = str(message.from_user.id)
+    if not is_subscribed(user_id):
+        bot.reply_to(message, "🔐 You are not an active subscriber.\nPlease subscribe at:\n👉 https://revicheva.gumroad.com/l/aideazzEspaLuz")
+        return
+    
     try:
         # Step 1: Send processing message
         processing_msg = bot.send_message(message.chat.id, "🔍 Procesando imagen... / Processing image...")
