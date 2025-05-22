@@ -2092,7 +2092,13 @@ def handle_text(message):
 @bot.message_handler(content_types=["photo"])
 def handle_photo(message):
     """Handle photo message with text recognition and translation"""
+    user_id = str(message.from_user.id)
+    if not is_subscribed(user_id):
+        bot.reply_to(message, "🔐 You are not an active subscriber.\nPlease subscribe at:\n👉 https://revicheva.gumroad.com/l/aideazzEspaLuz")
+        return
+
     processing_msg = bot.reply_to(message, "🔍 Procesando imagen... / Processing image...")
+
 
     try:
         # Step 1: Download the photo
