@@ -1890,6 +1890,8 @@ def handle_email_link(message):
                 bot.send_message(message.chat.id, "⚠️ Email not found. Did you subscribe yet?")
     except Exception as e:
         print(f"❌ Error linking email: {e}")
+        import traceback
+        traceback.print_exc()
         bot.send_message(message.chat.id, "⚠️ Something went wrong. Please try again.")
 
 @bot.message_handler(commands=["reset"])
