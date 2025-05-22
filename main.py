@@ -607,7 +607,14 @@ def create_initial_session(user_id, user_info, chat_info, message_text=""):
     """Create a rich context for Claude's MCP with emotional intelligence features"""
     # Detect family member
     family_member = detect_family_member(user_info, message_text) 
-    member_info = FAMILY_MEMBERS.get(family_member, FAMILY_MEMBERS["elena"])
+    member_info = FAMILY_MEMBERS.get(family_member, {
+    "role": "learner",
+    "age": 35,
+    "learning_level": "beginner",
+    "interests": ["culture", "language"],
+    "tone": "neutral",
+    "language_balance": {"spanish": 0.5, "english": 0.5}
+})
 
     return {
         "messages": [],
@@ -2021,6 +2028,11 @@ def transcribe_audio(audio_path: str) -> str:
 
 @bot.message_handler(content_types=["voice"])
 def handle_voice(message):
+    user_id = str(message.from_user.id)
+    if not is_subscribed(user_id):
+        bot.reply_to(message, "🔐 You are not an active subscriber.\nPlease subscribe at:\n👉 https://revicheva.gumroad.com/l/aideazzEspaLuz")
+        return
+
     try:
         file_info = bot.get_file(message.voice.file_id)
         voice_file = bot.download_file(file_info.file_path)
@@ -2050,7 +2062,7 @@ def handle_voice(message):
         bot.send_message(message.chat.id, f"🗣️ Transcripción:\n{transcription_cleaned}")
 
         # Continue as a normal text message
-        process_message(transcription_cleaned, message.chat.id, str(message.from_user.id), message)
+        process_message(transcription_cleaned, message.chat.id, user_id, message)
 
         # Cleanup
         os.remove(temp_ogg_path)
@@ -2071,8 +2083,11 @@ def remove_numerals_and_asterisks(text):
 
 @bot.message_handler(content_types=["text"])
 def handle_text(message):
-    """Handle text message"""
-    process_message(message.text, message.chat.id, str(message.from_user.id), message)
+    user_id = str(message.from_user.id)
+    if not is_subscribed(user_id):
+        bot.reply_to(message, "🔐 You are not an active subscriber.\nPlease subscribe at:\n👉 https://revicheva.gumroad.com/l/aideazzEspaLuz")
+        return
+    process_message(message.text, message.chat.id, user_id, message)
 
 @bot.message_handler(content_types=["photo"])
 def handle_photo(message):
@@ -2182,7 +2197,6 @@ custom_commands = [
     BotCommand("start", "Start Espaluz"),
     BotCommand("reset", "Reset learning session"),
     BotCommand("progress", "Show learning progress"),
-    BotCommand("family", "Switch family member"),
     BotCommand("help", "Help and instructions")
 ]
 
