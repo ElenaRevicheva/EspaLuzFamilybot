@@ -83,6 +83,50 @@ except Exception as e:
     print(f"❌ FFmpeg check failed: {str(e)}")
     FFMPEG_AVAILABLE = False
 
+import re
+
+def remove_numerals_and_asterisks(text):
+    """Clean text from numbers and asterisks — especially for TTS and transcription."""
+    cleaned = re.sub(r'\b\d+[\.\):\-\s]*', '', text)  # Remove numbered bullets like 1., 2)
+    cleaned = re.sub(r'\*+', '', cleaned)             # Remove asterisk markup
+    cleaned = re.sub(r'\s+', ' ', cleaned)            # Normalize whitespace
+    return cleaned.strip()
+
+import re
+
+def clean_video_script_block(text, name_variants=None):
+    """Remove hardcoded greetings like 'Hola Elena' from video script blocks"""
+    if not name_variants:
+        name_variants = ["elena", "alisa", "marina"]
+
+    def replacer(match):
+        script = match.group(1)
+        # Remove "Hola NAME!" or "Hola NAME." at start
+        cleaned_script = re.sub(
+            r"(?i)^\s*hola\s+(%s)[\.\!\:]?\s*" % "|".join(name_variants),
+            "Hola! ", script.strip()
+        )
+        return f"[VIDEO SCRIPT START]{cleaned_script.strip()}[VIDEO SCRIPT END]"
+
+    return re.sub(r"\[VIDEO SCRIPT START\](.*?)\[VIDEO SCRIPT END\]", replacer, text, flags=re.DOTALL)
+
+def get_user_greeting(session):
+    """Return a dynamic greeting based on profile or fallback to 'Hola amig@'"""
+    profile = session.get("profile", {})
+    name = profile.get("name", "").strip()
+
+    if name:
+        return f"👋 ¡Hola {name}!"
+    
+    # fallback based on gender
+    gender = profile.get("gender", "").lower()
+    if gender == "female":
+        return "👋 ¡Hola amiga!"
+    elif gender == "male":
+        return "👋 ¡Hola amigo!"
+    else:
+        return "👋 ¡Hola amig@!"
+
 import json
 
 def is_subscribed(user_id):
@@ -605,16 +649,19 @@ def enhance_language_learning_detection(text, family_member, session):
 # === MCP CONTEXT STRUCTURE ===
 def create_initial_session(user_id, user_info, chat_info, message_text=""):
     """Create a rich context for Claude's MCP with emotional intelligence features"""
-    # Detect family member
-    family_member = detect_family_member(user_info, message_text) 
-    member_info = FAMILY_MEMBERS.get(family_member, {
-    "role": "learner",
-    "age": 35,
-    "learning_level": "beginner",
-    "interests": ["culture", "language"],
-    "tone": "neutral",
-    "language_balance": {"spanish": 0.5, "english": 0.5}
-})
+    
+    # Detect family member or assign a neutral profile
+    family_member = detect_family_member(user_info, message_text)
+    
+    # Default dynamic profile (no hardcoded names like Elena, Marina, etc.)
+    profile_data = {
+        "role": "learner",
+        "age": 35,
+        "learning_level": "beginner",
+        "interests": ["culture", "language"],
+        "tone": "neutral",
+        "language_balance": {"spanish": 0.5, "english": 0.5}
+    }
 
     return {
         "messages": [],
@@ -626,10 +673,10 @@ def create_initial_session(user_id, user_info, chat_info, message_text=""):
                 "language_code": user_info.language_code,
                 "preferences": {
                     "family_role": family_member,
-                    "age": member_info["age"],
-                    "learning_level": member_info["learning_level"],
-                    "interests": member_info["interests"],
-                    "tone_preference": member_info["tone"],
+                    "age": profile_data["age"],
+                    "learning_level": profile_data["learning_level"],
+                    "interests": profile_data["interests"],
+                    "tone_preference": profile_data["tone"],
                     "primary_language": "russian",
                     "target_languages": ["spanish", "english"],
                     "difficult_words": [],
@@ -649,36 +696,24 @@ def create_initial_session(user_id, user_info, chat_info, message_text=""):
                 "last_interaction_time": datetime.now().isoformat(),
                 "message_count": 0,
                 "recent_topics": [],
-                "language_balance": member_info["language_balance"]
+                "language_balance": profile_data["language_balance"]
             },
             "learning": {
                 "last_session_date": datetime.now().isoformat(),
                 "total_sessions": 1,
                 "progress": {
                     "vocabulary": {
-                        "spanish": {
-                            "learned": [],
-                            "needs_review": []
-                        },
-                        "english": {
-                            "learned": [],
-                            "needs_review": []
-                        }
+                        "spanish": {"learned": [], "needs_review": []},
+                        "english": {"learned": [], "needs_review": []}
                     },
                     "grammar": {
-                        "spanish": {
-                            "learned": [],
-                            "needs_review": []
-                        },
-                        "english": {
-                            "learned": [],
-                            "needs_review": []
-                        }
+                        "spanish": {"learned": [], "needs_review": []},
+                        "english": {"learned": [], "needs_review": []}
                     }
                 },
                 "learning_path": {
-                    "vocabulary_level": member_info["learning_level"],
-                    "grammar_complexity": member_info["learning_level"],
+                    "vocabulary_level": profile_data["learning_level"],
+                    "grammar_complexity": profile_data["learning_level"],
                     "cultural_content": "basic",
                     "suggested_topics": [],
                     "review_needed": []
@@ -1455,106 +1490,95 @@ def generate_video_with_audio(chat_id, text_content, max_duration=30):
         print(f"Video generation error: {e}")
         return False
 
-def create_full_voice_message(chat_id, full_text):
+def create_full_voice_message(chat_id, full_text, session=None):
     """Create a voice message with the complete text response"""
     print(f"Creating full voice message, text length: {len(full_text)} characters")
+
+    # Clean numerals, asterisks, and hardcoded greetings
+    cleaned_text = remove_numerals_and_asterisks(full_text)
+    cleaned_text = re.sub(r"(?i)\b(hola)\s+(elena|alisa|marina)[\.\!\:]?", "Hola", cleaned_text)
+
+    # Add personalized greeting
+    greeting = get_user_greeting(session) if session else "👋 ¡Hola amig@!"
+    full_text_for_tts = f"{greeting} {cleaned_text}"
 
     # Create a unique filename
     timestamp = int(time.time())
     voice_file = f"full_voice_{timestamp}.mp3"
 
     try:
-        # Split text into chunks to handle very long responses
-        max_chunk_size = 1500  # Characters per chunk
+        # Split text into manageable chunks
+        max_chunk_size = 1500
+        paragraphs = full_text_for_tts.split('\n\n')
         chunks = []
+        current_chunk = ""
 
-        if len(full_text) <= max_chunk_size:
-            chunks = [full_text]
-        else:
-            # Split by paragraphs and combine until we reach chunk size
-            paragraphs = full_text.split('\n\n')
-            current_chunk = ""
-
-            for para in paragraphs:
-                if len(current_chunk) + len(para) + 2 <= max_chunk_size:
-                    if current_chunk:
-                        current_chunk += "\n\n" + para
-                    else:
-                        current_chunk = para
-                else:
-                    if current_chunk:
-                        chunks.append(current_chunk)
-                    current_chunk = para
-
-            if current_chunk:
+        for para in paragraphs:
+            if len(current_chunk) + len(para) + 2 <= max_chunk_size:
+                current_chunk += ("\n\n" if current_chunk else "") + para
+            else:
                 chunks.append(current_chunk)
+                current_chunk = para
+
+        if current_chunk:
+            chunks.append(current_chunk)
 
         print(f"Split text into {len(chunks)} chunks")
 
-        # Process each chunk
+        # Generate voice for each chunk
         chunk_files = []
         for i, chunk in enumerate(chunks):
             chunk_file = f"chunk_{timestamp}_{i}.mp3"
             try:
                 tts = gTTS(text=chunk, lang="es", slow=False)
                 tts.save(chunk_file)
-
                 if os.path.exists(chunk_file) and os.path.getsize(chunk_file) > 100:
                     chunk_files.append(chunk_file)
                 else:
-                    print(f"Failed to create voice chunk {i}")
+                    print(f"⚠️ Failed to create voice chunk {i}")
             except Exception as e:
-                print(f"Error generating voice chunk {i}: {e}")
+                print(f"❌ Error generating voice chunk {i}: {e}")
 
-        # If we have multiple chunks, combine them
+        # Combine chunks if needed
         if len(chunk_files) > 1:
-            # Create a file list for ffmpeg
             concat_file = f"concat_{timestamp}.txt"
             with open(concat_file, "w") as f:
-                for chunk_file in chunk_files:
-                    f.write(f"file '{chunk_file}'\n")
+                for file in chunk_files:
+                    f.write(f"file '{file}'\n")
 
-            # Combine audio files
-            combine_cmd = [
-                "ffmpeg", "-y",
-                "-f", "concat",
-                "-safe", "0",
-                "-i", concat_file,
-                "-c", "copy",
-                voice_file
-            ]
+            subprocess.run([
+                "ffmpeg", "-y", "-f", "concat", "-safe", "0",
+                "-i", concat_file, "-c", "copy", voice_file
+            ], capture_output=True)
 
-            subprocess.run(combine_cmd, capture_output=True)
-
-            # Check if combined file exists
             if not os.path.exists(voice_file) or os.path.getsize(voice_file) < 100:
-                print("Failed to combine audio chunks. Using first chunk.")
+                print("⚠️ Failed to combine audio chunks. Using first chunk.")
                 voice_file = chunk_files[0]
-        elif len(chunk_files) == 1:
-            # Just use the single chunk
+        elif chunk_files:
             voice_file = chunk_files[0]
         else:
-            print("No voice chunks were created successfully")
+            print("❌ No voice chunks were created")
             return False
 
         # Send the voice message
         with open(voice_file, "rb") as voice:
             bot.send_voice(chat_id, voice)
 
-        print("Full voice message sent successfully")
+        print("✅ Full voice message sent successfully")
 
         # Clean up
         try:
-            for file in chunk_files + [concat_file] if len(chunk_files) > 1 else chunk_files:
+            cleanup_files = chunk_files + ([concat_file] if len(chunk_files) > 1 else [])
+            for file in cleanup_files:
                 if os.path.exists(file):
                     os.remove(file)
         except Exception as e:
-            print(f"Voice cleanup error: {e}")
+            print(f"⚠️ Voice cleanup error: {e}")
 
         return True
 
     except Exception as e:
-        print(f"Full voice generation error: {e}")
+        print(f"❌ Full voice generation error: {e}")
         return False
 
 def extract_video_script(full_response):
@@ -1769,26 +1793,31 @@ def process_photo(photo_file):
         return "❌ Error processing the image with GPT-4o. Please try again later."
 
 # === MAIN LOGIC ===
-def ultimate_multimedia_generator(chat_id, full_reply, short_reply):
-    """Generate both video and voice messages with proper error handling"""
+def ultimate_multimedia_generator(chat_id, full_reply, short_reply, session=None):
+    """Generate and send both voice and video messages with session awareness"""
     try:
-        # First, attempt to generate and send the video
-        print("🎬 Starting video generation...")
-        video_success = bulletproof_video_generator(chat_id, full_reply)
-        
-        # Always generate voice message after video attempt, regardless of video success
-        print("🎙️ Starting voice message generation...")
-        send_full_voice_message(chat_id, full_reply)
-        
-        print(f"✅ Multimedia generation complete - Video: {'Success' if video_success else 'Failed'}, Voice: Sent")
-            
+        print("🎬 Starting ultimate multimedia generation...")
+
+        # === 1. Voice message ===
+        print("🎤 Generating full voice message...")
+        success = create_full_voice_message(chat_id, full_reply, session)
+        if not success:
+            print("⚠️ Voice message generation failed")
+
+        # === 2. Short reply video ===
+        print("🎞️ Preparing short video script...")
+        cleaned_short = clean_video_script_block(short_reply)
+
+        # Now generate the video
+        print("🎥 Creating avatar video with short script...")
+        video_success = create_video_from_script(chat_id, cleaned_short)
+        if not video_success:
+            print("⚠️ Video generation failed")
+
+        print("✅ Multimedia generation complete")
+
     except Exception as e:
-        print(f"❌ Critical error in multimedia generation: {e}")
-        # Final fallback - just send a simple message
-        try:
-            bot.send_message(chat_id, "❌ Lo siento, no pude generar contenido multimedia / Sorry, I couldn't generate multimedia content")
-        except:
-            print("💔 Failed to send error notification")
+        print(f"❌ Error in multimedia generator: {e}")
 
 def process_message(user_input, chat_id, user_id, message_obj):
     """Process incoming message with ultimate multimedia generation"""
@@ -1814,6 +1843,10 @@ def process_message(user_input, chat_id, user_id, message_obj):
     # Get Claude response with MCP
     print("Requesting Claude response...")
     full_reply, short_reply, thinking_process = ask_claude_with_mcp(session, translated)
+
+    # Clean video scripts from hardcoded names (like "Hola Elena")
+    short_reply = clean_video_script_block(short_reply)
+
     print(f"Received Claude response, length: {len(full_reply)}")
 
     # Send the main response
@@ -1831,11 +1864,11 @@ def process_message(user_input, chat_id, user_id, message_obj):
     # Update session with Claude's response
     session["messages"].append({"role": "assistant", "content": full_reply})
 
-    # Launch multimedia generation in a thread
+    # Launch multimedia generation in a thread, pass session!
     print("Starting multimedia generation thread...")
     media_thread = threading.Thread(
         target=ultimate_multimedia_generator,
-        args=(chat_id, full_reply, short_reply),
+        args=(chat_id, full_reply, short_reply, session),
         daemon=True
     )
     media_thread.start()
@@ -1859,13 +1892,13 @@ def handle_start(message):
         "• Real-time emotional support\n"
         "• Voice + video messages\n"
         "• Photo translation\n\n"
-        "🔐 *To unlock access:*\n"
-        "1️⃣ Subscribe monthly here 👉 https://revicheva.gumroad.com/l/aideazzEspaLuz\n"
-        "2️⃣ Then send /profile to set your name, age, and learning role.\n"
+        "🔐 *How to unlock access:*\n"
+        "1️⃣ Subscribe here 👉 https://revicheva.gumroad.com/l/aideazzEspaLuz\n"
+        "2️⃣ After subscribing, type /link and send the *email you used on Gumroad*\n"
+        "3️⃣ Then type /profile to set your *name, age, and role*\n\n"
+        "🎙️ Send me a voice or text message to begin.\n"
+        "📸 Or send a photo of text for automatic translation!"
     )
-    welcome_msg += "\n\n🎙️ Envíame un mensaje de voz o texto para comenzar. / Send me a voice or text message to begin."
-    welcome_msg += "\n\n📸 ¡También puedes enviarme fotos de texto para traducirlo! / You can also send me photos of text to translate it!"
-
     bot.send_message(message.chat.id, welcome_msg, parse_mode="Markdown")
 
 @bot.message_handler(commands=["link"])
@@ -1993,20 +2026,32 @@ def save_profile(message):
 
 @bot.message_handler(commands=["help"])
 def handle_help(message):
-    """Handle /help command"""
-    help_text = """🌟 *Comandos de Espaluz / Espaluz Commands:*
+    help_text = """🌟 *Espaluz Help Menu / Menú de Ayuda* 🌟
 
-/start - Iniciar el bot / Start the bot
-/reset - Reiniciar la conversación / Reset the conversation
-/progress - Ver tu progreso / View your progress
-/profile - Configura tu perfil / Set your learning profile
-/help - Ver este mensaje / See this message
+🧠 *What can I do?*
+• Talk to you in Spanish and English
+• Understand your emotional tone
+• Translate text from photos
+• Send you voice and video replies
 
-💬 Puedes enviar mensajes de texto o voz en ruso, español o inglés.
-💬 You can send text or voice messages in Russian, Spanish, or English.
+🔐 *How to unlock access:*
+1️⃣ Subscribe 👉 https://revicheva.gumroad.com/l/aideazzEspaLuz  
+2️⃣ Type /link and send the email you used on Gumroad  
+3️⃣ Then type /profile to set your name, age, and role
 
-📸 ¡Envíame fotos de texto para traducirlo automáticamente! (menús, señales, documentos)
-📸 Send me photos of text for automatic translation! (menus, signs, documents)"""
+🎙️ *How to use:*
+• Send a voice or text message — I’ll respond in both languages
+📸 *Or send a photo with text* — I’ll translate it for you
+
+ℹ️ *Available Commands:*
+/start – Intro and setup  
+/help – This help menu  
+/profile – Set your user details  
+/link – Link your Gumroad email  
+/progress – View your learning stats  
+/reset – Reset your session and learning history
+
+Let's learn together! 💬"""
 
     bot.reply_to(message, help_text, parse_mode="Markdown")
 
