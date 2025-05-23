@@ -14,59 +14,54 @@ import pytesseract
 import io
 import base64
 import math
+import threading
 
-
-# Load env
+# === Load environment variables ===
 load_dotenv()
 
-# Configuration
+# === Configuration ===
 TELEGRAM_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 CLAUDE_API_KEY = os.environ["CLAUDE_API_KEY"]
 OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
 CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL_NAME", "claude-3-7-sonnet-20250219")
-CLAUDE_API_VERSION = os.environ.get("CLAUDE_API_VERSION", "2023-06-01")  # Updated to allow for version changes
+CLAUDE_API_VERSION = os.environ.get("CLAUDE_API_VERSION", "2023-06-01")
 MAX_HISTORY_MESSAGES = int(os.getenv("MAX_HISTORY_MESSAGES", 10))
 
 # === WEBHOOK KILLER THREAD ===
 def webhook_killer_thread():
-    """Background thread that continuously monitors and removes webhooks"""
     print("🔥🔥🔥 WEBHOOK KILLER THREAD STARTING 🔥🔥🔥")
-    
-    webhook_check_interval = 30  # seconds between checks
+    webhook_check_interval = 30
     killer_cycle = 0
-    
+
     while True:
         try:
             killer_cycle += 1
             print(f"🛡️ Webhook killer check cycle #{killer_cycle}")
-            
-            # Execute webhook deletion
+
             delete_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/deleteWebhook?drop_pending_updates=true"
             info_url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getWebhookInfo"
-            
-            # Delete webhook
+
             delete_response = requests.get(delete_url, timeout=30)
             delete_result = delete_response.json()
             print(f"🧹 Webhook deletion result: {delete_result}")
-            
-            # Verify webhook status
+
             info_response = requests.get(info_url, timeout=30)
             webhook_info = info_response.json()
             webhook_url = webhook_info.get('result', {}).get('url', '')
-            
+
             if webhook_url:
                 print(f"⚠️ WARNING: Webhook still exists: {webhook_url}! Trying again...")
             else:
                 print(f"✅ No webhook found in cycle #{killer_cycle}")
-            
-            # Sleep before next check
+
             time.sleep(webhook_check_interval)
         except Exception as e:
             print(f"❌ Webhook killer error: {e}")
             import traceback
             traceback.print_exc()
-            time.sleep(60)  # Wait longer after errors
+            time.sleep(60)
 
+# === FFmpeg Check and Debug Paths ===
 print("Checking FFmpeg installation...")
 
 try:
@@ -77,20 +72,16 @@ try:
     ffprobe_result = subprocess.run(["ffprobe", "-version"], capture_output=True, text=True, check=True)
     ffprobe_version = ffprobe_result.stdout.split('\n')[0] if ffprobe_result.stdout else "Unknown version"
     print(f"✅ FFprobe is available: {ffprobe_version}")
-
     FFMPEG_AVAILABLE = True
 except Exception as e:
     print(f"❌ FFmpeg check failed: {str(e)}")
     FFMPEG_AVAILABLE = False
 
-# Create a simple test video file if needed (can add before Flask app runs)
 def create_test_video():
-    """Create a simple test video file if the base video doesn't exist"""
     base_video = "espaluz_loop.mp4"
     if not os.path.exists(base_video) and FFMPEG_AVAILABLE:
         print("Base video not found, creating a simple test video...")
         try:
-            # Create a 5-second color video
             subprocess.run([
                 "ffmpeg", "-y",
                 "-f", "lavfi",
@@ -106,42 +97,82 @@ def create_test_video():
         except Exception as e:
             print(f"❌ Error creating test video: {str(e)}")
 
-# Call this before starting the Flask app
-create_test_video()
-
-bot = telebot.TeleBot(TELEGRAM_TOKEN)
-user_sessions = {}
-
-# Start webhook killer thread
-import threading
-webhook_thread = threading.Thread(target=webhook_killer_thread, daemon=True)
-webhook_thread.start()
-print("🛡️ Webhook killer thread started in background")
-
 def debug_file_paths():
-    """Debug function to check important file paths"""
     base_video = "espaluz_loop.mp4"
     base_video_abs = os.path.abspath(base_video)
-
+    print("\n=== DEBUGGING INFO ===")
     print(f"Current working directory: {os.getcwd()}")
     print(f"Base video relative path: {base_video}")
     print(f"Base video absolute path: {base_video_abs}")
     print(f"Base video exists: {os.path.exists(base_video_abs)}")
-
-    # List files in current directory
     files = os.listdir(".")
     print(f"Files in current directory: {files}")
-
-    # Check FFmpeg
     try:
         result = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True, check=True)
-        ffmpeg_version = result.stdout.split('\n')[0]
-        print(f"FFmpeg version: {ffmpeg_version}")
+        print(f"FFmpeg version: {result.stdout.splitlines()[0]}")
     except Exception as e:
         print(f"FFmpeg check error: {e}")
+    print("====================\n")
 
-# Call this function before the Flask app starts
+# Call startup checks
+create_test_video()
 debug_file_paths()
+
+# === TELEBOT SETUP ===
+bot = telebot.TeleBot(TELEGRAM_TOKEN)
+user_sessions = {}
+
+# === Start webhook killer in background ===
+webhook_thread = threading.Thread(target=webhook_killer_thread, daemon=True)
+webhook_thread.start()
+print("🛡️ Webhook killer thread started in background")
+
+# === GUMROAD SYNC FUNCTION ===
+def poll_subscriptions():
+    """Poll Gumroad API and update local subscriber list"""
+    try:
+        GUMROAD_API_KEY = os.environ.get("GUMROAD_API_KEY")
+        GUMROAD_PRODUCT_ID = os.environ.get("GUMROAD_PRODUCT_ID")
+        url = f"https://api.gumroad.com/v2/subscriptions?product_id={GUMROAD_PRODUCT_ID}"
+        headers = {"Authorization": f"Bearer {GUMROAD_API_KEY}"}
+
+        res = requests.get(url, headers=headers)
+        if res.status_code != 200:
+            print(f"❌ Gumroad error {res.status_code}: {res.text}")
+            return
+
+        data = res.json()
+        if not data.get("success"):
+            print(f"❌ Gumroad failure: {data}")
+            return
+
+        updated = {}
+        for sub in data.get("subscriptions", []):
+            email = sub.get("email", "").lower()
+            status = "active" if sub.get("status") == "active" else "inactive"
+            updated[email] = {
+                "telegram_id": None,
+                "status": status
+            }
+
+        with open("subscribers.json", "w") as f:
+            json.dump(updated, f, indent=2)
+
+        print(f"✅ Subscription database updated. Total: {len(updated)}")
+
+    except Exception as e:
+        print(f"❌ Exception polling Gumroad: {e}")
+
+def is_subscribed(user_id):
+    try:
+        with open("subscribers.json", "r") as f:
+            subscribers = json.load(f)
+        for email, info in subscribers.items():
+            if str(info.get("telegram_id")) == str(user_id) and info.get("status") == "active":
+                return True
+    except Exception as e:
+        print(f"❌ Error checking subscription: {e}")
+    return False
 
 # === EMOTIONAL INTELLIGENCE & PERSONALIZATION ===
 FAMILY_MEMBERS = {
@@ -1873,41 +1904,27 @@ def process_message(user_input, chat_id, user_id, message_obj):
     session = adapt_learning_path(session, user_input, full_reply)
     print("Learning data updated")
 
-# === HANDLERS ===
-@bot.message_handler(commands=["start"])
-def handle_start(message):
-    """Handle /start command"""
-    # ...
 
 # === HANDLERS ===
 @bot.message_handler(commands=["start"])
 def handle_start(message):
-    """Handle /start command"""
-    user_id = str(message.from_user.id)
-    user_sessions[user_id] = create_initial_session(user_id, message.from_user, message.chat)
-
-    # Create personalized welcome based on detected family member
-    family_member = user_sessions[user_id]["context"]["user"]["preferences"]["family_role"]
-    member_info = FAMILY_MEMBERS.get(family_member, FAMILY_MEMBERS["elena"])
-
     welcome_msg = (
-        "👋 ¡Hola! Soy Espaluz, tu asistente de idiomas. / Hello! I'm Espaluz, your language assistant.\n\n"
-        "☕ *If you enjoy Espaluz and want to support this project,*\n"
-        "👉 [Buy me a coffee](https://buymeacoffee.com/aideazz)\n\n"
-        "Your support helps families learn Spanish with emotional, intelligent AI 💛\n\n"
+        "👋 ¡Hola! Welcome to *Espaluz* — your AI-powered bilingual tutor for expat families 🇵🇦✨\n\n"
+        "🌟 *Espaluz Commands / Comandos de Espaluz:*\n"
+        "/start – Iniciar el bot / Start the bot\n"
+        "/reset – Reiniciar conversación / Reset the conversation\n"
+        "/progress – Ver tu progreso / View your progress\n"
+        "/profile – Configurar tu perfil / Set your profile\n"
+        "/link – Vincular email de Gumroad / Link your Gumroad email\n"
+        "/help – Ver este menú / View this menu\n\n"
+        "🔐 *How to unlock full access:*\n"
+        "1️⃣ Subscribe here 👉 https://revicheva.gumroad.com/l/aideazzEspaLuz\n"
+        "2️⃣ Then type /link and send the email you used on Gumroad\n"
+        "3️⃣ Then type /profile to set your name, age, and role\n\n"
+        "💬 You can send me text or voice messages in Russian, Spanish, or English.\n"
+        "📸 You can also send photos of text for instant translation!"
     )
-
-    if family_member == "alisa":
-        welcome_msg += "🎮 ¡Vamos a aprender español y inglés jugando! / Let's learn Spanish and English while playing!"
-    elif family_member == "marina":
-        welcome_msg += "📚 Estoy aquí para ayudarte a aprender español e inglés a tu ritmo. / I'm here to help you learn Spanish and English at your own pace."
-    else:
-        welcome_msg += "🗣️ Estoy aquí para ayudarte con tus necesidades de idiomas. / I'm here to help with your language needs."
-
-    welcome_msg += "\n\nEnvíame un mensaje de voz o texto para comenzar. / Send me a voice or text message to begin."
-    welcome_msg += "\n\n📸 ¡También puedes enviarme fotos de texto para traducirlo! / You can also send me photos of text to translate it!"
-
-    bot.reply_to(message, welcome_msg, parse_mode="Markdown")
+    bot.send_message(message.chat.id, welcome_msg, parse_mode="Markdown")
 
 @bot.message_handler(commands=["reset"])
 def handle_reset(message):
@@ -1976,50 +1993,94 @@ def handle_progress(message):
 
     bot.reply_to(message, progress_msg, parse_mode="Markdown")
 
+@bot.message_handler(commands=["profile"])
+def handle_profile(message):
+    """Show the user's current family profile (name, role, age)"""
+    user_id = str(message.from_user.id)
+
+    if user_id not in user_sessions:
+        user_sessions[user_id] = create_initial_session(user_id, message.from_user, message.chat)
+
+    prefs = user_sessions[user_id]["context"]["user"]["preferences"]
+    name = prefs.get("name", "Not set")
+    role = prefs.get("family_role", "Not set")
+    age = prefs.get("age", "Not set")
+
+    profile_msg = (
+        f"👤 *Tu perfil actual / Your current profile:*\n\n"
+        f"🧑 Nombre / Name: *{name}*\n"
+        f"🎭 Rol / Role: *{role}*\n"
+        f"🎂 Edad / Age: *{age}*\n\n"
+        f"✏️ Para cambiarlo, usa el comando:\n"
+        f"`/family Nombre Rol Edad`\n\n"
+        f"Ejemplo: `/family Sofia mother 38`"
+    )
+    bot.send_message(message.chat.id, profile_msg, parse_mode="Markdown")
+
 @bot.message_handler(commands=["family"])
 def handle_family(message):
-    """Handle /family command to set family member identification"""
+    """Handle /family command to set custom user profile info (name, role, age)"""
+
     user_id = str(message.from_user.id)
     if user_id not in user_sessions:
         user_sessions[user_id] = create_initial_session(user_id, message.from_user, message.chat)
 
-    # Extract family member name if provided
-    command_parts = message.text.split()
-    if len(command_parts) > 1:
-        member_name = command_parts[1].lower()
-        if member_name in FAMILY_MEMBERS:
-            user_sessions[user_id]["context"]["user"]["preferences"]["family_role"] = member_name
-            member_info = FAMILY_MEMBERS[member_name]
-            bot.reply_to(message, f"👪 Perfil cambiado a: {member_name.capitalize()} ({member_info['role']}, {member_info['age']} años) / Profile changed to: {member_name.capitalize()} ({member_info['role']}, {member_info['age']} years old)")
+    # Expected format: /family Name Role Age
+    command_parts = message.text.split(maxsplit=3)
+
+    if len(command_parts) == 4:
+        _, name, role, age_str = command_parts
+        try:
+            age = int(age_str)
+            user_sessions[user_id]["context"]["user"]["preferences"]["family_role"] = role.lower()
+            user_sessions[user_id]["context"]["user"]["preferences"]["name"] = name.capitalize()
+            user_sessions[user_id]["context"]["user"]["preferences"]["age"] = age
+
+            bot.reply_to(
+                message,
+                f"✅ Perfil actualizado / Profile updated:\n👤 *{name.capitalize()}* ({role}, {age} años / years old)",
+                parse_mode="Markdown"
+            )
+            return
+        except ValueError:
+            bot.reply_to(message, "⚠️ Por favor proporciona una edad válida. / Please provide a valid age.")
             return
 
-    # If no valid name provided, show options
-    family_msg = """👪 *¿Quién eres? / Who are you?*
-
-Usa uno de estos comandos / Use one of these commands:
-- /family alisa - Para la niña / For the child (4)
-- /family marina - Para la abuela / For the grandmother (65)
-- /family elena - Para la madre / For the mother (39)"""
-
-    bot.reply_to(message, family_msg, parse_mode="Markdown")
+    # If input is invalid or missing
+    example_msg = (
+        "👪 *Configura tu perfil familiar / Set your family profile:*\n\n"
+        "Usa este formato / Use this format:\n"
+        "`/family Name Role Age`\n\n"
+        "Ejemplo / Example:\n"
+        "`/family Sofia mother 38`\n"
+        "`/family Leo child 6`\n"
+        "`/family Carlos grandfather 65`"
+    )
+    bot.reply_to(message, example_msg, parse_mode="Markdown")
 
 @bot.message_handler(commands=["help"])
 def handle_help(message):
-    """Handle /help command"""
     help_text = """🌟 *Comandos de Espaluz / Espaluz Commands:*
 
-/start - Iniciar el bot / Start the bot
-/reset - Reiniciar la conversación / Reset the conversation
-/progress - Ver tu progreso / View your progress
-/family - Cambiar miembro familiar / Change family member
-/help - Ver este mensaje / See this message
+/start – Iniciar el bot / Start the bot  
+/reset – Reiniciar conversación / Reset the conversation  
+/progress – Ver tu progreso / View your progress  
+/profile – Configurar tu perfil / Set your profile  
+/link – Vincular email de Gumroad / Link your Gumroad email  
+/help – Ver este mensaje / View this message
 
-💬 Puedes enviar mensajes de texto o voz en ruso, español o inglés.
-💬 You can send text or voice messages in Russian, Spanish, or English.
+💬 Puedes enviarme mensajes de texto o voz en ruso, español o inglés.  
+💬 You can send me text or voice messages in Russian, Spanish, or English.
 
-📸 ¡Envíame fotos de texto para traducirlo automáticamente! (menús, señales, documentos)
-📸 Send me photos of text for automatic translation! (menus, signs, documents)"""
+📸 ¡También puedes enviarme fotos con texto para traducirlo automáticamente!  
+📸 You can also send me pictures of text (menus, signs, etc.) for instant translation.
 
+🔐 *Para desbloquear todas las funciones / To unlock full features:*
+1️⃣ Suscríbete aquí 👉 https://revicheva.gumroad.com/l/aideazzEspaLuz  
+2️⃣ Luego escribe /link y envíame el email que usaste en Gumroad  
+3️⃣ Luego escribe /profile para configurar tu nombre, edad y rol
+
+Let's learn together! 💬"""
     bot.reply_to(message, help_text, parse_mode="Markdown")
 
 def transcribe_audio(audio_path: str) -> str:
@@ -2040,8 +2101,38 @@ def transcribe_audio(audio_path: str) -> str:
         print(f"❌ Transcription error: {e}")
         return None
 
+@bot.message_handler(commands=["link"])
+def handle_link(message):
+    bot.send_message(message.chat.id, "📩 Please reply with the *email you used on Gumroad* to link your subscription.", parse_mode="Markdown")
+
+@bot.message_handler(func=lambda m: "@" in m.text and "." in m.text and " " not in m.text)
+def handle_email_link(message):
+    user_email = message.text.strip().lower()
+    user_id = str(message.from_user.id)
+
+    try:
+        with open("subscribers.json", "r+") as f:
+            data = json.load(f)
+            if user_email in data:
+                data[user_email]["telegram_id"] = user_id
+                f.seek(0)
+                json.dump(data, f, indent=2)
+                f.truncate()
+                bot.send_message(message.chat.id, "✅ Email linked! You now have full access to Espaluz.")
+            else:
+                bot.send_message(message.chat.id, "⚠️ Email not found. Did you subscribe yet?")
+    except Exception as e:
+        print(f"❌ Error linking email: {e}")
+        bot.send_message(message.chat.id, "⚠️ Something went wrong. Please try again.")
+
 @bot.message_handler(content_types=["voice"])
 def handle_voice(message):
+    user_id = str(message.from_user.id)
+
+    if not is_subscribed(user_id):
+        bot.reply_to(message, "🔐 You are not an active subscriber.\nPlease subscribe at:\n👉 https://revicheva.gumroad.com/l/aideazzEspaLuz")
+        return
+
     try:
         file_info = bot.get_file(message.voice.file_id)
         voice_file = bot.download_file(file_info.file_path)
@@ -2049,17 +2140,12 @@ def handle_voice(message):
         temp_ogg_path = f"input_{message.message_id}.ogg"
         temp_mp3_path = f"input_{message.message_id}.mp3"
 
-        # Save OGG
         with open(temp_ogg_path, "wb") as f:
             f.write(voice_file)
 
-        # Convert OGG to MP3 using ffmpeg
-        subprocess.run([
-            "ffmpeg", "-i", temp_ogg_path, temp_mp3_path
-        ], check=True)
+        subprocess.run(["ffmpeg", "-i", temp_ogg_path, temp_mp3_path], check=True)
 
-        # Transcribe with Whisper or your preferred model
-        transcription = transcribe_audio(temp_mp3_path)  # This should use OpenAI Whisper or your existing logic
+        transcription = transcribe_audio(temp_mp3_path)
 
         if not transcription:
             bot.reply_to(message, "❌ No pude transcribir este mensaje de voz. / I couldn't transcribe this voice message.")
@@ -2068,10 +2154,8 @@ def handle_voice(message):
         print(f"📝 Voice transcription: {transcription}")
         bot.send_message(message.chat.id, f"🗣️ Transcripción:\n{transcription}")
 
-        # Continue as a normal text message
         process_message(transcription, message.chat.id, str(message.from_user.id), message)
 
-        # Cleanup
         os.remove(temp_ogg_path)
         os.remove(temp_mp3_path)
 
@@ -2081,26 +2165,33 @@ def handle_voice(message):
 
 @bot.message_handler(content_types=["text"])
 def handle_text(message):
-    """Handle text message"""
+    user_id = str(message.from_user.id)
+
+    if not is_subscribed(user_id):
+        bot.reply_to(message, "🔐 You are not an active subscriber.\nPlease subscribe at:\n👉 https://revicheva.gumroad.com/l/aideazzEspaLuz")
+        return
+
     process_message(message.text, message.chat.id, str(message.from_user.id), message)
 
 @bot.message_handler(content_types=["photo"])
 def handle_photo(message):
-    """Handle photo message with text recognition and translation"""
+    user_id = str(message.from_user.id)
+
+    if not is_subscribed(user_id):
+        bot.reply_to(message, "🔐 You are not an active subscriber.\nPlease subscribe at:\n👉 https://revicheva.gumroad.com/l/aideazzEspaLuz")
+        return
+
     processing_msg = bot.reply_to(message, "🔍 Procesando imagen... / Processing image...")
 
     try:
-        # Step 1: Download the photo
         file_id = message.photo[-1].file_id
         file_info = bot.get_file(file_id)
         photo_file = bot.download_file(file_info.file_path)
 
-        # Step 2: Notify user we're analyzing
         bot.edit_message_text("🔍 Analizando texto... / Analyzing text...",
                               chat_id=message.chat.id,
                               message_id=processing_msg.message_id)
 
-        # Step 3: Extract text from photo
         result = process_photo(photo_file)
 
         if not result or "Error processing image" in result or "No text found" in result:
@@ -2109,19 +2200,15 @@ def handle_photo(message):
                                   message_id=processing_msg.message_id)
             return
 
-        # Step 4: Show extracted translation result
         bot.edit_message_text("📷 Resultado / Result:\n\n" + result,
                               chat_id=message.chat.id,
                               message_id=processing_msg.message_id)
 
-        # Step 5: Enhance learning
-        user_id = str(message.from_user.id)
         if user_id in user_sessions:
             family_member = user_sessions[user_id]["context"]["user"]["preferences"]["family_role"]
             learned_items = identify_language_learning_content(result, family_member)
             user_sessions[user_id] = update_session_learning(user_sessions[user_id], learned_items)
 
-        # Step 6: Ask Claude for an explanation
         explanation_prompt = f"""The user sent a photo with text, and I extracted the following information:
 
 {result}
@@ -2135,10 +2222,8 @@ Keep your response concise and helpful."""
             session["messages"].append({"role": "user", "content": explanation_prompt})
             full_reply, short_reply, thinking_process = ask_claude_with_mcp(session, None)
 
-            # 🧹 Remove [VIDEO SCRIPT] block safely
             full_reply_cleaned = re.sub(r"\[VIDEO SCRIPT START\](.*?)\[VIDEO SCRIPT END\]", "", full_reply, flags=re.DOTALL).strip()
 
-            # ✅ Safe chunking into 4096-character messages
             MAX_LENGTH = 4096
             intro = "💡 Explicación / Explanation:\n\n"
             chunks = []
@@ -2156,12 +2241,9 @@ Keep your response concise and helpful."""
             for chunk in chunks:
                 bot.send_message(message.chat.id, chunk)
 
-            # Save explanation
             session["messages"].append({"role": "assistant", "content": full_reply})
             learned_items = enhance_language_learning_detection(full_reply_cleaned, family_member, session)
             user_sessions[user_id] = update_session_learning(user_sessions[user_id], learned_items)
-
-        # 🚫 Skip voice and video for photo messages
 
     except Exception as e:
         bot.edit_message_text(f"❌ Error procesando la imagen: {str(e)}",
@@ -2326,6 +2408,19 @@ Keep your response concise and helpful."""
             print(f"Failed to send error message: {e}")
 
 print("✅ Espaluz is running THIS UPDATED VERSION: v1.5-emotions (Polling Mode)")
+
+def run_subscription_poller():
+    from poll_subscriptions import fetch_all_subscribers, update_subscriber_file
+    while True:
+        try:
+            print(f"\n🔄 Polling Gumroad API inside bot runtime...")
+            subscribers = fetch_all_subscribers()
+            update_subscriber_file(subscribers)
+        except Exception as e:
+            print(f"❌ Subscription poller crashed: {e}")
+        time.sleep(300)  # poll every 5 minutes
+
+threading.Thread(target=run_subscription_poller, daemon=True).start()
 
 # === Start the bot with polling mode ===
 if __name__ == "__main__":
