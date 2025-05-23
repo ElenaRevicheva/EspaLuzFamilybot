@@ -3,8 +3,6 @@ import time
 import uuid
 import json
 import requests
-from requests.exceptions import Timeout, ConnectionError, HTTPError, RequestException
-import traceback
 import subprocess
 from datetime import datetime, timedelta
 from gtts import gTTS
@@ -25,7 +23,7 @@ load_dotenv()
 TELEGRAM_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 CLAUDE_API_KEY = os.environ["CLAUDE_API_KEY"]
 OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
-CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL_NAME", "claude-3-sonnet-20240229")
+CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL_NAME", "claude-3-7-sonnet-20250219")
 CLAUDE_API_VERSION = os.environ.get("CLAUDE_API_VERSION", "2023-06-01")  # Updated to allow for version changes
 MAX_HISTORY_MESSAGES = int(os.getenv("MAX_HISTORY_MESSAGES", 10))
 
@@ -85,131 +83,10 @@ except Exception as e:
     print(f"❌ FFmpeg check failed: {str(e)}")
     FFMPEG_AVAILABLE = False
 
-def ensure_subscribers_file():
-    """Ensure subscribers.json exists"""
-    if not os.path.exists("subscribers.json"):
-        with open("subscribers.json", "w") as f:
-            json.dump({}, f)
-        print("✅ Created empty subscribers.json")
-
-import re
-
-def remove_numerals_and_asterisks(text):
-    """Ultra-aggressive text cleaning for TTS to prevent artifacts"""
-    import re
-    text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)
-    text = re.sub(r'\*(.*?)\*', r'\1', text)
-    text = re.sub(r'__(.*?)__', r'\1', text)
-    text = re.sub(r'_(.*?)_', r'\1', text)
-    text = re.sub(r'`(.*?)`', r'\1', text)
-    text = re.sub(r'```.*?```', '', text, flags=re.DOTALL)
-    text = re.sub(r'[#`~\[\]{}]', '', text)
-    text = re.sub(r'^\s*\d+[\.\):\-]\s*', '', text, flags=re.MULTILINE)
-    text = re.sub(r'^\s*[-\*\+]\s*', '', text, flags=re.MULTILINE)
-    text = re.sub(r'[0-9]️⃣', '', text)
-    text = re.sub(r'\bcomillas?\b', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'\bagitar\s+la\s+mano\b', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'\bguión\s+bajo\b', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'\basterisco\b', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'\bparéntesis?\b', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'\bcorchetes?\b', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'\bnumerales?\b', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'https?://\S+', '', text)
-    text = re.sub(r'\S+@\S+\.\S+', '', text)
-    text = re.sub(r'\s+', ' ', text)
-    text = re.sub(r'\n{2,}', '\n', text)
-    return text.strip()
- 
-
-def nuclear_greeting_removal(text):
-    import re
-    problematic_names = ['elena', 'marina', 'alisa', 'алиса', 'марина', 'елена', 'lena', 'eli']
-    for name in problematic_names:
-        text = re.sub(rf'(?i)\b¡?hola\s+{name}[\.\!\:]?\s*', '¡Hola! ', text)
-        text = re.sub(rf'(?i)\bhola\s+{name}[\.\!\:]?\s*', 'Hola! ', text)
-        text = re.sub(rf'(?i)^¡?hola\s+{name}[\.\!\:]?\s*', '¡Hola! ', text, flags=re.MULTILINE)
-        text = re.sub(rf'(?i)^\s*{name}[\.\!\,]?\s*', '', text, flags=re.MULTILINE)
-        text = re.sub(rf'(?i)\b{name}[\.\!\,]?\s+', '', text)
-    text = re.sub(r'(?i)\b¡?hola\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+[\.\!\:]?\s*', '¡Hola! ', text)
-    text = re.sub(r'(?i)\bhola\s+[a-záéíóúñ]{3,}[\.\!\:]?\s*', 'Hola! ', text)
-    text = re.sub(r'(?i)(¡?hola!?\s*){2,}', '¡Hola! ', text)
-    text = re.sub(r'(?i)^[a-záéíóúñ]{3,}[\.\!\,]?\s+', '', text, flags=re.MULTILINE)
-    return text.strip()
-
-def remove_hardcoded_names_from_text(text):
-    import re
-    problematic_names = ['elena', 'marina', 'alisa', 'елена', 'марина', 'алиса', 'lena', 'eli', 'masha', 'sasha', 'katya', 'nastya']
-    for name in problematic_names:
-        text = re.sub(rf'(?i)\b¡?hola\s+{name}[\,\.\!\:]?\s*', '¡Hola! ', text)
-        text = re.sub(rf'(?i)\bbuenos?\s+días?\s+{name}[\,\.\!\:]?\s*', 'Buenos días ', text)
-        text = re.sub(rf'(?i)\bbuenas?\s+tardes?\s+{name}[\,\.\!\:]?\s*', 'Buenas tardes ', text)
-        text = re.sub(rf'(?i)^{name}[\,\.\!\:]?\s+', '', text, flags=re.MULTILINE)
-        text = re.sub(rf'(?i)\b{name}\s*[\,]\s*', '', text)
-    text = re.sub(r'(?i)\b¡?hola\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]{2,}[\,\.\!\:]?\s*', '¡Hola! ', text)
-    text = re.sub(r'(?i)^[A-ZÁÉÍÓÚÑ][a-záéíóúñ]{2,}[\,\.\!\:]?\s+', '', text, flags=re.MULTILINE)
-    text = re.sub(r'(?i)(¡?hola!?\s*){2,}', '¡Hola! ', text)
-    text = re.sub(r'\s+', ' ', text)
-    text = re.sub(r'\n\s*\n', '\n\n', text)
-    return text.strip()
-
-def add_no_names_instruction(system_content):
-    no_names_instruction = """\n\n🚨 CRITICAL INSTRUCTION: NEVER use specific names in your responses.
-- DO NOT say "Hola Elena", "Hola Marina", "Hola Alisa"
-- Always use generic greetings like "¡Hola!" or "Hello!"
-- In video scripts, use ONLY "¡Hola!" without any names
-- Never address the user by name. Use 'amigo/amiga' instead."""
-    return system_content + no_names_instruction
-
-   
-def clean_video_script_block(text, name_variants=None):
-    """Remove ALL names from video script blocks - super aggressive"""
-    def replacer(match):
-        script = match.group(1).strip()
-        script = nuclear_greeting_removal(script)
-        script = remove_numerals_and_asterisks(script)
-        script = re.sub(r'(?i)\b[a-záéíóúñ]{3,}[\.\!\:]?\s*', '', script)
-        if not script.lower().startswith('hola'):
-            script = "¡Hola! " + script
-        return f"[VIDEO SCRIPT START]{script.strip()}[VIDEO SCRIPT END]"
-    return re.sub(r"\[VIDEO SCRIPT START\](.*?)\[VIDEO SCRIPT END\]", replacer, text, flags=re.DOTALL)
-
-
-def get_user_greeting(session):
-    """Return a dynamic greeting based on profile or fallback to 'Hola amig@'"""
-    if not session:
-        return "👋 ¡Hola!"
-    
-    profile = session.get("profile", {})
-    name = profile.get("name", "").strip()
-
-    if name and name.lower() not in ["alisa", "marina", "elena"]:
-        # Use actual user name if it's not one of the default test names
-        return f"👋 ¡Hola {name}!"
-    
-    # fallback based on gender or neutral
-    gender = profile.get("gender", "").lower()
-    if gender == "female":
-        return "👋 ¡Hola amiga!"
-    elif gender == "male":
-        return "👋 ¡Hola amigo!"
-    else:
-        return "👋 ¡Hola!"
-
-def is_subscribed(user_id):
-    try:
-        with open("subscribers.json", "r") as f:
-            subscribers = json.load(f)
-        for email, info in subscribers.items():
-            if str(info.get("telegram_id")) == str(user_id) and info.get("status") == "active":
-                return True
-    except Exception as e:
-        print(f"❌ Error checking subscription: {e}")
-    return False
-
 # Create a simple test video file if needed (can add before Flask app runs)
 def create_test_video():
     """Create a simple test video file if the base video doesn't exist"""
-    base_video = "looped_video.mp4"
+    base_video = "espaluz_loop.mp4"
     if not os.path.exists(base_video) and FFMPEG_AVAILABLE:
         print("Base video not found, creating a simple test video...")
         try:
@@ -232,8 +109,6 @@ def create_test_video():
 # Call this before starting the Flask app
 create_test_video()
 
-
-ensure_subscribers_file()
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 user_sessions = {}
 
@@ -245,7 +120,7 @@ print("🛡️ Webhook killer thread started in background")
 
 def debug_file_paths():
     """Debug function to check important file paths"""
-    base_video = "looped_video.mp4"
+    base_video = "espaluz_loop.mp4"
     base_video_abs = os.path.abspath(base_video)
 
     print(f"Current working directory: {os.getcwd()}")
@@ -717,19 +592,9 @@ def enhance_language_learning_detection(text, family_member, session):
 # === MCP CONTEXT STRUCTURE ===
 def create_initial_session(user_id, user_info, chat_info, message_text=""):
     """Create a rich context for Claude's MCP with emotional intelligence features"""
-    
-    # Detect family member or assign a neutral profile
-    family_member = detect_family_member(user_info, message_text)
-    
-    # Default dynamic profile (no hardcoded names like Elena, Marina, etc.)
-    profile_data = {
-        "role": "learner",
-        "age": 35,
-        "learning_level": "beginner",
-        "interests": ["culture", "language"],
-        "tone": "neutral",
-        "language_balance": {"spanish": 0.5, "english": 0.5}
-    }
+    # Detect family member
+    family_member = detect_family_member(user_info, message_text) 
+    member_info = FAMILY_MEMBERS.get(family_member, FAMILY_MEMBERS["elena"])
 
     return {
         "messages": [],
@@ -741,10 +606,10 @@ def create_initial_session(user_id, user_info, chat_info, message_text=""):
                 "language_code": user_info.language_code,
                 "preferences": {
                     "family_role": family_member,
-                    "age": profile_data["age"],
-                    "learning_level": profile_data["learning_level"],
-                    "interests": profile_data["interests"],
-                    "tone_preference": profile_data["tone"],
+                    "age": member_info["age"],
+                    "learning_level": member_info["learning_level"],
+                    "interests": member_info["interests"],
+                    "tone_preference": member_info["tone"],
                     "primary_language": "russian",
                     "target_languages": ["spanish", "english"],
                     "difficult_words": [],
@@ -764,24 +629,36 @@ def create_initial_session(user_id, user_info, chat_info, message_text=""):
                 "last_interaction_time": datetime.now().isoformat(),
                 "message_count": 0,
                 "recent_topics": [],
-                "language_balance": profile_data["language_balance"]
+                "language_balance": member_info["language_balance"]
             },
             "learning": {
                 "last_session_date": datetime.now().isoformat(),
                 "total_sessions": 1,
                 "progress": {
                     "vocabulary": {
-                        "spanish": {"learned": [], "needs_review": []},
-                        "english": {"learned": [], "needs_review": []}
+                        "spanish": {
+                            "learned": [],
+                            "needs_review": []
+                        },
+                        "english": {
+                            "learned": [],
+                            "needs_review": []
+                        }
                     },
                     "grammar": {
-                        "spanish": {"learned": [], "needs_review": []},
-                        "english": {"learned": [], "needs_review": []}
+                        "spanish": {
+                            "learned": [],
+                            "needs_review": []
+                        },
+                        "english": {
+                            "learned": [],
+                            "needs_review": []
+                        }
                     }
                 },
                 "learning_path": {
-                    "vocabulary_level": profile_data["learning_level"],
-                    "grammar_complexity": profile_data["learning_level"],
+                    "vocabulary_level": member_info["learning_level"],
+                    "grammar_complexity": member_info["learning_level"],
                     "cultural_content": "basic",
                     "suggested_topics": [],
                     "review_needed": []
@@ -880,7 +757,7 @@ and everyday phrases needed for work, shopping, and managing a household in Pana
 
     return enhanced_prompt
 
-def format_mcp_request(session, new_message, translated_input=None):
+def format_mcp_request(session, new_message, translated_input=None, use_extended_thinking=None):
     """Create a properly formatted MCP request with rich context embedded in the system prompt"""
     # Use enhanced emotion detection
     emotion_analysis = enhanced_emotion_detection(new_message, session)
@@ -974,8 +851,7 @@ I'll adjust my tone to be: {emotional_calibration.get('response_tone', 'supporti
     # Add Panama-specific cultural context
     system_content = add_panama_cultural_context(system_content, session)
 
-# Add no-names instruction FIRST
-    system_content = add_no_names_instruction(system_content)
+    # Add response format instructions
     system_content += """
     Your answer should have TWO PARTS:
 
@@ -990,12 +866,11 @@ I'll adjust my tone to be: {emotional_calibration.get('response_tone', 'supporti
        - Use both Spanish and English
        - Tone: warm, clear, and simple for spoken delivery
        - It will be spoken by an avatar on video, so make it suitable for audio (not robotic or boring!)
-       - DO NOT include the user's name in the video script greeting - just use "¡Hola!" or similar
        - Example:
 
     [VIDEO SCRIPT START]
-    ¡Hola! Hoy es un gran día para aprender español. 
-    Hello! Today is a great day to learn Spanish.
+    ¡Hola Elena! Hoy es un gran día para aprender. 
+    Hello Elena! Today is a great day to learn.
     [VIDEO SCRIPT END]
     """
 
@@ -1013,6 +888,12 @@ I'll adjust my tone to be: {emotional_calibration.get('response_tone', 'supporti
     messages.append({"role": "user", "content": user_content})
 
     # Determine if extended thinking would benefit this interaction
+    if use_extended_thinking is None:
+        complexity_assessment = assess_message_complexity(new_message, session)
+        should_use_extended = complexity_assessment > 0.7 or is_complex_language_topic(new_message)
+    else:
+        should_use_extended = use_extended_thinking
+
     # Create request with optional extended thinking parameter
     request = {
         "model": CLAUDE_MODEL,
@@ -1021,6 +902,15 @@ I'll adjust my tone to be: {emotional_calibration.get('response_tone', 'supporti
         "max_tokens": 1000,
         "temperature": 0.7,
     }
+
+    # Add extended thinking parameter for complex language concepts
+    if should_use_extended:
+        request["extended_thinking"] = {
+            "enabled": True,
+            # Adjust thinking tokens based on complexity
+            "max_thinking_tokens": 3000,
+            "visible": True  # Make thinking visible for educational purposes
+        }
 
     return request
 
@@ -1305,80 +1195,79 @@ def translate_to_es_en(text):
     headers = {"Authorization": f"Bearer {OPENAI_API_KEY}"}
     data = {
         "model": "gpt-3.5-turbo",
-        "messages": [
-            {
-                "role": "user",
-                "content": f"Translate this message into both Spanish and English:\n\n{text}"
-            }
-        ]
+        "messages": [{"role": "user", "content": f"Translate this message into both Spanish and English:\n\n{text}"}]
     }
-
     try:
-        res = requests.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers=headers,
-            json=data,
-            timeout=20
-        )
+        res = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=data)
         return res.json()["choices"][0]["message"]["content"]
-
-    except (Timeout, ConnectionError, HTTPError) as net_err:
-        print(f"🌐 Translation error: {net_err}")
-        traceback.print_exc()
-        return "❌ Translation failed. Please try again later."
-
     except Exception as e:
         print(f"Translation error: {e}")
         return f"Error in translation: {e}"
 
 def ask_claude_with_mcp(session, translated_input):
-    """Use GPT-4o with advanced context embedding and improved script handling"""
+    """Use Claude 3.7 with advanced context embedding and improved script handling"""
+    # Prepare MCP request
     user_message = session["messages"][-1]["content"] if session["messages"] else ""
-    mcp_request = format_mcp_request(session, user_message, translated_input)
-    
-    # Convert Claude format to OpenAI format
-    openai_messages = [{"role": "system", "content": mcp_request["system"]}]
-    openai_messages.extend(mcp_request["messages"])
-    
-    headers = {"Authorization": f"Bearer {OPENAI_API_KEY}"}
-    
-    data = {
-        "model": "gpt-4o-mini",  # or "gpt-4o" for better quality
-        "messages": openai_messages,
-        "max_tokens": 1000,
-        "temperature": 0.7
+
+    # Check for complex language learning topics that would benefit from extended thinking
+    should_use_extended = is_complex_language_topic(user_message)
+
+    mcp_request = format_mcp_request(
+        session, 
+        user_message, 
+        translated_input, 
+        use_extended_thinking=should_use_extended
+    )
+
+    headers = {
+        "x-api-key": CLAUDE_API_KEY,
+        "anthropic-version": CLAUDE_API_VERSION,
+        "content-type": "application/json"
     }
 
     try:
-        res = requests.post("https://api.openai.com/v1/chat/completions", 
-                           timeout=20, headers=headers, json=data)
+        res = requests.post("https://api.anthropic.com/v1/messages", 
+                           headers=headers, 
+                           json=mcp_request)
+
         result = res.json()
-        
-        full_reply = result["choices"][0]["message"]["content"]
-        
-        # Apply same cleaning as before
-        full_reply = nuclear_greeting_removal(full_reply)
-        full_reply = remove_hardcoded_names_from_text(full_reply)
+
+        # Check for thinking output if extended thinking was enabled
+        thinking_process = ""
+        if "thinking" in result:
+            thinking_process = result["thinking"]
+            # Store thinking process in session for learning analytics
+            if "extended_thinking_history" not in session:
+                session["extended_thinking_history"] = []
+            session["extended_thinking_history"].append({
+                "query": user_message,
+                "thinking": thinking_process,
+                "timestamp": datetime.now().isoformat()
+            })
+
+        full_reply = result["content"][0]["text"]
+
+        # Use improved video script extraction
         short_text = extract_video_script(full_reply)
-        
-        return full_reply.strip(), short_text.strip(), ""
-        
-    except (Timeout, ConnectionError, HTTPError, RequestException) as err:
-        print(f"❌ OpenAI API error: {err}")
-        traceback.print_exc()
-        return "OpenAI error", "[VIDEO SCRIPT START]¡Hola![VIDEO SCRIPT END]", ""
+
+        return full_reply.strip(), short_text.strip(), thinking_process
+
     except Exception as e:
-        print(f"OpenAI API error: {e}")
+        print(f"Claude API error: {e}")
+        if 'res' in locals():
+            print(f"Response: {res.text}")
         return (
             "Lo siento, hubo un error. Sorry, there was an error.", 
             "Español: Lo siento. English: Sorry about that.",
-            "")
+            ""
+        )
 
 def transcribe_voice(file_path):
     """Transcribe voice message to text"""
     try:
         with open(file_path, "rb") as f:
-            res = requests.post("https://api.openai.com/v1/audio/transcriptions", timeout=30,
+            res = requests.post(
+                "https://api.openai.com/v1/audio/transcriptions",
                 headers={"Authorization": f"Bearer {OPENAI_API_KEY}"},
                 files={"file": f},
                 data={"model": "whisper-1"}
@@ -1414,23 +1303,16 @@ def generate_video_with_audio(chat_id, text_content, max_duration=30):
     """Generate a video with audio that meets requirements (up to 30s, with voice)"""
     print(f"Generating proper video with text: {text_content[:50]}...")
 
-    # Clean the text content for TTS
-    cleaned_content = remove_numerals_and_asterisks(text_content)
-    # Remove any remaining "Hola [Name]" patterns
-    cleaned_content = re.sub(r"(?i)^\s*hola\s+\w+[\.\!\:]?\s*", "¡Hola! ", cleaned_content)
-    
-    print(f"Cleaned text for video: {cleaned_content[:50]}...")
-
     # Create unique filenames to avoid conflicts
     timestamp = int(time.time())
     audio_file = f"video_audio_{timestamp}.mp3"
     output_video = f"final_video_{timestamp}.mp4"
-    base_video = "looped_video.mp4"
+    base_video = "espaluz_loop.mp4"
 
     try:
-        # 1. Create audio file with cleaned text content
+        # 1. Create audio file with full text content
         print("Generating audio for video...")
-        tts = gTTS(text=cleaned_content, lang="es", slow=False)
+        tts = gTTS(text=text_content, lang="es", slow=False)
         tts.save(audio_file)
 
         if not os.path.exists(audio_file):
@@ -1539,18 +1421,11 @@ def generate_video_with_audio(chat_id, text_content, max_duration=30):
 
         print("Video sent successfully!")
 
-        # Clean up - FIXED VERSION
+        # Clean up
         try:
-            cleanup_files = [audio_file, loop_file, loop_output, output_video]
-            for file in cleanup_files:
+            for file in [audio_file, loop_file, loop_output, output_video]:
                 if file != base_video and os.path.exists(file):
-                    try:
-                        os.remove(file)
-                        print(f"✅ Cleaned up: {file}")
-                    except Exception as cleanup_err:
-                        print(f"❌ Cleanup failed for {file}: {cleanup_err}")
-        except Exception as e:
-            print(f"General cleanup error: {e}")
+                    os.remove(file)
         except Exception as e:
             print(f"Cleanup error: {e}")
 
@@ -1560,113 +1435,106 @@ def generate_video_with_audio(chat_id, text_content, max_duration=30):
         print(f"Video generation error: {e}")
         return False
 
-def create_full_voice_message(chat_id, full_text, session=None):
+def create_full_voice_message(chat_id, full_text):
     """Create a voice message with the complete text response"""
     print(f"Creating full voice message, text length: {len(full_text)} characters")
-
-    # First remove the video script block entirely
-    full_text_clean = re.sub(r"\[VIDEO SCRIPT START\](.*?)\[VIDEO SCRIPT END\]", "", full_text, flags=re.DOTALL).strip()
-    
-    # Then clean numerals, asterisks, and markdown formatting
-    cleaned_text = remove_numerals_and_asterisks(full_text_clean)
-    # Remove markdown bold markers
-    cleaned_text = re.sub(r'\*\*(.*?)\*\*', r'\1', cleaned_text)
-    # Remove other markdown symbols
-    cleaned_text = re.sub(r'[#_`]', '', cleaned_text)
-    
-    # Clean hardcoded greetings for any name
-    cleaned_text = re.sub(r"(?i)\b(hola)\s+\w+[\.\!\:]?", "Hola", cleaned_text)
-
-    # Add personalized greeting only if we have a valid session
-    if session:
-        greeting = get_user_greeting(session)
-        # Only add greeting if it's not already in the text
-        if not cleaned_text.lower().startswith("hola"):
-            full_text_for_tts = f"{greeting} {cleaned_text}"
-        else:
-            full_text_for_tts = cleaned_text
-    else:
-        full_text_for_tts = cleaned_text
 
     # Create a unique filename
     timestamp = int(time.time())
     voice_file = f"full_voice_{timestamp}.mp3"
 
     try:
-        # Split text into manageable chunks
-        max_chunk_size = 1500
-        paragraphs = full_text_for_tts.split('\n\n')
+        # Split text into chunks to handle very long responses
+        max_chunk_size = 1500  # Characters per chunk
         chunks = []
-        current_chunk = ""
 
-        for para in paragraphs:
-            if len(current_chunk) + len(para) + 2 <= max_chunk_size:
-                current_chunk += ("\n\n" if current_chunk else "") + para
-            else:
+        if len(full_text) <= max_chunk_size:
+            chunks = [full_text]
+        else:
+            # Split by paragraphs and combine until we reach chunk size
+            paragraphs = full_text.split('\n\n')
+            current_chunk = ""
+
+            for para in paragraphs:
+                if len(current_chunk) + len(para) + 2 <= max_chunk_size:
+                    if current_chunk:
+                        current_chunk += "\n\n" + para
+                    else:
+                        current_chunk = para
+                else:
+                    if current_chunk:
+                        chunks.append(current_chunk)
+                    current_chunk = para
+
+            if current_chunk:
                 chunks.append(current_chunk)
-                current_chunk = para
-
-        if current_chunk:
-            chunks.append(current_chunk)
 
         print(f"Split text into {len(chunks)} chunks")
 
-        # Generate voice for each chunk
+        # Process each chunk
         chunk_files = []
         for i, chunk in enumerate(chunks):
             chunk_file = f"chunk_{timestamp}_{i}.mp3"
             try:
                 tts = gTTS(text=chunk, lang="es", slow=False)
                 tts.save(chunk_file)
+
                 if os.path.exists(chunk_file) and os.path.getsize(chunk_file) > 100:
                     chunk_files.append(chunk_file)
                 else:
-                    print(f"⚠️ Failed to create voice chunk {i}")
+                    print(f"Failed to create voice chunk {i}")
             except Exception as e:
-                print(f"❌ Error generating voice chunk {i}: {e}")
+                print(f"Error generating voice chunk {i}: {e}")
 
-        # Combine chunks if needed
+        # If we have multiple chunks, combine them
         if len(chunk_files) > 1:
+            # Create a file list for ffmpeg
             concat_file = f"concat_{timestamp}.txt"
             with open(concat_file, "w") as f:
-                for file in chunk_files:
-                    f.write(f"file '{file}'\n")
+                for chunk_file in chunk_files:
+                    f.write(f"file '{chunk_file}'\n")
 
-            subprocess.run([
-                "ffmpeg", "-y", "-f", "concat", "-safe", "0",
-                "-i", concat_file, "-c", "copy", voice_file
-            ], capture_output=True)
+            # Combine audio files
+            combine_cmd = [
+                "ffmpeg", "-y",
+                "-f", "concat",
+                "-safe", "0",
+                "-i", concat_file,
+                "-c", "copy",
+                voice_file
+            ]
 
+            subprocess.run(combine_cmd, capture_output=True)
+
+            # Check if combined file exists
             if not os.path.exists(voice_file) or os.path.getsize(voice_file) < 100:
-                print("⚠️ Failed to combine audio chunks. Using first chunk.")
+                print("Failed to combine audio chunks. Using first chunk.")
                 voice_file = chunk_files[0]
-        elif chunk_files:
+        elif len(chunk_files) == 1:
+            # Just use the single chunk
             voice_file = chunk_files[0]
         else:
-            print("❌ No voice chunks were created")
+            print("No voice chunks were created successfully")
             return False
 
         # Send the voice message
         with open(voice_file, "rb") as voice:
             bot.send_voice(chat_id, voice)
 
-        print("✅ Full voice message sent successfully")
+        print("Full voice message sent successfully")
 
         # Clean up
         try:
-            cleanup_files = chunk_files + ([concat_file] if len(chunk_files) > 1 else [])
-            if voice_file != chunk_files[0]:  # Also clean up the combined file if it's not one of the chunks
-                cleanup_files.append(voice_file)
-            for file in cleanup_files:
+            for file in chunk_files + [concat_file] if len(chunk_files) > 1 else chunk_files:
                 if os.path.exists(file):
                     os.remove(file)
         except Exception as e:
-            print(f"⚠️ Voice cleanup error: {e}")
+            print(f"Voice cleanup error: {e}")
 
         return True
 
     except Exception as e:
-        print(f"❌ Full voice generation error: {e}")
+        print(f"Full voice generation error: {e}")
         return False
 
 def extract_video_script(full_response):
@@ -1867,7 +1735,7 @@ def process_photo(photo_file):
         }
 
         # Send request
-        response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload, timeout=30)
+        response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
         result = response.json()
 
         # Handle result
@@ -1881,31 +1749,26 @@ def process_photo(photo_file):
         return "❌ Error processing the image with GPT-4o. Please try again later."
 
 # === MAIN LOGIC ===
-def ultimate_multimedia_generator(chat_id, full_reply, short_reply, session=None):
-    """Generate and send both voice and video messages with session awareness"""
+def ultimate_multimedia_generator(chat_id, full_reply, short_reply):
+    """Generate both video and voice messages with proper error handling"""
     try:
-        print("🎬 Starting ultimate multimedia generation...")
-
-        # === 1. Voice message ===
-        print("🎤 Generating full voice message...")
-        success = create_full_voice_message(chat_id, full_reply, session)
-        if not success:
-            print("⚠️ Voice message generation failed")
-
-        # === 2. Short reply video ===
-        print("🎞️ Preparing short video script...")
-        cleaned_short = clean_video_script_block(short_reply)
-
-        # Now generate the video
-        print("🎥 Creating avatar video with short script...")
-        video_success = generate_video_with_audio(chat_id, cleaned_short)
-        if not video_success:
-            print("⚠️ Video generation failed")
-
-        print("✅ Multimedia generation complete")
-
+        # First, attempt to generate and send the video
+        print("🎬 Starting video generation...")
+        video_success = bulletproof_video_generator(chat_id, full_reply)
+        
+        # Always generate voice message after video attempt, regardless of video success
+        print("🎙️ Starting voice message generation...")
+        send_full_voice_message(chat_id, full_reply)
+        
+        print(f"✅ Multimedia generation complete - Video: {'Success' if video_success else 'Failed'}, Voice: Sent")
+            
     except Exception as e:
-        print(f"❌ Error in multimedia generator: {e}")
+        print(f"❌ Critical error in multimedia generation: {e}")
+        # Final fallback - just send a simple message
+        try:
+            bot.send_message(chat_id, "❌ Lo siento, no pude generar contenido multimedia / Sorry, I couldn't generate multimedia content")
+        except:
+            print("💔 Failed to send error notification")
 
 def process_message(user_input, chat_id, user_id, message_obj):
     """Process incoming message with ultimate multimedia generation"""
@@ -1930,36 +1793,36 @@ def process_message(user_input, chat_id, user_id, message_obj):
 
     # Get Claude response with MCP
     print("Requesting Claude response...")
-    full_reply, short_reply, _ = ask_claude_with_mcp(session, translated)
-    full_reply = remove_hardcoded_names_from_text(full_reply)
-    full_reply = nuclear_greeting_removal(full_reply)
-    short_reply = clean_video_script_block(short_reply)
-
-    # Clean video scripts from hardcoded names (like "Hola Elena")
-    short_reply = clean_video_script_block(short_reply)
-
+    full_reply, short_reply, thinking_process = ask_claude_with_mcp(session, translated)
     print(f"Received Claude response, length: {len(full_reply)}")
 
     # Send the main response
     bot.send_message(chat_id, f"🤖 Espaluz:\n{full_reply}")
     print("Main text response sent")
 
+    # If extended thinking was used, send it as a separate message
+    if thinking_process:
+        thinking_summary = f"🧠 *Thinking Process*:\n\n{thinking_process[:500]}..."
+        if len(thinking_process) > 500:
+            thinking_summary += "\n\n(Thinking process summarized for brevity)"
+        bot.send_message(chat_id, thinking_summary, parse_mode="Markdown")
+        print("Thinking process sent")
+
     # Update session with Claude's response
     session["messages"].append({"role": "assistant", "content": full_reply})
 
-    # Launch multimedia generation in a thread, pass session!
+    # Launch multimedia generation in a thread
     print("Starting multimedia generation thread...")
     media_thread = threading.Thread(
         target=ultimate_multimedia_generator,
-        args=(chat_id, full_reply, short_reply, session),
+        args=(chat_id, full_reply, short_reply),
         daemon=True
     )
     media_thread.start()
 
     # Update learning data without waiting for multimedia to complete
     print("Updating learning data...")
-    profile = session.get("profile", {})
-    family_member = profile.get("role", "family_member")
+    family_member = session["context"]["user"]["preferences"]["family_role"]
     learned_items = enhance_language_learning_detection(full_reply, family_member, session)
     session = update_session_learning(session, learned_items)
     session = adapt_learning_path(session, user_input, full_reply)
@@ -1968,47 +1831,38 @@ def process_message(user_input, chat_id, user_id, message_obj):
 # === HANDLERS ===
 @bot.message_handler(commands=["start"])
 def handle_start(message):
-    welcome_msg = (
-        "👋 ¡Hola! Welcome to *Espaluz* — your AI-powered bilingual tutor for expat families 🇵🇦✨\n\n"
-        "🌟 *What Espaluz Offers:*\n"
-        "• Spanish + English learning for all ages\n"
-        "• Real-time emotional support\n"
-        "• Voice + video messages\n"
-        "• Photo translation\n\n"
-        "🔐 *How to unlock access:*\n"
-        "1️⃣ Subscribe here 👉 https://revicheva.gumroad.com/l/aideazzEspaLuz\n"
-        "2️⃣ After subscribing, type /link and send the *email you used on Gumroad*\n"
-        "3️⃣ Then type /profile to set your *name, age, and role*\n\n"
-        "🎙️ Send me a voice or text message to begin.\n"
-        "📸 Or send a photo of text for automatic translation!"
-    )
-    bot.send_message(message.chat.id, welcome_msg, parse_mode="Markdown")
+    """Handle /start command"""
+    # ...
 
-@bot.message_handler(commands=["link"])
-def handle_link(message):
-    bot.send_message(message.chat.id, "📩 Please reply with the email you used to subscribe on Gumroad.")
-
-@bot.message_handler(func=lambda m: "@" in m.text and "." in m.text and " " not in m.text)
-def handle_email_link(message):
-    user_email = message.text.strip().lower()
+# === HANDLERS ===
+@bot.message_handler(commands=["start"])
+def handle_start(message):
+    """Handle /start command"""
     user_id = str(message.from_user.id)
+    user_sessions[user_id] = create_initial_session(user_id, message.from_user, message.chat)
 
-    try:
-        with open("subscribers.json", "r+") as f:
-            data = json.load(f)
-            if user_email in data:
-                data[user_email]["telegram_id"] = user_id
-                f.seek(0)
-                json.dump(data, f, indent=2)
-                f.truncate()
-                bot.send_message(message.chat.id, "✅ Email linked. You now have access to Espaluz!")
-            else:
-                bot.send_message(message.chat.id, "⚠️ Email not found. Did you subscribe yet?")
-    except Exception as e:
-        print(f"❌ Error linking email: {e}")
-        import traceback
-        traceback.print_exc()
-        bot.send_message(message.chat.id, "⚠️ Something went wrong. Please try again.")
+    # Create personalized welcome based on detected family member
+    family_member = user_sessions[user_id]["context"]["user"]["preferences"]["family_role"]
+    member_info = FAMILY_MEMBERS.get(family_member, FAMILY_MEMBERS["elena"])
+
+    welcome_msg = (
+        "👋 ¡Hola! Soy Espaluz, tu asistente de idiomas. / Hello! I'm Espaluz, your language assistant.\n\n"
+        "☕ *If you enjoy Espaluz and want to support this project,*\n"
+        "👉 [Buy me a coffee](https://buymeacoffee.com/aideazz)\n\n"
+        "Your support helps families learn Spanish with emotional, intelligent AI 💛\n\n"
+    )
+
+    if family_member == "alisa":
+        welcome_msg += "🎮 ¡Vamos a aprender español y inglés jugando! / Let's learn Spanish and English while playing!"
+    elif family_member == "marina":
+        welcome_msg += "📚 Estoy aquí para ayudarte a aprender español e inglés a tu ritmo. / I'm here to help you learn Spanish and English at your own pace."
+    else:
+        welcome_msg += "🗣️ Estoy aquí para ayudarte con tus necesidades de idiomas. / I'm here to help with your language needs."
+
+    welcome_msg += "\n\nEnvíame un mensaje de voz o texto para comenzar. / Send me a voice or text message to begin."
+    welcome_msg += "\n\n📸 ¡También puedes enviarme fotos de texto para traducirlo! / You can also send me photos of text to translate it!"
+
+    bot.reply_to(message, welcome_msg, parse_mode="Markdown")
 
 @bot.message_handler(commands=["reset"])
 def handle_reset(message):
@@ -2025,13 +1879,10 @@ def handle_progress(message):
         user_sessions[user_id] = create_initial_session(user_id, message.from_user, message.chat)
 
     session = user_sessions[user_id]
-    
-    # Get profile info
-    profile = session.get("profile", {})
-    name = profile.get("name", "Learner")
-    age = profile.get("age", "N/A")
-    role = profile.get("role", "family member")
-    gender = profile.get("gender", "")
+
+    # Get family member info
+    family_member = session["context"]["user"]["preferences"]["family_role"]
+    member_info = FAMILY_MEMBERS.get(family_member, FAMILY_MEMBERS["elena"])
 
     # Extract learning stats
     spanish_words = len(session["context"]["learning"]["progress"]["vocabulary"]["spanish"]["learned"])
@@ -2080,61 +1931,49 @@ def handle_progress(message):
 
     bot.reply_to(message, progress_msg, parse_mode="Markdown")
 
-@bot.message_handler(commands=["profile"])
-def handle_profile(message):
-    bot.send_message(
-        message.chat.id,
-        "✍️ Please send your profile in this format:\n\n" +
-        "`Name, Age, Role, Gender`\n\n" +
-        "Example:\n`Elena, 36, parent, female`",
-        parse_mode="Markdown"
-    )
-
-@bot.message_handler(func=lambda m: "," in m.text and m.text.count(",") == 3)
-def save_profile(message):
+@bot.message_handler(commands=["family"])
+def handle_family(message):
+    """Handle /family command to set family member identification"""
     user_id = str(message.from_user.id)
-    name, age, role, gender = [x.strip() for x in message.text.split(",")]
-
-    # Save to session
     if user_id not in user_sessions:
-        user_sessions[user_id] = {}
-    user_sessions[user_id]["profile"] = {
-        "name": name,
-        "age": age,
-        "role": role,
-        "gender": gender
-    }
+        user_sessions[user_id] = create_initial_session(user_id, message.from_user, message.chat)
 
-    bot.send_message(message.chat.id, f"✅ Profile saved: {name}, {age} y.o., {role}, {gender}")
+    # Extract family member name if provided
+    command_parts = message.text.split()
+    if len(command_parts) > 1:
+        member_name = command_parts[1].lower()
+        if member_name in FAMILY_MEMBERS:
+            user_sessions[user_id]["context"]["user"]["preferences"]["family_role"] = member_name
+            member_info = FAMILY_MEMBERS[member_name]
+            bot.reply_to(message, f"👪 Perfil cambiado a: {member_name.capitalize()} ({member_info['role']}, {member_info['age']} años) / Profile changed to: {member_name.capitalize()} ({member_info['role']}, {member_info['age']} years old)")
+            return
+
+    # If no valid name provided, show options
+    family_msg = """👪 *¿Quién eres? / Who are you?*
+
+Usa uno de estos comandos / Use one of these commands:
+- /family alisa - Para la niña / For the child (4)
+- /family marina - Para la abuela / For the grandmother (65)
+- /family elena - Para la madre / For the mother (39)"""
+
+    bot.reply_to(message, family_msg, parse_mode="Markdown")
 
 @bot.message_handler(commands=["help"])
 def handle_help(message):
-    help_text = """🌟 *Espaluz Help Menu / Menú de Ayuda* 🌟
+    """Handle /help command"""
+    help_text = """🌟 *Comandos de Espaluz / Espaluz Commands:*
 
-🧠 *What can I do?*
-• Talk to you in Spanish and English
-• Understand your emotional tone
-• Translate text from photos
-• Send you voice and video replies
+/start - Iniciar el bot / Start the bot
+/reset - Reiniciar la conversación / Reset the conversation
+/progress - Ver tu progreso / View your progress
+/family - Cambiar miembro familiar / Change family member
+/help - Ver este mensaje / See this message
 
-🔐 *How to unlock access:*
-1️⃣ Subscribe 👉 https://revicheva.gumroad.com/l/aideazzEspaLuz  
-2️⃣ Type /link and send the email you used on Gumroad  
-3️⃣ Then type /profile to set your name, age, and role
+💬 Puedes enviar mensajes de texto o voz en ruso, español o inglés.
+💬 You can send text or voice messages in Russian, Spanish, or English.
 
-🎙️ *How to use:*
-• Send a voice or text message — I’ll respond in both languages
-📸 *Or send a photo with text* — I’ll translate it for you
-
-ℹ️ *Available Commands:*
-/start – Intro and setup  
-/help – This help menu  
-/profile – Set your user details  
-/link – Link your Gumroad email  
-/progress – View your learning stats  
-/reset – Reset your session and learning history
-
-Let's learn together! 💬"""
+📸 ¡Envíame fotos de texto para traducirlo automáticamente! (menús, señales, documentos)
+📸 Send me photos of text for automatic translation! (menus, signs, documents)"""
 
     bot.reply_to(message, help_text, parse_mode="Markdown")
 
@@ -2158,11 +1997,6 @@ def transcribe_audio(audio_path: str) -> str:
 
 @bot.message_handler(content_types=["voice"])
 def handle_voice(message):
-    user_id = str(message.from_user.id)
-    if not is_subscribed(user_id):
-        bot.reply_to(message, "🔐 You are not an active subscriber.\nPlease subscribe at:\n👉 https://revicheva.gumroad.com/l/aideazzEspaLuz")
-        return
-
     try:
         file_info = bot.get_file(message.voice.file_id)
         voice_file = bot.download_file(file_info.file_path)
@@ -2180,19 +2014,17 @@ def handle_voice(message):
         ], check=True)
 
         # Transcribe with Whisper or your preferred model
-        transcription = transcribe_audio(temp_mp3_path)
+        transcription = transcribe_audio(temp_mp3_path)  # This should use OpenAI Whisper or your existing logic
 
         if not transcription:
             bot.reply_to(message, "❌ No pude transcribir este mensaje de voz. / I couldn't transcribe this voice message.")
             return
 
-        transcription_cleaned = remove_numerals_and_asterisks(transcription)
-
-        print(f"📝 Voice transcription: {transcription_cleaned}")
-        bot.send_message(message.chat.id, f"🗣️ Transcripción:\n{transcription_cleaned}")
+        print(f"📝 Voice transcription: {transcription}")
+        bot.send_message(message.chat.id, f"🗣️ Transcripción:\n{transcription}")
 
         # Continue as a normal text message
-        process_message(transcription_cleaned, message.chat.id, user_id, message)
+        process_message(transcription, message.chat.id, str(message.from_user.id), message)
 
         # Cleanup
         os.remove(temp_ogg_path)
@@ -2204,11 +2036,92 @@ def handle_voice(message):
 
 @bot.message_handler(content_types=["text"])
 def handle_text(message):
-    user_id = str(message.from_user.id)
-    if not is_subscribed(user_id):
-        bot.reply_to(message, "🔐 You are not an active subscriber.\nPlease subscribe at:\n👉 https://revicheva.gumroad.com/l/aideazzEspaLuz")
-        return
-    process_message(message.text, message.chat.id, user_id, message)
+    """Handle text message"""
+    process_message(message.text, message.chat.id, str(message.from_user.id), message)
+
+@bot.message_handler(content_types=["photo"])
+def handle_photo(message):
+    """Handle photo message with text recognition and translation"""
+    processing_msg = bot.reply_to(message, "🔍 Procesando imagen... / Processing image...")
+
+    try:
+        # Step 1: Download the photo
+        file_id = message.photo[-1].file_id
+        file_info = bot.get_file(file_id)
+        photo_file = bot.download_file(file_info.file_path)
+
+        # Step 2: Notify user we're analyzing
+        bot.edit_message_text("🔍 Analizando texto... / Analyzing text...",
+                              chat_id=message.chat.id,
+                              message_id=processing_msg.message_id)
+
+        # Step 3: Extract text from photo
+        result = process_photo(photo_file)
+
+        if not result or "Error processing image" in result or "No text found" in result:
+            bot.edit_message_text(f"❌ {result or 'No se detectó texto en la imagen. / No text detected in the image.'}",
+                                  chat_id=message.chat.id,
+                                  message_id=processing_msg.message_id)
+            return
+
+        # Step 4: Show extracted translation result
+        bot.edit_message_text("📷 Resultado / Result:\n\n" + result,
+                              chat_id=message.chat.id,
+                              message_id=processing_msg.message_id)
+
+        # Step 5: Enhance learning
+        user_id = str(message.from_user.id)
+        if user_id in user_sessions:
+            family_member = user_sessions[user_id]["context"]["user"]["preferences"]["family_role"]
+            learned_items = identify_language_learning_content(result, family_member)
+            user_sessions[user_id] = update_session_learning(user_sessions[user_id], learned_items)
+
+        # Step 6: Ask Claude for an explanation
+        explanation_prompt = f"""The user sent a photo with text, and I extracted the following information:
+
+{result}
+
+Please provide a brief educational explanation about this text that could be helpful for a Russian expat in Panama. 
+Focus on any cultural context, vocabulary insights, or practical usage tips that would help them understand and remember this content.
+Keep your response concise and helpful."""
+
+        if user_id in user_sessions:
+            session = user_sessions[user_id]
+            session["messages"].append({"role": "user", "content": explanation_prompt})
+            full_reply, short_reply, thinking_process = ask_claude_with_mcp(session, None)
+
+            # 🧹 Remove [VIDEO SCRIPT] block safely
+            full_reply_cleaned = re.sub(r"\[VIDEO SCRIPT START\](.*?)\[VIDEO SCRIPT END\]", "", full_reply, flags=re.DOTALL).strip()
+
+            # ✅ Safe chunking into 4096-character messages
+            MAX_LENGTH = 4096
+            intro = "💡 Explicación / Explanation:\n\n"
+            chunks = []
+
+            while full_reply_cleaned:
+                chunk = full_reply_cleaned[:MAX_LENGTH - len(intro if not chunks else "")]
+                split_at = chunk.rfind('\n')
+                if split_at == -1 or split_at < len(chunk) * 0.5:
+                    split_at = chunk.rfind('.')
+                if split_at != -1:
+                    chunk = chunk[:split_at + 1]
+                chunks.append((intro if not chunks else "") + chunk.strip())
+                full_reply_cleaned = full_reply_cleaned[len(chunk):].strip()
+
+            for chunk in chunks:
+                bot.send_message(message.chat.id, chunk)
+
+            # Save explanation
+            session["messages"].append({"role": "assistant", "content": full_reply})
+            learned_items = enhance_language_learning_detection(full_reply_cleaned, family_member, session)
+            user_sessions[user_id] = update_session_learning(user_sessions[user_id], learned_items)
+
+        # 🚫 Skip voice and video for photo messages
+
+    except Exception as e:
+        bot.edit_message_text(f"❌ Error procesando la imagen: {str(e)}",
+                              chat_id=message.chat.id,
+                              message_id=processing_msg.message_id)
 
 def debug_files_and_env():
     """Print debugging info about environment and files"""
@@ -2234,6 +2147,7 @@ custom_commands = [
     BotCommand("start", "Start Espaluz"),
     BotCommand("reset", "Reset learning session"),
     BotCommand("progress", "Show learning progress"),
+    BotCommand("family", "Switch family member"),
     BotCommand("help", "Help and instructions")
 ]
 
@@ -2267,12 +2181,6 @@ register_commands_with_retry()
 @bot.message_handler(content_types=["photo"])
 def handle_photo(message):
     """Handle photo message with text recognition and translation"""
-    # ADD SUBSCRIPTION CHECK
-    user_id = str(message.from_user.id)
-    if not is_subscribed(user_id):
-        bot.reply_to(message, "🔐 You are not an active subscriber.\nPlease subscribe at:\n👉 https://revicheva.gumroad.com/l/aideazzEspaLuz")
-        return
-    
     try:
         # Step 1: Send processing message
         processing_msg = bot.send_message(message.chat.id, "🔍 Procesando imagen... / Processing image...")
@@ -2336,7 +2244,7 @@ Keep your response concise and helpful."""
             if user_id in user_sessions:
                 session = user_sessions[user_id]
                 session["messages"].append({"role": "user", "content": explanation_prompt})
-                full_reply, short_reply, _ = ask_claude_with_mcp(session, None)
+                full_reply, short_reply, thinking_process = ask_claude_with_mcp(session, None)
 
                 # 🧹 Remove [VIDEO SCRIPT] block safely
                 full_reply_cleaned = re.sub(r"\[VIDEO SCRIPT START\](.*?)\[VIDEO SCRIPT END\]", "", full_reply, flags=re.DOTALL).strip()
