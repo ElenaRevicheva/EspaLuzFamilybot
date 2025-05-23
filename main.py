@@ -3,6 +3,8 @@ import time
 import uuid
 import json
 import requests
+from requests.exceptions import Timeout, ConnectionError, HTTPError, RequestException
+import traceback
 import subprocess
 from datetime import datetime, timedelta
 from gtts import gTTS
@@ -23,7 +25,7 @@ load_dotenv()
 TELEGRAM_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 CLAUDE_API_KEY = os.environ["CLAUDE_API_KEY"]
 OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
-CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL_NAME", "claude-3-7-sonnet-20250219")
+CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL_NAME", "claude-3-sonnet-20240229")
 CLAUDE_API_VERSION = os.environ.get("CLAUDE_API_VERSION", "2023-06-01")  # Updated to allow for version changes
 MAX_HISTORY_MESSAGES = int(os.getenv("MAX_HISTORY_MESSAGES", 10))
 
@@ -83,53 +85,94 @@ except Exception as e:
     print(f"❌ FFmpeg check failed: {str(e)}")
     FFMPEG_AVAILABLE = False
 
+def ensure_subscribers_file():
+    """Ensure subscribers.json exists"""
+    if not os.path.exists("subscribers.json"):
+        with open("subscribers.json", "w") as f:
+            json.dump({}, f)
+        print("✅ Created empty subscribers.json")
+
 import re
 
 def remove_numerals_and_asterisks(text):
-    """Clean text from numbers, asterisks, and markdown — especially for TTS and transcription."""
-    # Remove numbered bullets like 1., 2), 1-, etc.
-    cleaned = re.sub(r'^\s*\d+[\.\):\-\s]+', '', text, flags=re.MULTILINE)
-    # Remove inline numbers that are list markers
-    cleaned = re.sub(r'\n\s*\d+[\.\):\-\s]+', '\n', cleaned)
-    # Remove markdown bold/italic markers
-    cleaned = re.sub(r'\*{1,2}([^\*]+)\*{1,2}', r'\1', cleaned)
-    # Remove other markdown elements
-    cleaned = re.sub(r'[#_`~]', '', cleaned)
-    # Remove emoji numbers like 1️⃣, 2️⃣
-    cleaned = re.sub(r'[0-9]️⃣', '', cleaned)
-    # Normalize whitespace
-    cleaned = re.sub(r'\s+', ' ', cleaned)
-    # Remove multiple newlines
-    cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
-    return cleaned.strip()
+    """Ultra-aggressive text cleaning for TTS to prevent artifacts"""
+    import re
+    text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)
+    text = re.sub(r'\*(.*?)\*', r'\1', text)
+    text = re.sub(r'__(.*?)__', r'\1', text)
+    text = re.sub(r'_(.*?)_', r'\1', text)
+    text = re.sub(r'`(.*?)`', r'\1', text)
+    text = re.sub(r'```.*?```', '', text, flags=re.DOTALL)
+    text = re.sub(r'[#`~\[\]{}]', '', text)
+    text = re.sub(r'^\s*\d+[\.\):\-]\s*', '', text, flags=re.MULTILINE)
+    text = re.sub(r'^\s*[-\*\+]\s*', '', text, flags=re.MULTILINE)
+    text = re.sub(r'[0-9]️⃣', '', text)
+    text = re.sub(r'\bcomillas?\b', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bagitar\s+la\s+mano\b', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bguión\s+bajo\b', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\basterisco\b', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bparéntesis?\b', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bcorchetes?\b', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bnumerales?\b', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'https?://\S+', '', text)
+    text = re.sub(r'\S+@\S+\.\S+', '', text)
+    text = re.sub(r'\s+', ' ', text)
+    text = re.sub(r'\n{2,}', '\n', text)
+    return text.strip()
+ 
 
-import re
+def nuclear_greeting_removal(text):
+    import re
+    problematic_names = ['elena', 'marina', 'alisa', 'алиса', 'марина', 'елена', 'lena', 'eli']
+    for name in problematic_names:
+        text = re.sub(rf'(?i)\b¡?hola\s+{name}[\.\!\:]?\s*', '¡Hola! ', text)
+        text = re.sub(rf'(?i)\bhola\s+{name}[\.\!\:]?\s*', 'Hola! ', text)
+        text = re.sub(rf'(?i)^¡?hola\s+{name}[\.\!\:]?\s*', '¡Hola! ', text, flags=re.MULTILINE)
+        text = re.sub(rf'(?i)^\s*{name}[\.\!\,]?\s*', '', text, flags=re.MULTILINE)
+        text = re.sub(rf'(?i)\b{name}[\.\!\,]?\s+', '', text)
+    text = re.sub(r'(?i)\b¡?hola\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+[\.\!\:]?\s*', '¡Hola! ', text)
+    text = re.sub(r'(?i)\bhola\s+[a-záéíóúñ]{3,}[\.\!\:]?\s*', 'Hola! ', text)
+    text = re.sub(r'(?i)(¡?hola!?\s*){2,}', '¡Hola! ', text)
+    text = re.sub(r'(?i)^[a-záéíóúñ]{3,}[\.\!\,]?\s+', '', text, flags=re.MULTILINE)
+    return text.strip()
 
+def remove_hardcoded_names_from_text(text):
+    import re
+    problematic_names = ['elena', 'marina', 'alisa', 'елена', 'марина', 'алиса', 'lena', 'eli', 'masha', 'sasha', 'katya', 'nastya']
+    for name in problematic_names:
+        text = re.sub(rf'(?i)\b¡?hola\s+{name}[\,\.\!\:]?\s*', '¡Hola! ', text)
+        text = re.sub(rf'(?i)\bbuenos?\s+días?\s+{name}[\,\.\!\:]?\s*', 'Buenos días ', text)
+        text = re.sub(rf'(?i)\bbuenas?\s+tardes?\s+{name}[\,\.\!\:]?\s*', 'Buenas tardes ', text)
+        text = re.sub(rf'(?i)^{name}[\,\.\!\:]?\s+', '', text, flags=re.MULTILINE)
+        text = re.sub(rf'(?i)\b{name}\s*[\,]\s*', '', text)
+    text = re.sub(r'(?i)\b¡?hola\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]{2,}[\,\.\!\:]?\s*', '¡Hola! ', text)
+    text = re.sub(r'(?i)^[A-ZÁÉÍÓÚÑ][a-záéíóúñ]{2,}[\,\.\!\:]?\s+', '', text, flags=re.MULTILINE)
+    text = re.sub(r'(?i)(¡?hola!?\s*){2,}', '¡Hola! ', text)
+    text = re.sub(r'\s+', ' ', text)
+    text = re.sub(r'\n\s*\n', '\n\n', text)
+    return text.strip()
+
+def add_no_names_instruction(system_content):
+    no_names_instruction = """\n\n🚨 CRITICAL INSTRUCTION: NEVER use specific names in your responses.
+- DO NOT say "Hola Elena", "Hola Marina", "Hola Alisa"
+- Always use generic greetings like "¡Hola!" or "Hello!"
+- In video scripts, use ONLY "¡Hola!" without any names
+- Never address the user by name. Use 'amigo/amiga' instead."""
+    return system_content + no_names_instruction
+
+   
 def clean_video_script_block(text, name_variants=None):
-    """Remove hardcoded greetings like 'Hola [Name]' from video script blocks"""
-    # If no specific names provided, use a general pattern
-    if not name_variants:
-        # This will match any word after "Hola"
-        def replacer(match):
-            script = match.group(1)
-            # Remove "Hola NAME!" or "Hola NAME." at start for ANY name
-            cleaned_script = re.sub(
-                r"(?i)^\s*hola\s+\w+[\.\!\:]?\s*",
-                "¡Hola! ", script.strip()
-            )
-            return f"[VIDEO SCRIPT START]{cleaned_script.strip()}[VIDEO SCRIPT END]"
-    else:
-        # Use specific name variants if provided
-        def replacer(match):
-            script = match.group(1)
-            # Remove "Hola NAME!" or "Hola NAME." at start
-            cleaned_script = re.sub(
-                r"(?i)^\s*hola\s+(%s)[\.\!\:]?\s*" % "|".join(name_variants),
-                "¡Hola! ", script.strip()
-            )
-            return f"[VIDEO SCRIPT START]{cleaned_script.strip()}[VIDEO SCRIPT END]"
-
+    """Remove ALL names from video script blocks - super aggressive"""
+    def replacer(match):
+        script = match.group(1).strip()
+        script = nuclear_greeting_removal(script)
+        script = remove_numerals_and_asterisks(script)
+        script = re.sub(r'(?i)\b[a-záéíóúñ]{3,}[\.\!\:]?\s*', '', script)
+        if not script.lower().startswith('hola'):
+            script = "¡Hola! " + script
+        return f"[VIDEO SCRIPT START]{script.strip()}[VIDEO SCRIPT END]"
     return re.sub(r"\[VIDEO SCRIPT START\](.*?)\[VIDEO SCRIPT END\]", replacer, text, flags=re.DOTALL)
+
 
 def get_user_greeting(session):
     """Return a dynamic greeting based on profile or fallback to 'Hola amig@'"""
@@ -166,7 +209,7 @@ def is_subscribed(user_id):
 # Create a simple test video file if needed (can add before Flask app runs)
 def create_test_video():
     """Create a simple test video file if the base video doesn't exist"""
-    base_video = "espaluz_loop.mp4"
+    base_video = "looped_video.mp4"
     if not os.path.exists(base_video) and FFMPEG_AVAILABLE:
         print("Base video not found, creating a simple test video...")
         try:
@@ -189,6 +232,8 @@ def create_test_video():
 # Call this before starting the Flask app
 create_test_video()
 
+
+ensure_subscribers_file()
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 user_sessions = {}
 
@@ -200,7 +245,7 @@ print("🛡️ Webhook killer thread started in background")
 
 def debug_file_paths():
     """Debug function to check important file paths"""
-    base_video = "espaluz_loop.mp4"
+    base_video = "looped_video.mp4"
     base_video_abs = os.path.abspath(base_video)
 
     print(f"Current working directory: {os.getcwd()}")
@@ -835,7 +880,7 @@ and everyday phrases needed for work, shopping, and managing a household in Pana
 
     return enhanced_prompt
 
-def format_mcp_request(session, new_message, translated_input=None, use_extended_thinking=None):
+def format_mcp_request(session, new_message, translated_input=None):
     """Create a properly formatted MCP request with rich context embedded in the system prompt"""
     # Use enhanced emotion detection
     emotion_analysis = enhanced_emotion_detection(new_message, session)
@@ -929,7 +974,8 @@ I'll adjust my tone to be: {emotional_calibration.get('response_tone', 'supporti
     # Add Panama-specific cultural context
     system_content = add_panama_cultural_context(system_content, session)
 
-    # Add response format instructions
+# Add no-names instruction FIRST
+    system_content = add_no_names_instruction(system_content)
     system_content += """
     Your answer should have TWO PARTS:
 
@@ -967,12 +1013,6 @@ I'll adjust my tone to be: {emotional_calibration.get('response_tone', 'supporti
     messages.append({"role": "user", "content": user_content})
 
     # Determine if extended thinking would benefit this interaction
-    if use_extended_thinking is None:
-        complexity_assessment = assess_message_complexity(new_message, session)
-        should_use_extended = complexity_assessment > 0.7 or is_complex_language_topic(new_message)
-    else:
-        should_use_extended = use_extended_thinking
-
     # Create request with optional extended thinking parameter
     request = {
         "model": CLAUDE_MODEL,
@@ -981,15 +1021,6 @@ I'll adjust my tone to be: {emotional_calibration.get('response_tone', 'supporti
         "max_tokens": 1000,
         "temperature": 0.7,
     }
-
-    # Add extended thinking parameter for complex language concepts
-    if should_use_extended:
-        request["extended_thinking"] = {
-            "enabled": True,
-            # Adjust thinking tokens based on complexity
-            "max_thinking_tokens": 3000,
-            "visible": True  # Make thinking visible for educational purposes
-        }
 
     return request
 
@@ -1274,30 +1305,26 @@ def translate_to_es_en(text):
     headers = {"Authorization": f"Bearer {OPENAI_API_KEY}"}
     data = {
         "model": "gpt-3.5-turbo",
-        "messages": [{"role": "user", "content": f"Translate this message into both Spanish and English:\n\n{text}"}]
+        "messages": [{"role": "user", "content": f"Translate this message into both Spanish and English:
+
+{text}"}]
     }
     try:
-        res = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=data)
+        res = requests.post("https://api.openai.com/v1/chat/completions", timeout=20, headers=headers, json=data)
         return res.json()["choices"][0]["message"]["content"]
+    except (Timeout, ConnectionError, HTTPError) as net_err:
+        print(f"🌐 Translation error: {net_err}")
+        traceback.print_exc()
+        return "❌ Translation failed. Please try again later."
     except Exception as e:
         print(f"Translation error: {e}")
         return f"Error in translation: {e}"
 
 def ask_claude_with_mcp(session, translated_input):
     """Use Claude 3.7 with advanced context embedding and improved script handling"""
-    # Prepare MCP request
     user_message = session["messages"][-1]["content"] if session["messages"] else ""
-
-    # Check for complex language learning topics that would benefit from extended thinking
-    should_use_extended = is_complex_language_topic(user_message)
-
-    mcp_request = format_mcp_request(
-        session, 
-        user_message, 
-        translated_input, 
-        use_extended_thinking=should_use_extended
-    )
-
+    mcp_request = format_mcp_request(session, user_message, translated_input)
+    
     headers = {
         "x-api-key": CLAUDE_API_KEY,
         "anthropic-version": CLAUDE_API_VERSION,
@@ -1305,17 +1332,11 @@ def ask_claude_with_mcp(session, translated_input):
     }
 
     try:
-        res = requests.post("https://api.anthropic.com/v1/messages", 
-                           headers=headers, 
-                           json=mcp_request)
-
+        res = requests.post("https://api.anthropic.com/v1/messages", timeout=20, headers=headers, json=mcp_request)
         result = res.json()
-
-        # Check for thinking output if extended thinking was enabled
         thinking_process = ""
         if "thinking" in result:
             thinking_process = result["thinking"]
-            # Store thinking process in session for learning analytics
             if "extended_thinking_history" not in session:
                 session["extended_thinking_history"] = []
             session["extended_thinking_history"].append({
@@ -1323,30 +1344,27 @@ def ask_claude_with_mcp(session, translated_input):
                 "thinking": thinking_process,
                 "timestamp": datetime.now().isoformat()
             })
-
         full_reply = result["content"][0]["text"]
-
-        # Use improved video script extraction
+        full_reply = nuclear_greeting_removal(full_reply)
+        full_reply = remove_hardcoded_names_from_text(full_reply)
         short_text = extract_video_script(full_reply)
-
         return full_reply.strip(), short_text.strip(), thinking_process
-
+    except (Timeout, ConnectionError, HTTPError, RequestException) as err:
+        print(f"❌ Claude API error: {err}")
+        traceback.print_exc()
+        return "Claude error", "[VIDEO SCRIPT START]¡Hola![VIDEO SCRIPT END]", ""
     except Exception as e:
         print(f"Claude API error: {e}")
-        if 'res' in locals():
-            print(f"Response: {res.text}")
         return (
             "Lo siento, hubo un error. Sorry, there was an error.", 
             "Español: Lo siento. English: Sorry about that.",
-            ""
-        )
+            "")
 
 def transcribe_voice(file_path):
     """Transcribe voice message to text"""
     try:
         with open(file_path, "rb") as f:
-            res = requests.post(
-                "https://api.openai.com/v1/audio/transcriptions",
+            res = requests.post("https://api.openai.com/v1/audio/transcriptions", timeout=30,
                 headers={"Authorization": f"Bearer {OPENAI_API_KEY}"},
                 files={"file": f},
                 data={"model": "whisper-1"}
@@ -1393,7 +1411,7 @@ def generate_video_with_audio(chat_id, text_content, max_duration=30):
     timestamp = int(time.time())
     audio_file = f"video_audio_{timestamp}.mp3"
     output_video = f"final_video_{timestamp}.mp4"
-    base_video = "espaluz_loop.mp4"
+    base_video = "looped_video.mp4"
 
     try:
         # 1. Create audio file with cleaned text content
@@ -1507,11 +1525,18 @@ def generate_video_with_audio(chat_id, text_content, max_duration=30):
 
         print("Video sent successfully!")
 
-        # Clean up
+        # Clean up - FIXED VERSION
         try:
-            for file in [audio_file, loop_file, loop_output, output_video]:
+            cleanup_files = [audio_file, loop_file, loop_output, output_video]
+            for file in cleanup_files:
                 if file != base_video and os.path.exists(file):
-                    os.remove(file)
+                    try:
+                        os.remove(file)
+                        print(f"✅ Cleaned up: {file}")
+                    except Exception as cleanup_err:
+                        print(f"❌ Cleanup failed for {file}: {cleanup_err}")
+        except Exception as e:
+            print(f"General cleanup error: {e}")
         except Exception as e:
             print(f"Cleanup error: {e}")
 
@@ -1828,7 +1853,7 @@ def process_photo(photo_file):
         }
 
         # Send request
-        response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
+        response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload, timeout=30)
         result = response.json()
 
         # Handle result
@@ -1891,7 +1916,10 @@ def process_message(user_input, chat_id, user_id, message_obj):
 
     # Get Claude response with MCP
     print("Requesting Claude response...")
-    full_reply, short_reply, thinking_process = ask_claude_with_mcp(session, translated)
+    full_reply, short_reply, _ = ask_claude_with_mcp(session, translated)
+    full_reply = remove_hardcoded_names_from_text(full_reply)
+    full_reply = nuclear_greeting_removal(full_reply)
+    short_reply = clean_video_script_block(short_reply)
 
     # Clean video scripts from hardcoded names (like "Hola Elena")
     short_reply = clean_video_script_block(short_reply)
@@ -1901,14 +1929,6 @@ def process_message(user_input, chat_id, user_id, message_obj):
     # Send the main response
     bot.send_message(chat_id, f"🤖 Espaluz:\n{full_reply}")
     print("Main text response sent")
-
-    # If extended thinking was used, send it as a separate message
-    if thinking_process:
-        thinking_summary = f"🧠 *Thinking Process*:\n\n{thinking_process[:500]}..."
-        if len(thinking_process) > 500:
-            thinking_summary += "\n\n(Thinking process summarized for brevity)"
-        bot.send_message(chat_id, thinking_summary, parse_mode="Markdown")
-        print("Thinking process sent")
 
     # Update session with Claude's response
     session["messages"].append({"role": "assistant", "content": full_reply})
@@ -2302,7 +2322,7 @@ Keep your response concise and helpful."""
             if user_id in user_sessions:
                 session = user_sessions[user_id]
                 session["messages"].append({"role": "user", "content": explanation_prompt})
-                full_reply, short_reply, thinking_process = ask_claude_with_mcp(session, None)
+                full_reply, short_reply, _ = ask_claude_with_mcp(session, None)
 
                 # 🧹 Remove [VIDEO SCRIPT] block safely
                 full_reply_cleaned = re.sub(r"\[VIDEO SCRIPT START\](.*?)\[VIDEO SCRIPT END\]", "", full_reply, flags=re.DOTALL).strip()
