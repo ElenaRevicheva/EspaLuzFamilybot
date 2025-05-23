@@ -1205,17 +1205,15 @@ def translate_to_es_en(text):
         return f"Error in translation: {e}"
 
 def ask_claude_with_mcp(session, translated_input):
-    """Use Claude 3.7 with advanced context embedding and improved script handling"""
-    # Prepare MCP request
-    user_message = session["messages"][-1]["content"] if session["messages"] else ""
+    """Use Claude 3.7 with fallback to GPT-4 if Claude fails"""
 
-    # Check for complex language learning topics that would benefit from extended thinking
+    user_message = session["messages"][-1]["content"] if session["messages"] else ""
     should_use_extended = is_complex_language_topic(user_message)
 
     mcp_request = format_mcp_request(
-        session, 
-        user_message, 
-        translated_input, 
+        session,
+        user_message,
+        translated_input,
         use_extended_thinking=should_use_extended
     )
 
@@ -1226,41 +1224,74 @@ def ask_claude_with_mcp(session, translated_input):
     }
 
     try:
-        res = requests.post("https://api.anthropic.com/v1/messages", 
-                           headers=headers, 
-                           json=mcp_request)
+        res = requests.post("https://api.anthropic.com/v1/messages",
+                            headers=headers,
+                            json=mcp_request)
+
+        # 🚨 Force error fallback if Claude returns non-200 status
+        if res.status_code != 200:
+            raise Exception(f"Claude failed with status {res.status_code}: {res.text}")
 
         result = res.json()
-
-        # Check for thinking output if extended thinking was enabled
         thinking_process = ""
         if "thinking" in result:
             thinking_process = result["thinking"]
-            # Store thinking process in session for learning analytics
-            if "extended_thinking_history" not in session:
-                session["extended_thinking_history"] = []
-            session["extended_thinking_history"].append({
+            session.setdefault("extended_thinking_history", []).append({
                 "query": user_message,
                 "thinking": thinking_process,
                 "timestamp": datetime.now().isoformat()
             })
 
         full_reply = result["content"][0]["text"]
-
-        # Use improved video script extraction
         short_text = extract_video_script(full_reply)
 
         return full_reply.strip(), short_text.strip(), thinking_process
 
     except Exception as e:
-        print(f"Claude API error: {e}")
+        print(f"❌ Claude API error: {e}")
         if 'res' in locals():
-            print(f"Response: {res.text}")
-        return (
-            "Lo siento, hubo un error. Sorry, there was an error.", 
-            "Español: Lo siento. English: Sorry about that.",
-            ""
-        )
+            print(f"Claude response: {res.text}")
+
+        # === FALLBACK TO OPENAI GPT ===
+        try:
+            print("🔁 Falling back to GPT-4 via OpenAI...")
+
+            content_input = translated_input if translated_input else user_message or "Hello"
+            gpt_payload = {
+                "model": "gpt-4",
+                "messages": [
+                    {"role": "system", "content": "You are Espaluz, a bilingual emotionally intelligent Spanish-English language tutor for expat families."},
+                    {"role": "user", "content": content_input}
+                ],
+                "temperature": 0.7,
+                "max_tokens": 1000
+            }
+
+            gpt_headers = {
+                "Authorization": f"Bearer {OPENAI_API_KEY}",
+                "Content-Type": "application/json"
+            }
+
+            gpt_res = requests.post("https://api.openai.com/v1/chat/completions",
+                                    headers=gpt_headers,
+                                    json=gpt_payload)
+
+            print(f"GPT-4 fallback status: {gpt_res.status_code}")
+            print(f"GPT-4 fallback raw: {gpt_res.text}")
+
+            gpt_result = gpt_res.json()
+            gpt_text = gpt_result["choices"][0]["message"]["content"]
+            short_text = extract_video_script(gpt_text)
+
+            return gpt_text.strip(), short_text.strip(), ""
+
+        except Exception as gpt_error:
+            print(f"❌ GPT-4 fallback failed: {gpt_error}")
+            return (
+                "Lo siento, hubo un error. Sorry, there was an error.",
+                "Español: Lo siento. English: Sorry about that.",
+                ""
+            )
 
 def transcribe_voice(file_path):
     """Transcribe voice message to text"""
