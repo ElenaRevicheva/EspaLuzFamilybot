@@ -1305,17 +1305,28 @@ def translate_to_es_en(text):
     headers = {"Authorization": f"Bearer {OPENAI_API_KEY}"}
     data = {
         "model": "gpt-3.5-turbo",
-        "messages": [{"role": "user", "content": f"Translate this message into both Spanish and English:
-
-{text}"}]
+        "messages": [
+            {
+                "role": "user",
+                "content": f"Translate this message into both Spanish and English:\n\n{text}"
+            }
+        ]
     }
+
     try:
-        res = requests.post("https://api.openai.com/v1/chat/completions", timeout=20, headers=headers, json=data)
+        res = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers=headers,
+            json=data,
+            timeout=20
+        )
         return res.json()["choices"][0]["message"]["content"]
+
     except (Timeout, ConnectionError, HTTPError) as net_err:
         print(f"🌐 Translation error: {net_err}")
         traceback.print_exc()
         return "❌ Translation failed. Please try again later."
+
     except Exception as e:
         print(f"Translation error: {e}")
         return f"Error in translation: {e}"
