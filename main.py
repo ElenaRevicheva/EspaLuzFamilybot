@@ -1332,40 +1332,43 @@ def translate_to_es_en(text):
         return f"Error in translation: {e}"
 
 def ask_claude_with_mcp(session, translated_input):
-    """Use Claude 3.7 with advanced context embedding and improved script handling"""
+    """Use GPT-4o with advanced context embedding and improved script handling"""
     user_message = session["messages"][-1]["content"] if session["messages"] else ""
     mcp_request = format_mcp_request(session, user_message, translated_input)
     
-    headers = {
-        "x-api-key": CLAUDE_API_KEY,
-        "anthropic-version": CLAUDE_API_VERSION,
-        "content-type": "application/json"
+    # Convert Claude format to OpenAI format
+    openai_messages = [{"role": "system", "content": mcp_request["system"]}]
+    openai_messages.extend(mcp_request["messages"])
+    
+    headers = {"Authorization": f"Bearer {OPENAI_API_KEY}"}
+    
+    data = {
+        "model": "gpt-4o-mini",  # or "gpt-4o" for better quality
+        "messages": openai_messages,
+        "max_tokens": 1000,
+        "temperature": 0.7
     }
 
     try:
-        res = requests.post("https://api.anthropic.com/v1/messages", timeout=20, headers=headers, json=mcp_request)
+        res = requests.post("https://api.openai.com/v1/chat/completions", 
+                           timeout=20, headers=headers, json=data)
         result = res.json()
-        thinking_process = ""
-        if "thinking" in result:
-            thinking_process = result["thinking"]
-            if "extended_thinking_history" not in session:
-                session["extended_thinking_history"] = []
-            session["extended_thinking_history"].append({
-                "query": user_message,
-                "thinking": thinking_process,
-                "timestamp": datetime.now().isoformat()
-            })
-        full_reply = result["content"][0]["text"]
+        
+        full_reply = result["choices"][0]["message"]["content"]
+        
+        # Apply same cleaning as before
         full_reply = nuclear_greeting_removal(full_reply)
         full_reply = remove_hardcoded_names_from_text(full_reply)
         short_text = extract_video_script(full_reply)
-        return full_reply.strip(), short_text.strip(), thinking_process
+        
+        return full_reply.strip(), short_text.strip(), ""
+        
     except (Timeout, ConnectionError, HTTPError, RequestException) as err:
-        print(f"❌ Claude API error: {err}")
+        print(f"❌ OpenAI API error: {err}")
         traceback.print_exc()
-        return "Claude error", "[VIDEO SCRIPT START]¡Hola![VIDEO SCRIPT END]", ""
+        return "OpenAI error", "[VIDEO SCRIPT START]¡Hola![VIDEO SCRIPT END]", ""
     except Exception as e:
-        print(f"Claude API error: {e}")
+        print(f"OpenAI API error: {e}")
         return (
             "Lo siento, hubo un error. Sorry, there was an error.", 
             "Español: Lo siento. English: Sorry about that.",
