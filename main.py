@@ -1203,9 +1203,8 @@ def translate_to_es_en(text):
     except Exception as e:
         print(f"Translation error: {e}")
         return f"Error in translation: {e}"
-
 def ask_claude_with_mcp(session, translated_input):
-    """Use Claude 3.7 with fallback to GPT-4 if Claude fails"""
+    """Use Claude API with fallback to GPT-4, both formatted for bilingual response and video script."""
 
     user_message = session["messages"][-1]["content"] if session["messages"] else ""
     should_use_extended = is_complex_language_topic(user_message)
@@ -1228,7 +1227,6 @@ def ask_claude_with_mcp(session, translated_input):
                             headers=headers,
                             json=mcp_request)
 
-        # 🚨 Force error fallback if Claude returns non-200 status
         if res.status_code != 200:
             raise Exception(f"Claude failed with status {res.status_code}: {res.text}")
 
@@ -1252,7 +1250,7 @@ def ask_claude_with_mcp(session, translated_input):
         if 'res' in locals():
             print(f"Claude response: {res.text}")
 
-        # === FALLBACK TO OPENAI GPT ===
+        # === FALLBACK TO OPENAI GPT-4 ===
         try:
             print("🔁 Falling back to GPT-4 via OpenAI...")
 
@@ -1260,7 +1258,23 @@ def ask_claude_with_mcp(session, translated_input):
             gpt_payload = {
                 "model": "gpt-4",
                 "messages": [
-                    {"role": "system", "content": "You are Espaluz, a bilingual emotionally intelligent Spanish-English language tutor for expat families."},
+                    {
+                        "role": "system",
+                        "content": """You are Espaluz, a bilingual emotionally intelligent Spanish-English language tutor for expat families.
+
+Your answers must have TWO PARTS:
+
+1️⃣ A full bilingual text message with emotional tone and context.
+
+2️⃣ Then add a short second section inside [VIDEO SCRIPT START] and [VIDEO SCRIPT END], like:
+
+[VIDEO SCRIPT START]
+¡Hola! Hoy vamos a aprender algo nuevo.
+Hello! Today we will learn something new.
+[VIDEO SCRIPT END]
+
+This second block will be spoken in video, so keep it short, warm, and clear."""
+                    },
                     {"role": "user", "content": content_input}
                 ],
                 "temperature": 0.7,
