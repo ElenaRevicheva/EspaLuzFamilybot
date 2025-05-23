@@ -2422,6 +2422,13 @@ def run_subscription_poller():
 
 threading.Thread(target=run_subscription_poller, daemon=True).start()
 
+# === TEMP DEBUG: PRINT CURRENT SUBSCRIBERS TO LOGS ===
+try:
+    with open("subscribers.json", "r") as f:
+        print("\n📄 subscribers.json:\n", f.read())
+except Exception as e:
+    print("❌ Could not read subscribers.json:", e)
+
 # === Start the bot with polling mode ===
 if __name__ == "__main__":
     while True:  # Add infinite retry loop
