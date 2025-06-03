@@ -1,8 +1,0 @@
-openai==0.28.1
-pyTelegramBotAPI==4.6.0
-python-dotenv==1.0.0
-requests==2.31.0
-gTTS==2.5.3
-pytesseract==0.3.10
-pillow==10.0.0
-pydub==0.25.1
