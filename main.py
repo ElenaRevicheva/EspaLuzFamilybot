@@ -3205,7 +3205,7 @@ def debug_files_and_env():
     print(f"Disk free space: {subprocess.check_output(['df', '-h', '.']).decode().strip()}")
     print("====================\n")
 
-print("✅ Espaluz is running THIS UPDATED VERSION: v1.5-emotions")
+print("✅ Espaluz is running THIS UPDATED VERSION: v2.0-free-trial")
 
 # Call the debug function here
 debug_files_and_env()
@@ -3352,7 +3352,7 @@ Keep your response concise and helpful."""
         except:
             print(f"Failed to send error message: {e}")
 
-print("✅ Espaluz is running THIS UPDATED VERSION: v1.5-emotions (Polling Mode)")
+print("✅ Espaluz is running THIS UPDATED VERSION: v2.0-free-trial (Polling Mode)")
 
 def run_subscription_poller():
     from poll_subscriptions import fetch_all_subscribers, update_subscriber_file
