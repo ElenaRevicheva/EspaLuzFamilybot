@@ -3516,14 +3516,14 @@ def handle_email_link(message):
         subscribers_file = "subscribers.json"
         if os.path.exists(subscribers_file):
             with open(subscribers_file, "r+") as f:
-            data = json.load(f)
-            if user_email in data:
-                data[user_email]["telegram_id"] = user_id
-                f.seek(0)
-                json.dump(data, f, indent=2)
-                f.truncate()
-                bot.send_message(message.chat.id, "✅ Email linked! You now have full access to Espaluz.")
-            else:
+                data = json.load(f)
+                if user_email in data:
+                    data[user_email]["telegram_id"] = user_id
+                    f.seek(0)
+                    json.dump(data, f, indent=2)
+                    f.truncate()
+                    bot.send_message(message.chat.id, "✅ Email linked! You now have full access to Espaluz.")
+                else:
                     bot.send_message(message.chat.id, f"⚠️ Email not found. Subscribe first:\n{PAYPAL_SUBSCRIPTION_LINK}")
         else:
             bot.send_message(message.chat.id, f"⚠️ No subscribers file found. Subscribe first:\n{PAYPAL_SUBSCRIPTION_LINK}")
