@@ -107,13 +107,28 @@ Just send me any message! I understand:
 /metrics — See community stats (admin)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔐 *SUBSCRIPTION*
+🔐 *SUBSCRIPTION & TRIAL*
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-/link — Link your payment email
-  ↳ Works with PayPal subscription
+/trial — Check your trial status
+  ↳ 14-day free trial for new users
+
+/subscribe — View subscription options
+  ↳ PayPal: $15/month or $99/year
+
+/link — Link your PayPal email
+  ↳ Activates paid subscription
 
 /connect CODE — Connect to web dashboard
   ↳ Sync your progress across devices
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🎬 *DEMO MODE (For Workshops)*
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+/demo — Toggle demo presentation mode
+  ↳ Shows emotional intelligence in action
+
+/scenarios — View demo scenarios
+  ↳ Pre-written demos for presenters
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📖 *ALL COMMANDS QUICK REFERENCE*
@@ -125,7 +140,8 @@ Just send me any message! I understand:
         /help_shopping /help_transport /help_emergency
 *Culture:* /country /slang /culture  
 *Orgs:* /org /feedback /refer
-*Account:* /link /connect /help
+*Account:* /trial /subscribe /link /connect
+*Demo:* /demo /scenarios
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 💡 *PRO TIPS*

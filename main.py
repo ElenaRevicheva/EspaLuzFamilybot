@@ -62,6 +62,19 @@ except ImportError as e:
     print(f"⚠️ Enhanced brain modules not available: {e}")
     print("   Bot will work with basic functionality.")
 
+# === PAYPAL & DEMO MODE MODULES (NEW - Jan 2026) ===
+try:
+    from espaluz_paypal_system import paypal_system, PAYPAL_SUBSCRIPTION_LINK
+    from espaluz_demo_mode import demo_mode, detect_demo_emotion
+    PAYPAL_SYSTEM_AVAILABLE = True
+    print("✅ PayPal system and Demo mode loaded successfully!")
+except ImportError as e:
+    PAYPAL_SYSTEM_AVAILABLE = False
+    paypal_system = None
+    demo_mode = None
+    PAYPAL_SUBSCRIPTION_LINK = "https://www.paypal.com/webapps/billing/plans/subscribe?plan_id=P-38A73508FY163121MNCJXTYY"
+    print(f"⚠️ PayPal/Demo modules not available: {e}")
+
 # =============================================================================
 # ONBOARDING SYSTEM (NEW - Jan 2026)
 # Asks new users: Country -> Name -> Role -> Family members
@@ -798,7 +811,7 @@ def enhanced_emotion_detection(text, session):
                 print(f"🧠 Enhanced brain detected: {enhanced_result['dominant_emotion']} (conf: {enhanced_result['confidence']:.2f})")
         except Exception as e:
             print(f"⚠️ Enhanced brain error (using basic): {e}")
-    
+
     # Add confidence metric
     confidence = dominant[1] if isinstance(dominant[1], float) else basic_confidence
 
@@ -1371,7 +1384,7 @@ IMPORTANT - Personalize for THIS user:
         if family_members.get("children"):
             kids = [f"{c['name']} ({c['age']}yo)" for c in family_members["children"]]
             personalization += f"- Children: {', '.join(kids)}\n"
-    
+
     # Combine with original prompt
     enhanced_prompt = prompt + "\n\n" + country_context + "\n" + personalization
 
@@ -2609,8 +2622,8 @@ def process_message(user_input, chat_id, user_id, message_obj):
     # Get translation (skip if translation fails)
     translated = translate_to_es_en(user_input)
     if translated:
-        bot.send_message(chat_id, f"📝 Traducción:\n{translated}")
-        print("Translation sent")
+    bot.send_message(chat_id, f"📝 Traducción:\n{translated}")
+    print("Translation sent")
     else:
         print("Translation skipped - API error")
 
@@ -2686,8 +2699,8 @@ def process_message_with_tracking(user_input, chat_id, user_id, message_obj):
     # Get translation (skip if translation fails)
     translated = translate_to_es_en(user_input)
     if translated:
-        bot.send_message(chat_id, f"📝 Traducción:\n{translated}")
-        print("Translation sent")
+    bot.send_message(chat_id, f"📝 Traducción:\n{translated}")
+    print("Translation sent")
     else:
         print("Translation skipped - API error")
 
@@ -3003,7 +3016,7 @@ Just chat! Text, voice 🎤, photos 📷
 
 ¡Empecemos! / Let's learn! 🚀"""
     else:
-        help_text = """🌟 *EspaLuz Bot – Available Commands:*
+    help_text = """🌟 *EspaLuz Bot – Available Commands:*
 
 /start – Start the bot  
 /reset – Reset the conversation  
@@ -3313,30 +3326,196 @@ def transcribe_audio(audio_path: str) -> str:
 
 @bot.message_handler(commands=["link"])
 def handle_link(message):
-    link_msg = """📩 *Link Your Subscription*
+    link_msg = f"""📩 Link Your Subscription
 
-You're currently on a *FREE TRIAL* - enjoy all features!
+You're currently on a FREE TRIAL - enjoy all features!
 
-*After trial ends:*
+After trial ends:
 • Monthly: $15/month
 • Annual: $99/year (save 45%!)
 
-*Payment options (coming soon):*
-• 💳 PayPal
-• 🪙 Crypto (USDT/USDC)
+💳 PayPal (ready now):
+{PAYPAL_SUBSCRIPTION_LINK}
 
-For now, enjoy your free trial! 🎉
+📧 After subscribing, send me your PayPal email to activate!
 
 Questions? Contact @revicheva"""
-    bot.send_message(message.chat.id, link_msg, parse_mode="Markdown")
+    bot.send_message(message.chat.id, link_msg)
 
-@bot.message_handler(func=lambda m: "@" in m.text and "." in m.text and " " not in m.text)
+
+# === DEMO MODE COMMANDS (NEW - Jan 2026) ===
+@bot.message_handler(commands=["demo"])
+def handle_demo(message):
+    """Toggle demo mode for workshop presentations"""
+    user_id = str(message.from_user.id)
+    
+    if not PAYPAL_SYSTEM_AVAILABLE or not demo_mode:
+        bot.reply_to(message, "⚠️ Demo mode not available.")
+        return
+    
+    # Check if user wants to turn off demo
+    args = message.text.split()
+    if len(args) > 1 and args[1].lower() == "off":
+        response = demo_mode.deactivate_demo(user_id)
+        bot.reply_to(message, response)
+        return
+    
+    # Activate demo mode
+    if demo_mode.is_demo_active(user_id):
+        response = demo_mode.deactivate_demo(user_id)
+    else:
+        response = demo_mode.activate_demo(user_id)
+    
+    bot.reply_to(message, response)
+
+
+@bot.message_handler(commands=["scenarios"])
+def handle_scenarios(message):
+    """Show demo scenarios for presenters"""
+    if demo_mode:
+        bot.reply_to(message, demo_mode.get_demo_scenarios())
+    else:
+        bot.reply_to(message, "⚠️ Demo mode not available.")
+
+
+# === SUBSCRIPTION COMMANDS (NEW - Jan 2026) ===
+@bot.message_handler(commands=["subscribe"])
+def handle_subscribe(message):
+    """Show subscription options"""
+    user_id = str(message.from_user.id)
+    
+    # Check trial status if PayPal system available
+    trial_info = ""
+    if PAYPAL_SYSTEM_AVAILABLE and paypal_system:
+        trial_status = paypal_system.get_trial_status(user_id)
+        if trial_status["has_trial"]:
+            if trial_status["is_active"]:
+                days = trial_status["days_remaining"]
+                trial_info = f"\n✅ You have {days} days left in your free trial!\n"
+            else:
+                trial_info = "\n⏰ Your free trial has expired.\n"
+        else:
+            trial_info = "\n🎉 Start your 14-day free trial now!\n"
+    
+    sub_msg = f"""💳 EspaLuz Subscription
+{trial_info}
+🎯 Simple Pricing:
+• $15/month - Full access, family included
+• $99/year - Save 45%!
+
+💳 Subscribe via PayPal:
+{PAYPAL_SUBSCRIPTION_LINK}
+
+📧 After subscribing:
+Send me your PayPal email to activate access immediately!
+
+✨ Your Spanish learning journey awaits!"""
+    
+    bot.send_message(message.chat.id, sub_msg)
+
+
+@bot.message_handler(commands=["trial"])
+def handle_trial(message):
+    """Check or start trial status"""
+    user_id = str(message.from_user.id)
+    
+    if not PAYPAL_SYSTEM_AVAILABLE or not paypal_system:
+        bot.reply_to(message, "🎉 You have full access! Enjoy EspaLuz!")
+        return
+    
+    trial_status = paypal_system.get_trial_status(user_id)
+    
+    if not trial_status["has_trial"]:
+        # Start trial for new user
+        paypal_system.start_trial(user_id)
+        bot.reply_to(message, """🎉 Welcome to EspaLuz!
+
+Your 14-day FREE TRIAL has started!
+
+What you can do:
+• 🎤 Send voice messages for practice
+• 📷 Take photos of text to translate
+• 💬 Chat in Spanish or English
+• 🌎 Learn about your new country
+
+Try sending me a message or voice note!
+
+/help - See all commands
+/menu - Full feature list""")
+    
+    elif trial_status["is_active"]:
+        days = trial_status["days_remaining"]
+        messages = trial_status["messages_sent"]
+        org = trial_status.get("org_code")
+        org_text = f"\n🏢 Organization: {org}" if org else ""
+        
+        bot.reply_to(message, f"""✅ Trial Status
+
+📅 Days remaining: {days}
+💬 Messages sent: {messages}{org_text}
+
+Keep practicing! 🚀
+/subscribe - View subscription options""")
+    
+    else:
+        bot.reply_to(message, f"""⏰ Trial Expired
+
+Your free trial has ended.
+
+To continue your Spanish learning journey:
+💳 Subscribe: {PAYPAL_SUBSCRIPTION_LINK}
+
+📧 After subscribing, send me your PayPal email!""")
+
+
+@bot.message_handler(commands=["admin"])
+def handle_admin(message):
+    """Admin command - show admin dashboard info"""
+    user_id = str(message.from_user.id)
+    
+    # Only allow admin access for specific users
+    ADMIN_IDS = ["1494063516", "YOUR_ADMIN_ID"]  # Add your Telegram ID
+    
+    if user_id not in ADMIN_IDS:
+        bot.reply_to(message, "⚠️ Admin access required.")
+        return
+    
+    if PAYPAL_SYSTEM_AVAILABLE and paypal_system:
+        stats = paypal_system.get_stats()
+        admin_msg = f"""🎯 EspaLuz Admin Stats
+
+👥 Total Users: {stats['total_users']}
+✅ Active Trials: {stats['active_trials']}
+⏰ Expired Trials: {stats['expired_trials']}
+💳 Active Subscriptions: {stats['active_subscriptions']}
+
+🌐 Web Admin (if deployed):
+https://your-deployment-url/admin
+
+Commands:
+/extend [user_id] [days] - Extend trial
+/adduser [email] - Add subscriber"""
+        bot.reply_to(message, admin_msg)
+    else:
+        bot.reply_to(message, "⚠️ PayPal system not initialized.")
+
+@bot.message_handler(func=lambda m: m.text and "@" in m.text and "." in m.text and " " not in m.text.strip())
 def handle_email_link(message):
+    """Handle email linking for PayPal subscriptions"""
     user_email = message.text.strip().lower()
     user_id = str(message.from_user.id)
 
+    # Use new PayPal system if available
+    if PAYPAL_SYSTEM_AVAILABLE and paypal_system:
+        result = paypal_system.link_email(user_id, user_email)
+        bot.send_message(message.chat.id, result["message"])
+        return
+
+    # Fallback to legacy system
     try:
-        with open("subscribers.json", "r+") as f:
+        subscribers_file = "subscribers.json"
+        if os.path.exists(subscribers_file):
+            with open(subscribers_file, "r+") as f:
             data = json.load(f)
             if user_email in data:
                 data[user_email]["telegram_id"] = user_id
@@ -3345,7 +3524,9 @@ def handle_email_link(message):
                 f.truncate()
                 bot.send_message(message.chat.id, "✅ Email linked! You now have full access to Espaluz.")
             else:
-                bot.send_message(message.chat.id, "⚠️ Email not found. Did you subscribe yet?")
+                    bot.send_message(message.chat.id, f"⚠️ Email not found. Subscribe first:\n{PAYPAL_SUBSCRIPTION_LINK}")
+        else:
+            bot.send_message(message.chat.id, f"⚠️ No subscribers file found. Subscribe first:\n{PAYPAL_SUBSCRIPTION_LINK}")
     except Exception as e:
         print(f"❌ Error linking email: {e}")
         bot.send_message(message.chat.id, "⚠️ Something went wrong. Please try again.")
@@ -3758,7 +3939,7 @@ def debug_files_and_env():
     print(f"Disk free space: {subprocess.check_output(['df', '-h', '.']).decode().strip()}")
     print("====================\n")
 
-print("✅ Espaluz is running THIS UPDATED VERSION: v3.0-enhanced-emotional-brain")
+print("✅ Espaluz is running THIS UPDATED VERSION: v4.0-paypal-demo-mode")
 
 # Call the debug function here
 debug_files_and_env()
@@ -3905,7 +4086,7 @@ Keep your response concise and helpful."""
         except:
             print(f"Failed to send error message: {e}")
 
-print("✅ Espaluz is running THIS UPDATED VERSION: v2.0-free-trial (Polling Mode)")
+print("✅ Espaluz is running THIS UPDATED VERSION: v4.0-paypal-demo-mode (Polling Mode)")
 
 def run_subscription_poller():
     from poll_subscriptions import fetch_all_subscribers, update_subscriber_file
