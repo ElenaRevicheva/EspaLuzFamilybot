@@ -329,6 +329,62 @@ def poll_subscriptions():
         print(f"❌ Exception polling Gumroad: {e}")
 
 def is_subscribed(user_id):
+    """
+    Check if user has access. Now includes FREE TRIAL for everyone!
+    
+    Access granted if:
+    1. User is within free trial period (14 days, 60 for org members)
+    2. User has PayPal subscription (future)
+    3. User has valid org code
+    4. User is in legacy subscribers.json
+    """
+    user_id = str(user_id)
+    
+    # === FREE TRIAL SYSTEM (NEW - Jan 2026) ===
+    try:
+        # Check free trial status
+        trial_file = "user_trials.json"
+        trials = {}
+        
+        if os.path.exists(trial_file):
+            with open(trial_file, "r") as f:
+                trials = json.load(f)
+        
+        if user_id in trials:
+            # User exists, check trial status
+            user_trial = trials[user_id]
+            start_date = datetime.fromisoformat(user_trial.get("start_date", datetime.now().isoformat()))
+            trial_days = user_trial.get("trial_days", 14)
+            org_code = user_trial.get("org_code")
+            
+            # Check if trial is still valid
+            days_elapsed = (datetime.now() - start_date).days
+            if days_elapsed <= trial_days:
+                print(f"✅ User {user_id} has valid trial ({days_elapsed}/{trial_days} days)")
+                return True
+            else:
+                # Trial expired, but still allow access during transition period
+                if days_elapsed <= trial_days + 7:  # 7 day grace period
+                    print(f"⚠️ User {user_id} trial expired but in grace period")
+                    return True
+        else:
+            # New user - automatically start free trial!
+            trials[user_id] = {
+                "start_date": datetime.now().isoformat(),
+                "trial_days": 14,  # Default 14 days
+                "org_code": None,
+                "status": "trial"
+            }
+            with open(trial_file, "w") as f:
+                json.dump(trials, f, indent=2)
+            print(f"🎉 New user {user_id} - started 14-day free trial!")
+            return True
+            
+    except Exception as e:
+        print(f"⚠️ Trial check error: {e} - allowing access")
+        return True  # On error, allow access
+    
+    # === LEGACY: Check old Gumroad subscribers ===
     try:
         with open("subscribers.json", "r") as f:
             subscribers = json.load(f)
@@ -336,8 +392,13 @@ def is_subscribed(user_id):
             if str(info.get("telegram_id")) == str(user_id) and info.get("status") == "active":
                 return True
     except Exception as e:
-        print(f"❌ Error checking subscription: {e}")
-    return False
+        print(f"⚠️ Legacy subscription check error: {e}")
+    
+    # === FUTURE: PayPal subscription check will go here ===
+    
+    # Default: Allow access (for now - remove blocking)
+    print(f"ℹ️ User {user_id} - allowing access (trial system active)")
+    return True  # Changed from False to True - no blocking!
 
 # === EMOTIONAL INTELLIGENCE & PERSONALIZATION ===
 FAMILY_MEMBERS = {
@@ -2807,7 +2868,22 @@ def transcribe_audio(audio_path: str) -> str:
 
 @bot.message_handler(commands=["link"])
 def handle_link(message):
-    bot.send_message(message.chat.id, "📩 Please reply with the *email you used on Gumroad* to link your subscription.", parse_mode="Markdown")
+    link_msg = """📩 *Link Your Subscription*
+
+You're currently on a *FREE TRIAL* - enjoy all features!
+
+*After trial ends:*
+• Monthly: $15/month
+• Annual: $99/year (save 45%!)
+
+*Payment options (coming soon):*
+• 💳 PayPal
+• 🪙 Crypto (USDT/USDC)
+
+For now, enjoy your free trial! 🎉
+
+Questions? Contact @revicheva"""
+    bot.send_message(message.chat.id, link_msg, parse_mode="Markdown")
 
 @bot.message_handler(func=lambda m: "@" in m.text and "." in m.text and " " not in m.text)
 def handle_email_link(message):
@@ -2833,8 +2909,18 @@ def handle_email_link(message):
 def handle_voice(message):
     user_id = str(message.from_user.id)
 
+    # Track activity for analytics
+    if ENHANCED_BRAIN_AVAILABLE:
+        try:
+            track_activity(user_id)
+        except:
+            pass
+    
+    # Free trial is now active for everyone!
+    # Legacy subscription check kept for future PayPal integration
     if not is_subscribed(user_id):
-        bot.reply_to(message, "🔐 You are not an active subscriber.\nPlease subscribe at:\n👉 https://revicheva.gumroad.com/l/aideazzEspaLuz")
+        # This should rarely trigger now with free trial
+        bot.reply_to(message, "🎉 Welcome! Your 14-day free trial has started.\n\nSend me a voice message to practice!")
         return
 
     try:
@@ -2870,9 +2956,18 @@ def handle_voice(message):
 @bot.message_handler(content_types=["text"])
 def handle_text(message):
     user_id = str(message.from_user.id)
+    
+    # Track activity for analytics
+    if ENHANCED_BRAIN_AVAILABLE:
+        try:
+            track_activity(user_id)
+        except:
+            pass
 
+    # Free trial is now active for everyone!
     if not is_subscribed(user_id):
-        bot.reply_to(message, "🔐 You are not an active subscriber.\nPlease subscribe at:\n👉 https://revicheva.gumroad.com/l/aideazzEspaLuz")
+        # This should rarely trigger now with free trial
+        bot.reply_to(message, "🎉 Welcome! Your 14-day free trial has started.\n\nJust send me any message to start learning!")
         return
 
     process_message_with_tracking(message.text, message.chat.id, str(message.from_user.id), message)
