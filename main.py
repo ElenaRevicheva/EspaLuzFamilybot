@@ -62,6 +62,157 @@ except ImportError as e:
     print(f"⚠️ Enhanced brain modules not available: {e}")
     print("   Bot will work with basic functionality.")
 
+# =============================================================================
+# ONBOARDING SYSTEM (NEW - Jan 2026)
+# Asks new users: Country -> Name -> Role -> Family members
+# =============================================================================
+ONBOARDING_FILE = "user_onboarding.json"
+
+def load_onboarding_states():
+    """Load onboarding states from file"""
+    try:
+        if os.path.exists(ONBOARDING_FILE):
+            with open(ONBOARDING_FILE, 'r') as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"⚠️ Error loading onboarding states: {e}")
+    return {}
+
+def save_onboarding_states(states):
+    """Save onboarding states to file"""
+    try:
+        with open(ONBOARDING_FILE, 'w') as f:
+            json.dump(states, f, indent=2)
+    except Exception as e:
+        print(f"⚠️ Error saving onboarding states: {e}")
+
+# Onboarding states: {user_id: {step: "country|name|role|complete", country: "...", name: "...", role: "..."}}
+onboarding_states = load_onboarding_states()
+
+def get_user_onboarding(user_id):
+    """Get user's onboarding state"""
+    user_id = str(user_id)
+    return onboarding_states.get(user_id, {"step": "country"})
+
+def set_user_onboarding(user_id, data):
+    """Update user's onboarding state"""
+    user_id = str(user_id)
+    onboarding_states[user_id] = data
+    save_onboarding_states(onboarding_states)
+
+def is_onboarding_complete(user_id):
+    """Check if user has completed onboarding"""
+    state = get_user_onboarding(user_id)
+    return state.get("step") == "complete"
+
+# Country detection from text
+COUNTRY_KEYWORDS = {
+    "panama": ["panama", "panamá", "панама", "pty"],
+    "mexico": ["mexico", "méxico", "мексика", "cdmx"],
+    "colombia": ["colombia", "колумбия", "bogota", "bogotá", "medellin", "medellín"],
+    "argentina": ["argentina", "аргентина", "buenos aires"],
+    "spain": ["spain", "españa", "испания", "madrid", "barcelona"],
+    "costa_rica": ["costa rica", "коста рика", "san jose", "san josé"],
+    "peru": ["peru", "perú", "перу", "lima"],
+    "chile": ["chile", "чили", "santiago"],
+    "ecuador": ["ecuador", "эквадор", "quito", "guayaquil"],
+    "usa": ["usa", "united states", "сша", "америка", "miami", "new york", "los angeles"],
+    "dominican": ["dominican", "dominicana", "república dominicana", "santo domingo"],
+    "cuba": ["cuba", "куба", "havana"],
+    "venezuela": ["venezuela", "венесуэла", "caracas"],
+    "puerto_rico": ["puerto rico", "пуэрто рико"],
+    "guatemala": ["guatemala", "гватемала"],
+    "honduras": ["honduras", "гондурас"],
+    "el_salvador": ["el salvador", "сальвадор"],
+    "nicaragua": ["nicaragua", "никарагуа"],
+    "bolivia": ["bolivia", "боливия"],
+    "uruguay": ["uruguay", "уругвай"],
+    "paraguay": ["paraguay", "парагвай"]
+}
+
+def detect_country_from_text(text):
+    """Detect country from user's message"""
+    text_lower = text.lower()
+    for country, keywords in COUNTRY_KEYWORDS.items():
+        for keyword in keywords:
+            if keyword in text_lower:
+                return country
+    return None
+
+# Role detection from text
+ROLE_KEYWORDS = {
+    "parent": ["parent", "mother", "father", "mom", "dad", "мама", "папа", "madre", "padre", "mamá", "papá"],
+    "child": ["child", "kid", "son", "daughter", "niño", "niña", "ребенок", "сын", "дочь"],
+    "teenager": ["teenager", "teen", "adolescent", "подросток", "adolescente"],
+    "traveler": ["traveler", "tourist", "travel", "viajero", "turista", "путешественник", "турист"],
+    "expat": ["expat", "expatriate", "экспат", "relocating", "moved", "living abroad"],
+    "local": ["local", "native", "local person", "trabajo", "service", "работа", "сервис"],
+    "student": ["student", "estudent", "estudiante", "студент"]
+}
+
+def detect_role_from_text(text):
+    """Detect user role from message"""
+    text_lower = text.lower()
+    for role, keywords in ROLE_KEYWORDS.items():
+        for keyword in keywords:
+            if keyword in text_lower:
+                return role
+    return None
+
+ONBOARDING_MESSAGES = {
+    "country": """👋 Welcome to EspaLuz!
+
+🌍 First, where are you located or planning to travel?
+
+I support 21 Spanish-speaking countries + USA!
+
+Examples:
+• "Panama" 🇵🇦
+• "Mexico" 🇲🇽
+• "Colombia" 🇨🇴
+• "Spain" 🇪🇸
+• "Costa Rica" 🇨🇷
+• Or any other country!
+
+Just type your country name...""",
+    
+    "name": """Great! 🎉
+
+Now, what's your name? (I'll personalize our conversations)
+
+Just type your first name...""",
+    
+    "role": """Nice to meet you, {name}! 👋
+
+What best describes you?
+
+• "Parent" - Learning with my family
+• "Child/Teen" - I'm young and learning
+• "Traveler" - I'm visiting Spanish-speaking countries
+• "Expat" - I moved abroad recently
+• "Local" - I want to improve my English for work
+• "Student" - I'm studying languages
+
+Just type what fits you best...""",
+
+    "complete": """🎉 Perfect! You're all set, {name}!
+
+📍 Country: {country}
+👤 Role: {role}
+
+Now I'll adapt my teaching to YOUR real-life situations in {country}!
+
+Try:
+• Send a voice message 🎤
+• Take a photo of text 📷
+• Just type anything to chat!
+
+/help - See all commands
+/menu - Full feature list
+
+¡Empecemos! Let's begin! 🚀"""
+}
+
 # === Configuration ===
 TELEGRAM_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 CLAUDE_API_KEY = os.environ["CLAUDE_API_KEY"]
@@ -1468,17 +1619,34 @@ def suggest_next_topics(session, adjustments):
 # === TRANSLATION & AI HANDLERS ===
 def translate_to_es_en(text):
     """Translate the input text to both Spanish and English"""
-    headers = {"Authorization": f"Bearer {OPENAI_API_KEY}"}
+    headers = {"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"}
     data = {
         "model": "gpt-3.5-turbo",
         "messages": [{"role": "user", "content": f"Translate this message into both Spanish and English:\n\n{text}"}]
     }
     try:
-        res = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=data)
-        return res.json()["choices"][0]["message"]["content"]
+        res = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=data, timeout=30)
+        res_json = res.json()
+        
+        # Check for API errors
+        if "error" in res_json:
+            error_msg = res_json.get("error", {}).get("message", "Unknown API error")
+            print(f"OpenAI API error: {error_msg}")
+            return None  # Return None instead of error message
+        
+        # Check for valid response structure
+        if "choices" in res_json and len(res_json["choices"]) > 0:
+            return res_json["choices"][0]["message"]["content"]
+        else:
+            print(f"Unexpected API response: {res_json}")
+            return None
+            
+    except requests.exceptions.Timeout:
+        print("Translation timeout")
+        return None
     except Exception as e:
         print(f"Translation error: {e}")
-        return f"Error in translation: {e}"
+        return None  # Return None, let caller handle gracefully
 def ask_claude_with_mcp(session, translated_input):
     """Use Claude API with fallback to GPT-4, both formatted for bilingual response and video script."""
 
@@ -2118,10 +2286,13 @@ def process_message(user_input, chat_id, user_id, message_obj):
     session["context"]["conversation"]["message_count"] += 1
     session["context"]["conversation"]["last_interaction_time"] = datetime.now().isoformat()
 
-    # Get translation
+    # Get translation (skip if translation fails)
     translated = translate_to_es_en(user_input)
-    bot.send_message(chat_id, f"📝 Traducción:\n{translated}")
-    print("Translation sent")
+    if translated:
+        bot.send_message(chat_id, f"📝 Traducción:\n{translated}")
+        print("Translation sent")
+    else:
+        print("Translation skipped - API error")
 
     # Update message history
     session["messages"].append({"role": "user", "content": user_input})
@@ -2192,10 +2363,13 @@ def process_message_with_tracking(user_input, chat_id, user_id, message_obj):
     session["context"]["conversation"]["message_count"] += 1
     session["context"]["conversation"]["last_interaction_time"] = datetime.now().isoformat()
 
-    # Get translation
+    # Get translation (skip if translation fails)
     translated = translate_to_es_en(user_input)
-    bot.send_message(chat_id, f"📝 Traducción:\n{translated}")
-    print("Translation sent")
+    if translated:
+        bot.send_message(chat_id, f"📝 Traducción:\n{translated}")
+        print("Translation sent")
+    else:
+        print("Translation skipped - API error")
 
     # Update message history
     session["messages"].append({"role": "user", "content": user_input})
@@ -2251,78 +2425,22 @@ def process_message_with_tracking(user_input, chat_id, user_id, message_obj):
 # === HANDLERS ===
 @bot.message_handler(commands=["start"])
 def handle_start(message):
+    user_id = str(message.from_user.id)
+    
     # Track activity if enhanced brain available
     if ENHANCED_BRAIN_AVAILABLE:
         try:
-            track_activity(str(message.from_user.id))
+            track_activity(user_id)
         except:
             pass
     
-    # Use enhanced welcome if available
-    if ENHANCED_BRAIN_AVAILABLE:
-        welcome_msg = """👋 *¡Hola! Welcome to EspaLuz!*
-
-🌟 Your AI bilingual companion for expat families, travelers, and locals.
-
-━━━━━━━━━━━━━━━━━━━━━━━━
-📱 *QUICK START*
-━━━━━━━━━━━━━━━━━━━━━━━━
-1️⃣ Set your profile: /family Name Role Age
-   Example: /family Sofia mother 38
-
-2️⃣ Just chat! Send text, voice 🎤, or photos 📷
-
-3️⃣ Try: "How do I say 'thank you' in Spanish?"
-
-━━━━━━━━━━━━━━━━━━━━━━━━
-🆘 *REAL-LIFE HELP*
-━━━━━━━━━━━━━━━━━━━━━━━━
-/help_banking — Bank phrases
-/help_medical — Healthcare
-/help_school — School vocabulary
-/help_emergency — 🚨 Urgent help
-
-━━━━━━━━━━━━━━━━━━━━━━━━
-🌎 *LOCAL CULTURE*
-━━━━━━━━━━━━━━━━━━━━━━━━
-/slang panama — Local expressions
-/country panama — Set your country
-
-━━━━━━━━━━━━━━━━━━━━━━━━
-🏢 *ORGANIZATIONS*
-━━━━━━━━━━━━━━━━━━━━━━━━
-/org CODE — Enter your org code
-
-━━━━━━━━━━━━━━━━━━━━━━━━
-📖 *MORE*
-━━━━━━━━━━━━━━━━━━━━━━━━
-/menu — Full command list
-/progress — Your learning stats
-/help — All commands
-
-💬 Text in English, Spanish, or Russian
-🎤 Voice messages work too!
-📸 Send photos of menus/signs to translate
-
-¡Empecemos! / Let's begin! 🚀"""
-    else:
-        welcome_msg = (
-            "👋 ¡Hola! Welcome to *Espaluz* — your AI-powered bilingual tutor for expat families 🇵🇦✨\n\n"
-            "🌟 *Espaluz Commands / Comandos de Espaluz:*\n"
-            "/start – Iniciar el bot / Start the bot\n"
-            "/reset – Reiniciar conversación / Reset the conversation\n"
-            "/progress – Ver tu progreso / View your progress\n"
-            "/profile – Configurar tu perfil / Set your profile\n"
-            "/link – Vincular email de Gumroad / Link your Gumroad email\n"
-            "/help – Ver este menú / View this menu\n\n"
-            "🔐 *How to unlock full access:*\n"
-            "1️⃣ Subscribe here 👉 https://revicheva.gumroad.com/l/aideazzEspaLuz\n"
-            "2️⃣ Then type /link and send the email you used on Gumroad\n"
-            "3️⃣ Then type /profile to set your name, age, and role\n\n"
-            "💬 You can send me text or voice messages in Russian, Spanish, or English.\n"
-            "📸 You can also send photos of text for instant translation!"
-        )
-    bot.send_message(message.chat.id, welcome_msg, parse_mode="Markdown")
+    # Always reset to start of onboarding for /start
+    set_user_onboarding(user_id, {"step": "country"})
+    
+    # Start onboarding - ask for country first
+    welcome_msg = ONBOARDING_MESSAGES["country"]
+    
+    bot.send_message(message.chat.id, welcome_msg)
 
 @bot.message_handler(commands=["reset"])
 def handle_reset(message):
@@ -2837,9 +2955,10 @@ Thank you for spreading the word! 🙏"""
 
 @bot.message_handler(commands=["menu"])
 def handle_menu(message):
-    """Show the complete menu"""
+    """Show the complete menu - NO Markdown to avoid parsing errors"""
     if ENHANCED_BRAIN_AVAILABLE:
-        bot.reply_to(message, MENU_TEXT, parse_mode="Markdown")
+        # Plain text - no parse_mode to avoid underscore issues
+        bot.reply_to(message, MENU_TEXT.replace('*', '').replace('_', ' '))
     else:
         # Fallback to basic help
         handle_help(message)
@@ -2956,6 +3075,7 @@ def handle_voice(message):
 @bot.message_handler(content_types=["text"])
 def handle_text(message):
     user_id = str(message.from_user.id)
+    text = message.text.strip()
     
     # Track activity for analytics
     if ENHANCED_BRAIN_AVAILABLE:
@@ -2966,10 +3086,73 @@ def handle_text(message):
 
     # Free trial is now active for everyone!
     if not is_subscribed(user_id):
-        # This should rarely trigger now with free trial
         bot.reply_to(message, "🎉 Welcome! Your 14-day free trial has started.\n\nJust send me any message to start learning!")
         return
 
+    # === ONBOARDING FLOW ===
+    onboarding = get_user_onboarding(user_id)
+    current_step = onboarding.get("step", "country")
+    
+    if current_step != "complete":
+        # User is in onboarding mode
+        
+        if current_step == "country":
+            # Try to detect country from message
+            country = detect_country_from_text(text)
+            if country:
+                onboarding["country"] = country
+                onboarding["step"] = "name"
+                set_user_onboarding(user_id, onboarding)
+                bot.send_message(message.chat.id, ONBOARDING_MESSAGES["name"])
+            else:
+                # Couldn't detect country, ask again
+                bot.send_message(message.chat.id, 
+                    f"🤔 I didn't recognize '{text}' as a country.\n\n"
+                    "Please type a country name like:\n"
+                    "• Panama\n• Mexico\n• Colombia\n• Spain\n• Costa Rica\n• USA\n\n"
+                    "Or any other Spanish-speaking country!")
+            return
+        
+        elif current_step == "name":
+            # Accept any text as name
+            name = text.split()[0].capitalize()  # Take first word as name
+            onboarding["name"] = name
+            onboarding["step"] = "role"
+            set_user_onboarding(user_id, onboarding)
+            msg = ONBOARDING_MESSAGES["role"].format(name=name)
+            bot.send_message(message.chat.id, msg)
+            return
+        
+        elif current_step == "role":
+            # Try to detect role from message
+            role = detect_role_from_text(text)
+            if not role:
+                # Default to traveler if can't detect
+                role = "traveler"
+            
+            onboarding["role"] = role
+            onboarding["step"] = "complete"
+            set_user_onboarding(user_id, onboarding)
+            
+            # Also update session with user's info
+            if user_id not in user_sessions:
+                user_sessions[user_id] = create_initial_session(user_id, message.from_user, message.chat)
+            
+            # Update session context with onboarding info
+            user_sessions[user_id]["context"]["user"]["preferences"]["country"] = onboarding.get("country", "panama")
+            user_sessions[user_id]["context"]["user"]["preferences"]["user_name"] = onboarding.get("name", "Friend")
+            user_sessions[user_id]["context"]["user"]["preferences"]["family_role"] = role
+            
+            # Send completion message
+            msg = ONBOARDING_MESSAGES["complete"].format(
+                name=onboarding.get("name", "Friend"),
+                country=onboarding.get("country", "your country").replace("_", " ").title(),
+                role=role.title()
+            )
+            bot.send_message(message.chat.id, msg)
+            return
+    
+    # === NORMAL CONVERSATION (onboarding complete) ===
     process_message_with_tracking(message.text, message.chat.id, str(message.from_user.id), message)
 
 @bot.message_handler(content_types=["photo"])
@@ -3205,7 +3388,7 @@ def debug_files_and_env():
     print(f"Disk free space: {subprocess.check_output(['df', '-h', '.']).decode().strip()}")
     print("====================\n")
 
-print("✅ Espaluz is running THIS UPDATED VERSION: v2.0-free-trial")
+print("✅ Espaluz is running THIS UPDATED VERSION: v2.1-onboarding")
 
 # Call the debug function here
 debug_files_and_env()
