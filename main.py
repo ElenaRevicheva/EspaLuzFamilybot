@@ -2622,8 +2622,8 @@ def process_message(user_input, chat_id, user_id, message_obj):
     # Get translation (skip if translation fails)
     translated = translate_to_es_en(user_input)
     if translated:
-        bot.send_message(chat_id, f"📝 Traducción:\n{translated}")
-        print("Translation sent")
+    bot.send_message(chat_id, f"📝 Traducción:\n{translated}")
+    print("Translation sent")
     else:
         print("Translation skipped - API error")
 
@@ -2699,8 +2699,8 @@ def process_message_with_tracking(user_input, chat_id, user_id, message_obj):
     # Get translation (skip if translation fails)
     translated = translate_to_es_en(user_input)
     if translated:
-        bot.send_message(chat_id, f"📝 Traducción:\n{translated}")
-        print("Translation sent")
+    bot.send_message(chat_id, f"📝 Traducción:\n{translated}")
+    print("Translation sent")
     else:
         print("Translation skipped - API error")
 
@@ -3016,31 +3016,31 @@ Just chat! Text, voice 🎤, photos 📷
 
 ¡Empecemos! / Let's learn! 🚀"""
     else:
-    help_text = """🌟 *EspaLuz Bot – Available Commands:*
+        help_text = """🌟 EspaLuz Bot – Available Commands
 
 /start – Start the bot  
 /reset – Reset the conversation  
 /progress – View your learning progress  
 /profile – Set your name, role, and age  
-/link – Link your Gumroad email (for subscribers)  
+/link – Link your payment email  
 /connect – Connect to your web dashboard  
 /help – Show this help message
 
 💬 You can send me text or voice messages in Russian, Spanish, or English.  
 📸 You can also send pictures of text (menus, signs, etc.) and I'll translate them instantly.
 
-📊 *How to connect your web dashboard:*  
-1️⃣ Visit https://lovable.dev and go to the *Tu Progreso* section  
-2️⃣ Click *Conectar Telegram* to generate your 6-digit code  
-3️⃣ Then type `/connect YOURCODE` here in the chat
+📊 How to connect your web dashboard:  
+1️⃣ Visit https://lovable.dev and go to the Tu Progreso section  
+2️⃣ Click Conectar Telegram to generate your 6-digit code  
+3️⃣ Then type /connect YOURCODE here in the chat
 
-🔐 *To unlock all premium features:*  
-1️⃣ Subscribe here 👉 https://revicheva.gumroad.com/l/aideazzEspaLuz  
-2️⃣ Then use `/link` to send me the email you used on Gumroad  
-3️⃣ Then set up your profile using `/profile`
+🔐 To unlock all premium features:  
+1️⃣ Subscribe via PayPal  
+2️⃣ Then use /link to send me the email you used  
+3️⃣ Then set up your profile using /profile
 
 Let's learn Spanish together — anywhere, anytime! 💬"""
-    bot.reply_to(message, help_text, parse_mode="Markdown")
+        bot.reply_to(message, help_text)
 
 # =============================================================================
 # NEW ENHANCED COMMANDS (Added January 2026)
