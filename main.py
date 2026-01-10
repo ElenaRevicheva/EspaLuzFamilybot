@@ -3294,10 +3294,27 @@ Thank you for spreading the word! 🙏"""
 
 @bot.message_handler(commands=["menu"])
 def handle_menu(message):
-    """Show the complete menu - NO Markdown to avoid parsing errors"""
+    """Show the complete menu - split if too long for Telegram"""
     if ENHANCED_BRAIN_AVAILABLE:
         # Plain text - no parse_mode to avoid underscore issues
-        bot.reply_to(message, MENU_TEXT.replace('*', '').replace('_', ' '))
+        menu_clean = MENU_TEXT.replace('*', '').replace('_', ' ')
+        
+        # Telegram limit is 4096 chars - split if needed
+        if len(menu_clean) > 4000:
+            # Split into parts
+            parts = menu_clean.split('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+            current_msg = ""
+            for part in parts:
+                if len(current_msg) + len(part) + 35 < 4000:
+                    current_msg += part + '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+                else:
+                    if current_msg:
+                        bot.send_message(message.chat.id, current_msg.strip())
+                    current_msg = part + '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
+            if current_msg:
+                bot.send_message(message.chat.id, current_msg.strip())
+        else:
+            bot.reply_to(message, menu_clean)
     else:
         # Fallback to basic help
         handle_help(message)
