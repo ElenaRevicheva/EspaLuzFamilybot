@@ -1192,42 +1192,89 @@ def is_complex_language_topic(message):
 
     return any(topic in message.lower() for topic in complex_topics)
 
-def add_panama_cultural_context(prompt, session):
-    """Add Panama-specific cultural context to learning prompts"""
-    # Get family member
-    family_role = session["context"]["user"]["preferences"]["family_role"]
-
-    # Add Panama-specific cultural context
-    panama_context = """
+def add_country_cultural_context(prompt, session):
+    """Add country-specific cultural context based on user's onboarding - NOT hardcoded!"""
+    # Get user's actual country from onboarding
+    user_country = session["context"]["user"]["preferences"].get("country", "panama")
+    family_role = session["context"]["user"]["preferences"].get("family_role", "parent")
+    user_name = session["context"]["user"]["preferences"].get("user_name", "friend")
+    family_members = session["context"]["user"]["preferences"].get("family_members", {})
+    
+    # Country-specific contexts
+    COUNTRY_CONTEXTS = {
+        "colombia": """
+Use these Colombia-specific cultural references in your teaching:
+Geography: Colombia has Caribbean coast, Pacific coast, Andes mountains, and Amazon rainforest.
+Language: Colombians speak clear, neutral Spanish. Common expressions: "¿Qué más?" (What's up?), "Parcero/a" (friend)
+Food: Bandeja paisa, arepas, empanadas, ajiaco (chicken soup), and excellent coffee.
+Cities: Bogotá (capital), Medellín (innovative city), Cartagena (Caribbean beauty), Cali (salsa capital)
+Culture: Gabriel García Márquez, cumbia and vallenato music, flower festival in Medellín.
+""",
+        "mexico": """
+Use these Mexico-specific cultural references in your teaching:
+Geography: Mexico has beaches (Cancún, Puerto Vallarta), deserts, mountains, and ancient ruins.
+Language: Mexican Spanish uses "güey" (dude), "¿Qué onda?" (What's up?), "Órale" (alright/wow)
+Food: Tacos, tamales, pozole, mole, guacamole, churros, and incredible street food culture.
+Cities: CDMX (Mexico City), Guadalajara, Monterrey, Oaxaca, Cancún
+Culture: Day of the Dead, mariachi, lucha libre, ancient Aztec and Maya heritage.
+""",
+        "panama": """
 Use these Panama-specific cultural references in your teaching:
-
 Geography: Panama connects North and South America, with the Panama Canal as its most famous feature.
-Language: Panamanians speak Spanish with unique local expressions like "¿Qué xopá?" (What's up?)
-Food: Common dishes include sancocho (chicken soup), patacones (fried plantains), and ceviche.
-Daily Life: In Panama City, people navigate between modern skyscrapers and the colonial Casco Viejo district.
-Cultural Mix: Panama has influences from Indigenous peoples, Africans, Spanish colonizers, and Americans.
-Weather: Panama has a tropical climate with a rainy season (May-November) and dry season (December-April).
+Language: Panamanians speak Spanish with unique expressions like "¿Qué xopá?" (What's up?)
+Food: Sancocho (chicken soup), patacones (fried plantains), ceviche, arroz con pollo.
+Cities: Panama City (modern + colonial Casco Viejo), Bocas del Toro, Boquete (coffee region)
+Culture: Mix of Indigenous, African, Spanish, and American influences. Dollar as currency!
+""",
+        "spain": """
+Use these Spain-specific cultural references in your teaching:
+Geography: Spain has Mediterranean coast, mountains (Pyrenees, Sierra Nevada), and diverse regions.
+Language: Castilian Spanish with "vosotros", "tío/tía" (dude), "mola" (cool), "vale" (okay)
+Food: Tapas, paella, jamón ibérico, tortilla española, gazpacho, churros con chocolate.
+Cities: Madrid, Barcelona, Sevilla, Valencia, Bilbao - each with unique character!
+Culture: Flamenco, La Siesta, late dinners (9-10pm!), fútbol passion.
+""",
+        "argentina": """
+Use these Argentina-specific cultural references in your teaching:
+Geography: Patagonia, Andes, pampas (grasslands), Buenos Aires, Iguazu Falls.
+Language: "Vos" instead of "tú", "che" (hey), lunfardo slang, Italian influence.
+Food: Asado (BBQ), empanadas, dulce de leche, mate (cultural ritual!), medialunas.
+Cities: Buenos Aires (Paris of South America), Mendoza (wine), Bariloche (ski)
+Culture: Tango, fútbol (Maradona, Messi), literature, psychoanalysis capital!
+""",
+        "costa_rica": """
+Use these Costa Rica-specific cultural references in your teaching:
+Geography: Rainforests, volcanoes, Caribbean and Pacific beaches, cloud forests.
+Language: "Pura vida!" (essential expression = cool/fine/thanks), "Mae" (dude), "Tico/a"
+Food: Gallo pinto (rice & beans), casado, patacones, tres leches cake.
+Cities: San José (capital), Manuel Antonio, Arenal, Monteverde
+Culture: Eco-tourism, no army, "Pura vida" lifestyle, biodiversity hotspot.
 """
-
-    # Adjust cultural context based on family member
-    if family_role == "alisa":
-        panama_context += """
-For a child: Focus on simple concepts like Panamanian animals (harpy eagle, jaguar), 
-fruits (mango, pineapple), and basic greetings used by Panamanian children.
+    }
+    
+    # Get context for user's country (default to generic if not found)
+    country_context = COUNTRY_CONTEXTS.get(user_country, f"""
+Use {user_country.replace('_', ' ').title()}-specific cultural references.
+Adapt vocabulary, expressions, and examples to this country.
+""")
+    
+    # Add user personalization
+    personalization = f"""
+IMPORTANT - Personalize for THIS user:
+- User's name: {user_name} (ALWAYS use this name, not Elena!)
+- Country: {user_country.replace('_', ' ').title()} (use THIS country's references!)
+- Role: {family_role}
 """
-    elif family_role == "marina":
-        panama_context += """
-For an elder: Focus on traditional aspects of Panama like the pollera (national dress),
-traditional folklore dances like the tamborito, and markets/shopping terminology.
-"""
-    else:  # elena
-        panama_context += """
-For a working parent: Focus on professional vocabulary, education system terminology,
-and everyday phrases needed for work, shopping, and managing a household in Panama.
-"""
-
+    
+    if family_members:
+        if family_members.get("spouse"):
+            personalization += f"- Spouse: {family_members['spouse']}\n"
+        if family_members.get("children"):
+            kids = [f"{c['name']} ({c['age']}yo)" for c in family_members["children"]]
+            personalization += f"- Children: {', '.join(kids)}\n"
+    
     # Combine with original prompt
-    enhanced_prompt = prompt + "\n\n" + panama_context
+    enhanced_prompt = prompt + "\n\n" + country_context + "\n" + personalization
 
     return enhanced_prompt
 
@@ -1335,8 +1382,8 @@ I'll adjust my tone to be: {emotional_calibration.get('response_tone', 'supporti
     conversation_count = session["context"]["conversation"]["message_count"]
     system_content += f"\n\nThis is message #{conversation_count} in this conversation session."
 
-    # Add Panama-specific cultural context
-    system_content = add_panama_cultural_context(system_content, session)
+    # Add country-specific cultural context (based on user's onboarding!)
+    system_content = add_country_cultural_context(system_content, session)
 
     # Add response format instructions
     system_content += """
@@ -1345,8 +1392,9 @@ I'll adjust my tone to be: {emotional_calibration.get('response_tone', 'supporti
     1️⃣ A full, thoughtful bilingual response (using both Spanish and English):
        - Respond naturally to the message
        - Be emotionally aware, friendly, and motivating
-       - Include relevant Spanish learning or cultural context (from Panama or daily life)
+       - Include cultural context from the USER'S COUNTRY (not Panama unless they're in Panama!)
        - Use vocabulary appropriate for the user's level
+       - ALWAYS use the user's actual name from the context!
 
     2️⃣ A second short block inside [VIDEO SCRIPT START] ... [VIDEO SCRIPT END] for video:
        - Must be 2 to 4 concise sentences MAX
@@ -3512,7 +3560,7 @@ def debug_files_and_env():
     print(f"Disk free space: {subprocess.check_output(['df', '-h', '.']).decode().strip()}")
     print("====================\n")
 
-print("✅ Espaluz is running THIS UPDATED VERSION: v2.2-family-onboarding")
+print("✅ Espaluz is running THIS UPDATED VERSION: v2.3-country-context")
 
 # Call the debug function here
 debug_files_and_env()
