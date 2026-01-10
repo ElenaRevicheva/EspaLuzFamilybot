@@ -19,6 +19,49 @@ import threading
 # === Load environment variables ===
 load_dotenv()
 
+# === ENHANCED EMOTIONAL INTELLIGENCE MODULES (NEW - Jan 2026) ===
+try:
+    from espaluz_emotional_brain import (
+        enhance_emotion_analysis,
+        get_empathy_phrase,
+        detect_user_type,
+        track_activity,
+        get_analytics_metrics,
+        validate_org_code,
+        analytics
+    )
+    from espaluz_country_contexts import (
+        get_country_context,
+        get_situation_phrases,
+        detect_country_from_context,
+        Country,
+        COUNTRY_CONTEXTS
+    )
+    from espaluz_menu import (
+        MENU_TEXT,
+        WELCOME_SHORT,
+        HELP_BANKING,
+        HELP_MEDICAL,
+        HELP_SCHOOL,
+        HELP_SHOPPING,
+        HELP_TRANSPORT,
+        HELP_EMERGENCY,
+        get_slang,
+        SLANG_PANAMA,
+        SLANG_MEXICO,
+        SLANG_COLOMBIA,
+        SLANG_ARGENTINA,
+        SLANG_COSTA_RICA,
+        TESTIMONIAL_7_DAY,
+        TESTIMONIAL_30_DAY
+    )
+    ENHANCED_BRAIN_AVAILABLE = True
+    print("✅ Enhanced emotional brain loaded successfully!")
+except ImportError as e:
+    ENHANCED_BRAIN_AVAILABLE = False
+    print(f"⚠️ Enhanced brain modules not available: {e}")
+    print("   Bot will work with basic functionality.")
+
 # === Configuration ===
 TELEGRAM_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 CLAUDE_API_KEY = os.environ["CLAUDE_API_KEY"]
@@ -2147,22 +2190,77 @@ def process_message_with_tracking(user_input, chat_id, user_id, message_obj):
 # === HANDLERS ===
 @bot.message_handler(commands=["start"])
 def handle_start(message):
-    welcome_msg = (
-        "👋 ¡Hola! Welcome to *Espaluz* — your AI-powered bilingual tutor for expat families 🇵🇦✨\n\n"
-        "🌟 *Espaluz Commands / Comandos de Espaluz:*\n"
-        "/start – Iniciar el bot / Start the bot\n"
-        "/reset – Reiniciar conversación / Reset the conversation\n"
-        "/progress – Ver tu progreso / View your progress\n"
-        "/profile – Configurar tu perfil / Set your profile\n"
-        "/link – Vincular email de Gumroad / Link your Gumroad email\n"
-        "/help – Ver este menú / View this menu\n\n"
-        "🔐 *How to unlock full access:*\n"
-        "1️⃣ Subscribe here 👉 https://revicheva.gumroad.com/l/aideazzEspaLuz\n"
-        "2️⃣ Then type /link and send the email you used on Gumroad\n"
-        "3️⃣ Then type /profile to set your name, age, and role\n\n"
-        "💬 You can send me text or voice messages in Russian, Spanish, or English.\n"
-        "📸 You can also send photos of text for instant translation!"
-    )
+    # Track activity if enhanced brain available
+    if ENHANCED_BRAIN_AVAILABLE:
+        try:
+            track_activity(str(message.from_user.id))
+        except:
+            pass
+    
+    # Use enhanced welcome if available
+    if ENHANCED_BRAIN_AVAILABLE:
+        welcome_msg = """👋 *¡Hola! Welcome to EspaLuz!*
+
+🌟 Your AI bilingual companion for expat families, travelers, and locals.
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+📱 *QUICK START*
+━━━━━━━━━━━━━━━━━━━━━━━━
+1️⃣ Set your profile: /family Name Role Age
+   Example: /family Sofia mother 38
+
+2️⃣ Just chat! Send text, voice 🎤, or photos 📷
+
+3️⃣ Try: "How do I say 'thank you' in Spanish?"
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+🆘 *REAL-LIFE HELP*
+━━━━━━━━━━━━━━━━━━━━━━━━
+/help_banking — Bank phrases
+/help_medical — Healthcare
+/help_school — School vocabulary
+/help_emergency — 🚨 Urgent help
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+🌎 *LOCAL CULTURE*
+━━━━━━━━━━━━━━━━━━━━━━━━
+/slang panama — Local expressions
+/country panama — Set your country
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+🏢 *ORGANIZATIONS*
+━━━━━━━━━━━━━━━━━━━━━━━━
+/org CODE — Enter your org code
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+📖 *MORE*
+━━━━━━━━━━━━━━━━━━━━━━━━
+/menu — Full command list
+/progress — Your learning stats
+/help — All commands
+
+💬 Text in English, Spanish, or Russian
+🎤 Voice messages work too!
+📸 Send photos of menus/signs to translate
+
+¡Empecemos! / Let's begin! 🚀"""
+    else:
+        welcome_msg = (
+            "👋 ¡Hola! Welcome to *Espaluz* — your AI-powered bilingual tutor for expat families 🇵🇦✨\n\n"
+            "🌟 *Espaluz Commands / Comandos de Espaluz:*\n"
+            "/start – Iniciar el bot / Start the bot\n"
+            "/reset – Reiniciar conversación / Reset the conversation\n"
+            "/progress – Ver tu progreso / View your progress\n"
+            "/profile – Configurar tu perfil / Set your profile\n"
+            "/link – Vincular email de Gumroad / Link your Gumroad email\n"
+            "/help – Ver este menú / View this menu\n\n"
+            "🔐 *How to unlock full access:*\n"
+            "1️⃣ Subscribe here 👉 https://revicheva.gumroad.com/l/aideazzEspaLuz\n"
+            "2️⃣ Then type /link and send the email you used on Gumroad\n"
+            "3️⃣ Then type /profile to set your name, age, and role\n\n"
+            "💬 You can send me text or voice messages in Russian, Spanish, or English.\n"
+            "📸 You can also send photos of text for instant translation!"
+        )
     bot.send_message(message.chat.id, welcome_msg, parse_mode="Markdown")
 
 @bot.message_handler(commands=["reset"])
@@ -2345,7 +2443,62 @@ def handle_connect(message):
 
 @bot.message_handler(commands=["help"])
 def handle_help(message):
-    help_text = """🌟 *EspaLuz Bot – Available Commands:*
+    if ENHANCED_BRAIN_AVAILABLE:
+        help_text = """🌟 *EspaLuz — All Commands*
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+📱 *SETUP*
+━━━━━━━━━━━━━━━━━━━━━━━━
+/start — Welcome & quick start
+/family Name Role Age — Set profile
+/profile — View your profile
+/reset — Clear conversation
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+💬 *LEARNING*
+━━━━━━━━━━━━━━━━━━━━━━━━
+Just chat! Text, voice 🎤, photos 📷
+/progress — Your learning stats
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+🆘 *REAL-LIFE HELP*
+━━━━━━━━━━━━━━━━━━━━━━━━
+/help_banking — Bank phrases
+/help_medical — Healthcare
+/help_school — School vocab
+/help_shopping — Shopping
+/help_transport — Getting around
+/help_emergency — 🚨 Urgent!
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+🌎 *CULTURE & SLANG*
+━━━━━━━━━━━━━━━━━━━━━━━━
+/slang panama — Panamanian expressions
+/slang mexico — Mexican slang
+/slang colombia — Colombian slang
+/slang argentina — Argentine slang
+/country NAME — Set your country
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+🏢 *ORGANIZATIONS*
+━━━━━━━━━━━━━━━━━━━━━━━━
+/org CODE — Enter org code
+/feedback — Share experience
+/refer — Referral program
+/metrics — Community stats
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+🔐 *ACCOUNT*
+━━━━━━━━━━━━━━━━━━━━━━━━
+/link — Link payment email
+/connect CODE — Web dashboard
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+/menu — Full detailed menu
+
+¡Empecemos! / Let's learn! 🚀"""
+    else:
+        help_text = """🌟 *EspaLuz Bot – Available Commands:*
 
 /start – Start the bot  
 /reset – Reset the conversation  
@@ -2356,7 +2509,7 @@ def handle_help(message):
 /help – Show this help message
 
 💬 You can send me text or voice messages in Russian, Spanish, or English.  
-📸 You can also send pictures of text (menus, signs, etc.) and I’ll translate them instantly.
+📸 You can also send pictures of text (menus, signs, etc.) and I'll translate them instantly.
 
 📊 *How to connect your web dashboard:*  
 1️⃣ Visit https://lovable.dev and go to the *Tu Progreso* section  
@@ -2368,8 +2521,271 @@ def handle_help(message):
 2️⃣ Then use `/link` to send me the email you used on Gumroad  
 3️⃣ Then set up your profile using `/profile`
 
-Let’s learn Spanish together — anywhere, anytime! 💬"""
+Let's learn Spanish together — anywhere, anytime! 💬"""
     bot.reply_to(message, help_text, parse_mode="Markdown")
+
+# =============================================================================
+# NEW ENHANCED COMMANDS (Added January 2026)
+# =============================================================================
+
+@bot.message_handler(commands=["help_banking"])
+def handle_help_banking(message):
+    """Banking help phrases"""
+    if ENHANCED_BRAIN_AVAILABLE:
+        bot.reply_to(message, HELP_BANKING, parse_mode="Markdown")
+    else:
+        bot.reply_to(message, "🏦 Banking help not available. Update your bot modules.")
+
+@bot.message_handler(commands=["help_medical"])
+def handle_help_medical(message):
+    """Medical/healthcare help phrases"""
+    if ENHANCED_BRAIN_AVAILABLE:
+        bot.reply_to(message, HELP_MEDICAL, parse_mode="Markdown")
+    else:
+        bot.reply_to(message, "🏥 Medical help not available. Update your bot modules.")
+
+@bot.message_handler(commands=["help_school"])
+def handle_help_school(message):
+    """School-related help phrases"""
+    if ENHANCED_BRAIN_AVAILABLE:
+        bot.reply_to(message, HELP_SCHOOL, parse_mode="Markdown")
+    else:
+        bot.reply_to(message, "🏫 School help not available. Update your bot modules.")
+
+@bot.message_handler(commands=["help_shopping"])
+def handle_help_shopping(message):
+    """Shopping help phrases"""
+    if ENHANCED_BRAIN_AVAILABLE:
+        bot.reply_to(message, HELP_SHOPPING, parse_mode="Markdown")
+    else:
+        bot.reply_to(message, "🛒 Shopping help not available. Update your bot modules.")
+
+@bot.message_handler(commands=["help_transport"])
+def handle_help_transport(message):
+    """Transportation help phrases"""
+    if ENHANCED_BRAIN_AVAILABLE:
+        bot.reply_to(message, HELP_TRANSPORT, parse_mode="Markdown")
+    else:
+        bot.reply_to(message, "🚗 Transport help not available. Update your bot modules.")
+
+@bot.message_handler(commands=["help_emergency"])
+def handle_help_emergency(message):
+    """Emergency help phrases - PRIORITY"""
+    if ENHANCED_BRAIN_AVAILABLE:
+        bot.reply_to(message, HELP_EMERGENCY, parse_mode="Markdown")
+    else:
+        emergency_basic = """🚨 *EMERGENCY PHRASES*
+        
+¡AYUDA! = HELP!
+¡Llame a la policía! = Call the police!
+Necesito una ambulancia = I need an ambulance
+📞 Emergency: 911"""
+        bot.reply_to(message, emergency_basic, parse_mode="Markdown")
+
+@bot.message_handler(commands=["slang"])
+def handle_slang(message):
+    """Show local slang for a country"""
+    if not ENHANCED_BRAIN_AVAILABLE:
+        bot.reply_to(message, "Slang module not available.")
+        return
+    
+    parts = message.text.split()
+    if len(parts) > 1:
+        country = parts[1].lower()
+        slang_text = get_slang(country)
+        bot.reply_to(message, slang_text, parse_mode="Markdown")
+    else:
+        # Default to Panama, show available options
+        response = SLANG_PANAMA + "\n\n💡 *Other countries:*\n"
+        response += "/slang mexico\n/slang colombia\n/slang argentina\n/slang costa_rica"
+        bot.reply_to(message, response, parse_mode="Markdown")
+
+@bot.message_handler(commands=["org"])
+def handle_org(message):
+    """Handle organization code for pilot programs"""
+    if not ENHANCED_BRAIN_AVAILABLE:
+        bot.reply_to(message, "Organization codes not available.")
+        return
+    
+    parts = message.text.split()
+    if len(parts) < 2:
+        bot.reply_to(message, """🏢 *Enter your organization code*
+
+Usage: /org YOUR_CODE
+
+Examples:
+• /org AMCHAM_PANAMA
+• /org ISP_PARENTS
+• /org ISD_MEMBERS
+
+Contact your organization if you don't have a code.""", parse_mode="Markdown")
+        return
+    
+    code = parts[1].upper().strip()
+    org = validate_org_code(code)
+    
+    if org:
+        user_id = str(message.from_user.id)
+        track_activity(user_id, code)
+        
+        response = f"""✅ *{org['welcome_message']}*
+
+🏢 Organization: {org['name']}
+📅 Trial Period: {org['trial_days']} days
+🌎 Country: {org['country']}
+
+You now have extended access! Start chatting to learn."""
+        bot.reply_to(message, response, parse_mode="Markdown")
+    else:
+        bot.reply_to(message, "❌ Invalid organization code.\n\nPlease check with your organization for the correct code.")
+
+@bot.message_handler(commands=["feedback"])
+def handle_feedback(message):
+    """Collect user feedback and testimonials"""
+    feedback_prompt = """💬 *We'd love your feedback!*
+
+Please reply with:
+• ⭐ Your rating (1-5 stars)
+• 💬 A short sentence about your experience
+• ✅ "Share" if we can use it publicly, or "Private"
+
+*Example:*
+"5 ⭐ EspaLuz helped my whole family adapt to Panama! Share"
+
+Your feedback helps other expat families discover us. Thank you! 🙏"""
+    bot.reply_to(message, feedback_prompt, parse_mode="Markdown")
+
+@bot.message_handler(commands=["metrics"])
+def handle_metrics(message):
+    """Show analytics metrics (for admin/pilots)"""
+    if not ENHANCED_BRAIN_AVAILABLE:
+        bot.reply_to(message, "Metrics not available.")
+        return
+    
+    try:
+        metrics = get_analytics_metrics()
+        
+        response = f"""📊 *EspaLuz Community Metrics*
+
+👥 Total Users: {metrics['total_users']}
+📈 Weekly Active: {metrics['weekly_active_users']}
+🔄 30-Day Retention: {metrics['retention_30_day']}
+🏢 Organizations Piloting: {metrics['organizations_piloting']}
+⭐ Testimonials Collected: {metrics['testimonials_collected']}
+🔗 Referrals: {metrics['referrals']}
+
+_Updated in real-time_"""
+        bot.reply_to(message, response, parse_mode="Markdown")
+    except Exception as e:
+        print(f"❌ Error getting metrics: {e}")
+        bot.reply_to(message, "❌ Error loading metrics.")
+
+@bot.message_handler(commands=["country"])
+def handle_country(message):
+    """Set user's country context for localized vocabulary"""
+    if not ENHANCED_BRAIN_AVAILABLE:
+        bot.reply_to(message, "Country context not available.")
+        return
+    
+    parts = message.text.split()
+    if len(parts) < 2:
+        countries = "panama, mexico, colombia, argentina, spain, costa_rica, peru, chile, ecuador"
+        bot.reply_to(message, f"""🌎 *Set your country for local vocabulary*
+
+Usage: /country COUNTRY_NAME
+
+Available countries:
+{countries}
+
+Example: /country panama
+
+I'll use local expressions and cultural tips!""", parse_mode="Markdown")
+        return
+    
+    country_name = parts[1].lower().strip()
+    
+    # Map common names
+    country_map = {
+        "panama": Country.PANAMA,
+        "panamá": Country.PANAMA,
+        "mexico": Country.MEXICO,
+        "méxico": Country.MEXICO,
+        "colombia": Country.COLOMBIA,
+        "argentina": Country.ARGENTINA,
+        "spain": Country.SPAIN,
+        "españa": Country.SPAIN,
+        "costa_rica": Country.COSTA_RICA,
+        "costarica": Country.COSTA_RICA,
+        "peru": Country.PERU,
+        "perú": Country.PERU,
+        "chile": Country.CHILE,
+        "ecuador": Country.ECUADOR
+    }
+    
+    if country_name in country_map:
+        country = country_map[country_name]
+        context = get_country_context(country)
+        
+        user_id = str(message.from_user.id)
+        if user_id in user_sessions:
+            user_sessions[user_id]["context"]["user"]["preferences"]["country"] = country_name
+        
+        response = f"""✅ *Country set: {context.get('flag', '')} {context.get('name', country_name.title())}*
+
+💰 Currency: {context.get('currency', 'Local currency')}
+🕐 Timezone: {context.get('timezone', 'Local time')}
+
+I'll now use local vocabulary and expressions!
+
+Try: /slang {country_name} to see local expressions."""
+        bot.reply_to(message, response, parse_mode="Markdown")
+    else:
+        bot.reply_to(message, f"❌ Country '{country_name}' not found.\n\nTry: panama, mexico, colombia, argentina, spain, costa_rica")
+
+@bot.message_handler(commands=["refer"])
+def handle_refer(message):
+    """Show referral program info"""
+    user_id = str(message.from_user.id)
+    
+    # Get referral stats if available
+    referral_count = 0
+    if ENHANCED_BRAIN_AVAILABLE:
+        try:
+            if user_id in analytics.data.get("referrals", {}):
+                referral_count = len(analytics.data["referrals"][user_id])
+        except:
+            pass
+    
+    response = f"""🔗 *Share EspaLuz with Friends!*
+
+*How it works:*
+1. Share EspaLuz with friends
+2. When they subscribe, you BOTH get 1 month FREE
+3. No limit on referrals!
+
+*Your referral stats:*
+• Friends referred: {referral_count}
+• Free months earned: {referral_count}
+
+To refer someone:
+1. Tell them to message @EspaLuzBot
+2. Have them mention your username when subscribing
+
+Thank you for spreading the word! 🙏"""
+    bot.reply_to(message, response, parse_mode="Markdown")
+
+@bot.message_handler(commands=["menu"])
+def handle_menu(message):
+    """Show the complete menu"""
+    if ENHANCED_BRAIN_AVAILABLE:
+        bot.reply_to(message, MENU_TEXT, parse_mode="Markdown")
+    else:
+        # Fallback to basic help
+        handle_help(message)
+
+# =============================================================================
+# END OF NEW ENHANCED COMMANDS
+# =============================================================================
 
 def transcribe_audio(audio_path: str) -> str:
     """Transcribe audio file using OpenAI Whisper (SDK v1.0+)"""
