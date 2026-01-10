@@ -159,6 +159,46 @@ def detect_role_from_text(text):
                 return role
     return None
 
+def finish_onboarding(user_id, message, onboarding):
+    """Complete onboarding and set up user session"""
+    # Create session if not exists
+    if user_id not in user_sessions:
+        user_sessions[user_id] = create_initial_session(user_id, message.from_user, message.chat)
+    
+    # Update session context with onboarding info
+    prefs = user_sessions[user_id]["context"]["user"]["preferences"]
+    prefs["country"] = onboarding.get("country", "panama")
+    prefs["user_name"] = onboarding.get("name", "Friend")
+    prefs["family_role"] = onboarding.get("role", "learner")
+    
+    # Store family members
+    family_members = {}
+    if onboarding.get("spouse"):
+        family_members["spouse"] = onboarding["spouse"]
+    if onboarding.get("children"):
+        family_members["children"] = onboarding["children"]
+    prefs["family_members"] = family_members
+    
+    # Build family line for completion message
+    family_line = ""
+    if family_members:
+        parts = []
+        if family_members.get("spouse"):
+            parts.append(f"💑 {family_members['spouse']}")
+        if family_members.get("children"):
+            kids = [f"{c['name']} ({c['age']})" for c in family_members["children"]]
+            parts.append(f"👶 Kids: {', '.join(kids)}")
+        family_line = "👨‍👩‍👧 Family: " + " | ".join(parts) if parts else ""
+    
+    # Send completion message
+    msg = ONBOARDING_MESSAGES["complete"].format(
+        name=onboarding.get("name", "Friend"),
+        country=onboarding.get("country", "your country").replace("_", " ").title(),
+        role=onboarding.get("role", "learner").title(),
+        family_line=family_line
+    )
+    bot.send_message(message.chat.id, msg)
+
 ONBOARDING_MESSAGES = {
     "country": """👋 Welcome to EspaLuz!
 
@@ -195,10 +235,36 @@ What best describes you?
 
 Just type what fits you best...""",
 
+    "family_spouse": """👨‍👩‍👧 Tell me about your family, {name}!
+
+Are you married or have a partner?
+
+• "Married to [name]" or "Partner [name]"
+• "Single parent"
+• "Skip" - I'll ask later
+
+Example: "Married to Alex" """,
+
+    "family_children": """👶 Do you have children? (I'll personalize learning for them too!)
+
+Tell me their names and ages:
+• "Sofia 8, Marco 5"
+• "One daughter, Ana, 12"
+• "No children" or "Skip"
+
+Example: "Alisa 4, no more kids" """,
+
+    "family_complete": """👨‍👩‍👧‍👦 Wonderful! I now know your family:
+
+{family_summary}
+
+I'll remember everyone and personalize our learning journey! 🌟""",
+
     "complete": """🎉 Perfect! You're all set, {name}!
 
 📍 Country: {country}
 👤 Role: {role}
+{family_line}
 
 Now I'll adapt my teaching to YOUR real-life situations in {country}!
 
@@ -1208,12 +1274,25 @@ You're speaking with Marina, a 65-year-old learning Spanish and English. Be resp
 Use short sentences with straightforward vocabulary. Explain cultural context when relevant. Be supportive and encouraging, recognizing the challenge of learning languages later in life.
 Focus on practical, everyday phrases that would be useful in Panama.
 """
-    else:  # elena / default
+    else:  # default adult user
+        # Get user name from onboarding or session
+        user_name = session["context"]["user"]["preferences"].get("user_name", 
+                    session["context"]["user"].get("first_name", "friend"))
+        user_country = session["context"]["user"]["preferences"].get("country", "Panama").replace("_", " ").title()
+        user_role = session["context"]["user"]["preferences"].get("family_role", "learner")
+        family_info = session["context"]["user"]["preferences"].get("family_members", {})
+        
+        system_content += f"""
+You're speaking with {user_name}, who is learning Spanish and English in {user_country}.
+Role: {user_role}. At an intermediate level.
+"""
+        # Add family context if available
+        if family_info:
+            system_content += f"Family: {family_info}\n"
+        
         system_content += """
-You're speaking with Elena, a 39-year-old parent who is at an intermediate level in Spanish and English. 
-She's looking to improve her conversational fluency while managing daily language tasks and helping her daughter learn too.
 Provide nuanced language assistance focused on natural conversation, idioms, and practical vocabulary. 
-You can use more complex grammar structures and vocabulary with her.
+Use vocabulary appropriate for their level. ALWAYS address them by their actual name, not "Elena".
 """
 
     # Add enhanced emotional intelligence from context
@@ -1272,13 +1351,14 @@ I'll adjust my tone to be: {emotional_calibration.get('response_tone', 'supporti
     2️⃣ A second short block inside [VIDEO SCRIPT START] ... [VIDEO SCRIPT END] for video:
        - Must be 2 to 4 concise sentences MAX
        - Use both Spanish and English
+       - ALWAYS use the user's ACTUAL NAME (not Elena!)
        - Tone: warm, clear, and simple for spoken delivery
        - It will be spoken by an avatar on video, so make it suitable for audio (not robotic or boring!)
        - Example:
 
     [VIDEO SCRIPT START]
-    ¡Hola Elena! Hoy es un gran día para aprender. 
-    Hello Elena! Today is a great day to learn.
+    ¡Hola! Hoy es un gran día para aprender. 
+    Hello! Today is a great day to learn.
     [VIDEO SCRIPT END]
     """
 
@@ -3131,25 +3211,69 @@ def handle_text(message):
                 role = "traveler"
             
             onboarding["role"] = role
+            
+            # If parent or expat, ask about family
+            if role in ["parent", "expat"]:
+                onboarding["step"] = "family_spouse"
+                set_user_onboarding(user_id, onboarding)
+                msg = ONBOARDING_MESSAGES["family_spouse"].format(name=onboarding.get("name", "Friend"))
+                bot.send_message(message.chat.id, msg)
+            else:
+                # Skip family questions for non-parents
+                onboarding["step"] = "complete"
+                set_user_onboarding(user_id, onboarding)
+                finish_onboarding(user_id, message, onboarding)
+            return
+        
+        elif current_step == "family_spouse":
+            # Parse spouse info
+            text_lower = text.lower()
+            if "skip" in text_lower:
+                onboarding["spouse"] = None
+            elif "single" in text_lower:
+                onboarding["spouse"] = "single parent"
+            else:
+                # Try to extract spouse name
+                onboarding["spouse"] = text.strip()
+            
+            onboarding["step"] = "family_children"
+            set_user_onboarding(user_id, onboarding)
+            bot.send_message(message.chat.id, ONBOARDING_MESSAGES["family_children"])
+            return
+        
+        elif current_step == "family_children":
+            # Parse children info
+            text_lower = text.lower()
+            if "skip" in text_lower or "no children" in text_lower or "no kids" in text_lower:
+                onboarding["children"] = []
+            else:
+                # Store raw children info - will be parsed later
+                onboarding["children_raw"] = text.strip()
+                # Try to parse children: "Alisa 4, Marco 8"
+                children = []
+                import re
+                # Match patterns like "Alisa 4" or "Sofia, 8" or "Marco 5 years"
+                patterns = re.findall(r'([A-Za-zА-Яа-я]+)\s*,?\s*(\d+)', text)
+                for name, age in patterns:
+                    children.append({"name": name.capitalize(), "age": int(age)})
+                onboarding["children"] = children
+            
             onboarding["step"] = "complete"
             set_user_onboarding(user_id, onboarding)
             
-            # Also update session with user's info
-            if user_id not in user_sessions:
-                user_sessions[user_id] = create_initial_session(user_id, message.from_user, message.chat)
+            # Build family summary
+            family_summary = ""
+            if onboarding.get("spouse"):
+                family_summary += f"💑 {onboarding['spouse']}\n"
+            if onboarding.get("children"):
+                for child in onboarding["children"]:
+                    family_summary += f"👶 {child['name']} ({child['age']} years old)\n"
             
-            # Update session context with onboarding info
-            user_sessions[user_id]["context"]["user"]["preferences"]["country"] = onboarding.get("country", "panama")
-            user_sessions[user_id]["context"]["user"]["preferences"]["user_name"] = onboarding.get("name", "Friend")
-            user_sessions[user_id]["context"]["user"]["preferences"]["family_role"] = role
+            if family_summary:
+                bot.send_message(message.chat.id, 
+                    ONBOARDING_MESSAGES["family_complete"].format(family_summary=family_summary))
             
-            # Send completion message
-            msg = ONBOARDING_MESSAGES["complete"].format(
-                name=onboarding.get("name", "Friend"),
-                country=onboarding.get("country", "your country").replace("_", " ").title(),
-                role=role.title()
-            )
-            bot.send_message(message.chat.id, msg)
+            finish_onboarding(user_id, message, onboarding)
             return
     
     # === NORMAL CONVERSATION (onboarding complete) ===
@@ -3388,7 +3512,7 @@ def debug_files_and_env():
     print(f"Disk free space: {subprocess.check_output(['df', '-h', '.']).decode().strip()}")
     print("====================\n")
 
-print("✅ Espaluz is running THIS UPDATED VERSION: v2.1-onboarding")
+print("✅ Espaluz is running THIS UPDATED VERSION: v2.2-family-onboarding")
 
 # Call the debug function here
 debug_files_and_env()
