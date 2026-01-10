@@ -502,7 +502,61 @@ def update_connected_bot_activity(user_id):
 
 # === TELEBOT SETUP ===
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
-user_sessions = {}
+
+# =============================================================================
+# 💾 PERSISTENT SESSION STORAGE (NEW - Upgrade #3)
+# =============================================================================
+SESSIONS_FILE = "user_sessions.json"
+
+def load_persistent_sessions():
+    """Load user sessions from persistent storage."""
+    try:
+        if os.path.exists(SESSIONS_FILE):
+            with open(SESSIONS_FILE, 'r', encoding='utf-8') as f:
+                sessions = json.load(f)
+                print(f"💾 Loaded {len(sessions)} user sessions from disk")
+                return sessions
+    except Exception as e:
+        print(f"⚠️ Error loading sessions (starting fresh): {e}")
+    return {}
+
+def save_persistent_sessions():
+    """Save user sessions to persistent storage."""
+    global user_sessions
+    try:
+        # Create a serializable copy (remove non-serializable items)
+        serializable_sessions = {}
+        for user_id, session in user_sessions.items():
+            try:
+                # Test if serializable
+                json.dumps(session)
+                serializable_sessions[user_id] = session
+            except (TypeError, ValueError):
+                # Skip non-serializable sessions
+                print(f"⚠️ Session for {user_id} not serializable, skipping")
+        
+        with open(SESSIONS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(serializable_sessions, f, indent=2, ensure_ascii=False)
+        print(f"💾 Saved {len(serializable_sessions)} user sessions to disk")
+    except Exception as e:
+        print(f"⚠️ Error saving sessions: {e}")
+
+def auto_save_sessions():
+    """Background thread to auto-save sessions every 5 minutes."""
+    while True:
+        time.sleep(300)  # 5 minutes
+        try:
+            save_persistent_sessions()
+        except Exception as e:
+            print(f"⚠️ Auto-save error: {e}")
+
+# Load existing sessions from disk
+user_sessions = load_persistent_sessions()
+
+# Start auto-save thread
+session_save_thread = threading.Thread(target=auto_save_sessions, daemon=True)
+session_save_thread.start()
+print("💾 Session auto-save started (every 5 minutes)")
 
 # === Start webhook killer in background ===
 webhook_thread = threading.Thread(target=webhook_killer_thread, daemon=True)
@@ -671,7 +725,9 @@ def detect_emotion(text):
     return dominant[0], detected
 
 def enhanced_emotion_detection(text, session):
-    """Advanced emotion detection with learning capabilities"""
+    """Advanced emotion detection with learning capabilities - NOW WITH ENHANCED BRAIN!"""
+    user_id = str(session.get("user_id", "unknown"))
+    
     # Start with the current keyword-based approach
     base_emotion, emotion_data = detect_emotion(text)
 
@@ -702,11 +758,49 @@ def enhanced_emotion_detection(text, session):
         else:
             combined_emotions[emotion] = value * 0.2
 
-    # Find dominant emotion
+    # Find dominant emotion from basic detection
     dominant = max(combined_emotions.items(), key=lambda x: x[1]) if combined_emotions else ("neutral", 1.0)
+    basic_emotion = dominant[0]
+    basic_confidence = dominant[1] / sum(combined_emotions.values()) if sum(combined_emotions.values()) > 0 else 0.5
 
+    # =========================================================================
+    # 🧠 ENHANCED EMOTIONAL BRAIN INTEGRATION (NEW!)
+    # =========================================================================
+    enhanced_result = None
+    response_strategy = None
+    empathy_phrase = ""
+    is_expat_emotion = False
+    
+    if ENHANCED_BRAIN_AVAILABLE:
+        try:
+            # Call the enhanced emotion analysis from espaluz_emotional_brain
+            enhanced_result = enhance_emotion_analysis(text, user_id, basic_emotion)
+            
+            # If enhanced brain has higher confidence, use its result
+            if enhanced_result and enhanced_result.get("confidence", 0) > basic_confidence:
+                dominant = (enhanced_result["dominant_emotion"], enhanced_result["confidence"])
+                
+                # Get the response strategy for this emotion
+                response_strategy = enhanced_result.get("strategy", {})
+                
+                # Get empathy phrase in both languages
+                empathy_phrase = get_empathy_phrase(enhanced_result["dominant_emotion"], "en")
+                
+                # Check if this is an expat-specific emotion
+                expat_emotions = [
+                    "homesickness", "cultural_shock", "language_frustration", 
+                    "language_anxiety", "language_breakthrough", "social_isolation",
+                    "child_adaptation_worry", "urgency_stress", "cultural_confusion",
+                    "integration_anxiety", "family_separation_grief"
+                ]
+                is_expat_emotion = enhanced_result["dominant_emotion"] in expat_emotions
+                
+                print(f"🧠 Enhanced brain detected: {enhanced_result['dominant_emotion']} (conf: {enhanced_result['confidence']:.2f})")
+        except Exception as e:
+            print(f"⚠️ Enhanced brain error (using basic): {e}")
+    
     # Add confidence metric
-    confidence = dominant[1] / sum(combined_emotions.values()) if sum(combined_emotions.values()) > 0 else 0.5
+    confidence = dominant[1] if isinstance(dominant[1], float) else basic_confidence
 
     # Add emotional progression analysis
     progression_analysis = analyze_emotional_progression(dominant[0], session)
@@ -715,7 +809,12 @@ def enhanced_emotion_detection(text, session):
         "dominant_emotion": dominant[0],
         "confidence": confidence,
         "emotion_data": combined_emotions,
-        "progression": progression_analysis
+        "progression": progression_analysis,
+        # Enhanced brain additions
+        "enhanced_result": enhanced_result,
+        "response_strategy": response_strategy,
+        "empathy_phrase": empathy_phrase,
+        "is_expat_emotion": is_expat_emotion
     }
 
 def analyze_emotional_context(text, session):
@@ -1342,11 +1441,104 @@ Provide nuanced language assistance focused on natural conversation, idioms, and
 Use vocabulary appropriate for their level. ALWAYS address them by their actual name, not "Elena".
 """
 
-    # Add enhanced emotional intelligence from context
+    # =========================================================================
+    # 🧠 ENHANCED EMOTIONAL INTELLIGENCE INTEGRATION
+    # =========================================================================
+    response_strategy = emotion_analysis.get("response_strategy", {})
+    empathy_phrase = emotion_analysis.get("empathy_phrase", "")
+    is_expat_emotion = emotion_analysis.get("is_expat_emotion", False)
+    
+    # Build emotionally-aware instruction
     system_content += f"""
 
-I notice that the user's emotional state appears to be: {emotion.upper()} (confidence: {emotion_confidence:.2f}).
-Emotional progression: {emotion_progression}. 
+🧠 EMOTIONAL INTELLIGENCE ACTIVATED:
+- Detected emotion: {emotion.upper()} (confidence: {emotion_confidence:.2f})
+- Emotional progression: {emotion_progression}
+"""
+    
+    # If it's an expat-specific emotion, add special handling
+    if is_expat_emotion and response_strategy:
+        tone = response_strategy.get("tone", "supportive")
+        approach = response_strategy.get("approach", "standard")
+        teaching_style = response_strategy.get("teaching_style", "balanced")
+        
+        system_content += f"""
+⚡ EXPAT-SPECIFIC EMOTION DETECTED - SPECIAL RESPONSE REQUIRED:
+- Tone: {tone}
+- Approach: {approach}
+- Teaching style: {teaching_style}
+"""
+        # Add specific instructions based on detected emotion
+        if emotion == "homesickness":
+            system_content += """
+🏠 HOMESICKNESS RESPONSE PROTOCOL:
+- Start with genuine empathy: acknowledge their feelings are valid
+- Connect learning to their home culture (Russian references welcome)
+- Suggest phrases that help them express feelings in Spanish
+- Be warm, not overly cheerful - they need understanding, not forced positivity
+"""
+        elif emotion == "language_frustration":
+            system_content += """
+😤 LANGUAGE FRUSTRATION RESPONSE PROTOCOL:
+- Validate the frustration first - learning languages IS hard
+- Break down the challenge into smaller, achievable steps
+- Give ONE clear tip they can use immediately
+- Remind them of progress they've already made
+- Keep explanations SHORT and SIMPLE
+"""
+        elif emotion == "language_anxiety":
+            system_content += """
+😰 LANGUAGE ANXIETY RESPONSE PROTOCOL:
+- Create a safe, judgment-free space in your response
+- Use gentle, encouraging language
+- Start with something they know well before introducing new concepts
+- Emphasize that mistakes are valuable learning opportunities
+- Avoid overwhelming with too much information
+"""
+        elif emotion == "urgency_stress":
+            system_content += """
+🚨 URGENCY/STRESS RESPONSE PROTOCOL:
+- Skip pleasantries - give the answer IMMEDIATELY
+- Provide the EXACT phrase they need in Spanish + English
+- Keep it SHORT and ACTIONABLE
+- Add pronunciation hints if helpful
+- Offer to elaborate AFTER giving the quick answer
+"""
+        elif emotion == "child_adaptation_worry":
+            system_content += """
+👶 PARENTING CONCERN RESPONSE PROTOCOL:
+- Reassure: children are remarkably resilient
+- Provide practical, actionable advice
+- Suggest specific phrases they can practice with their child
+- Connect to school scenarios
+- Be supportive but not preachy
+"""
+        elif emotion == "social_isolation":
+            system_content += """
+🤝 SOCIAL ISOLATION RESPONSE PROTOCOL:
+- Acknowledge loneliness is a real challenge for expats
+- Suggest social phrases that can help build connections
+- Be warm and conversational - you ARE their connection right now
+- Recommend community resources if appropriate (meetups, groups)
+"""
+        elif emotion == "language_breakthrough":
+            system_content += """
+🎉 LANGUAGE BREAKTHROUGH RESPONSE PROTOCOL:
+- CELEBRATE with genuine enthusiasm!
+- Reinforce what they did right
+- Build on this momentum with a related concept
+- Encourage them to use this in real life today
+"""
+        
+        # Add empathy opener if available
+        if empathy_phrase:
+            system_content += f"""
+
+💬 Start your response with empathy. Consider using: "{empathy_phrase}"
+"""
+    else:
+        # Standard emotional calibration for non-expat emotions
+        system_content += f"""
 I'll adjust my tone to be: {emotional_calibration.get('response_tone', 'supportive')}.
 """
 
@@ -2528,6 +2720,12 @@ def process_message_with_tracking(user_input, chat_id, user_id, message_obj):
         update_connected_bot_activity(user_id)
     except Exception as e:
         print(f"⚠️ Supabase tracking failed (non-critical): {e}")
+    
+    # 💾 Save session to persistent storage after each conversation
+    try:
+        save_persistent_sessions()
+    except Exception as e:
+        print(f"⚠️ Session save failed (non-critical): {e}")
 
     # Launch multimedia generation in a thread
     print("Starting multimedia generation thread...")
@@ -3560,7 +3758,7 @@ def debug_files_and_env():
     print(f"Disk free space: {subprocess.check_output(['df', '-h', '.']).decode().strip()}")
     print("====================\n")
 
-print("✅ Espaluz is running THIS UPDATED VERSION: v2.3-country-context")
+print("✅ Espaluz is running THIS UPDATED VERSION: v3.0-enhanced-emotional-brain")
 
 # Call the debug function here
 debug_files_and_env()

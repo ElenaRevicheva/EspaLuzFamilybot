@@ -586,76 +586,404 @@ COUNTRY_CONTEXTS = {
     },
     
     # =========================================================================
-    # Other countries (basic info)
+    # UPGRADED COUNTRIES (Enhanced with real-life practicalities)
     # =========================================================================
     Country.GUATEMALA: {
         "name": "Guatemala",
         "flag": "🇬🇹",
         "currency": "Quetzal (GTQ)",
-        "expressions": {"chapín/chapina": "Guatemalan person", "cabal": "Exactly right"}
+        "timezone": "CST (UTC-6)",
+        "spanish_variant": "guatemalan",
+        
+        "local_vocabulary": {
+            "expressions": {
+                "chapín/chapina": "Guatemalan person",
+                "cabal": "Exactly right / Precisely",
+                "pisto": "Money",
+                "canche": "Blonde person",
+                "patojo/patoja": "Kid/young person",
+                "chilero": "Cool/nice",
+                "a huevo": "Of course / Yes",
+                "aguas": "Watch out! Be careful!"
+            }
+        },
+        
+        "real_life_scenarios": {
+            "banking": {
+                "main_banks": ["Banrural", "Banco Industrial", "BAM", "G&T Continental"],
+                "tips": "DPI (ID card) required for everything. USD accepted in tourist areas."
+            },
+            "immigration": {
+                "office": "Instituto Guatemalteco de Migración",
+                "tips": "90-day visa for most nationalities. Extend at Migración."
+            },
+            "healthcare": {
+                "emergency": "911 or 122",
+                "hospitals": ["Hospital Herrera Llerandi", "Centro Médico"],
+                "tips": "Private healthcare recommended for expats"
+            },
+            "schools": {
+                "international": ["American School of Guatemala", "Colegio Interamericano"],
+                "tips": "Many bilingual options in Guatemala City and Antigua"
+            }
+        },
+        
+        "cultural_notes": {
+            "mayan_influence": "Strong indigenous culture, many Mayan languages spoken",
+            "antigua": "Colonial city, UNESCO World Heritage, popular with expats"
+        }
     },
     
     Country.HONDURAS: {
         "name": "Honduras",
         "flag": "🇭🇳",
         "currency": "Lempira (HNL)",
-        "expressions": {"catracho/catracha": "Honduran person"}
+        "timezone": "CST (UTC-6)",
+        "spanish_variant": "honduran",
+        
+        "local_vocabulary": {
+            "expressions": {
+                "catracho/catracha": "Honduran person",
+                "maje": "Dude/guy",
+                "cipote/cipota": "Kid",
+                "púchica": "Wow! (exclamation)",
+                "cheque": "Okay/Alright",
+                "cabal": "Exactly"
+            }
+        },
+        
+        "real_life_scenarios": {
+            "banking": {
+                "main_banks": ["BAC Credomatic", "Banco Atlántida", "Ficohsa"],
+                "tips": "USD widely accepted. ATMs in major cities."
+            },
+            "healthcare": {
+                "emergency": "911",
+                "tips": "Private healthcare recommended. Medical tourism for dental."
+            }
+        },
+        
+        "cultural_notes": {
+            "roatan": "Bay Islands popular for diving and expat retirement",
+            "safety": "Stay in tourist areas, use registered taxis"
+        }
     },
     
     Country.EL_SALVADOR: {
         "name": "El Salvador",
         "flag": "🇸🇻",
-        "currency": "USD + Bitcoin",
-        "expressions": {"chero": "Friend", "cipote": "Kid"}
+        "currency": "USD (Bitcoin is legal tender!)",
+        "timezone": "CST (UTC-6)",
+        "spanish_variant": "salvadoran",
+        
+        "local_vocabulary": {
+            "expressions": {
+                "chero/chera": "Friend/buddy",
+                "cipote/cipota": "Kid",
+                "vaya pues": "Okay then",
+                "púchica": "Wow! (exclamation)",
+                "bayunco": "Silly/dumb",
+                "chucho": "Dog"
+            }
+        },
+        
+        "real_life_scenarios": {
+            "banking": {
+                "main_banks": ["Banco Agrícola", "Davivienda", "Banco Cuscatlán"],
+                "tips": "Bitcoin accepted at many businesses! Chivo wallet for Bitcoin."
+            },
+            "immigration": {
+                "tips": "Very crypto-friendly. Special visas for Bitcoin investors."
+            },
+            "healthcare": {
+                "emergency": "911",
+                "tips": "Private hospitals good quality in San Salvador"
+            }
+        },
+        
+        "cultural_notes": {
+            "bitcoin": "First country to make Bitcoin legal tender (2021)",
+            "pupusas": "National dish - must try!",
+            "surf": "Great surf beaches on the Pacific coast"
+        }
     },
     
     Country.NICARAGUA: {
         "name": "Nicaragua",
         "flag": "🇳🇮",
         "currency": "Córdoba (NIO)",
-        "expressions": {"nica": "Nicaraguan", "chunche": "Thing"}
+        "timezone": "CST (UTC-6)",
+        "spanish_variant": "nicaraguan",
+        
+        "local_vocabulary": {
+            "expressions": {
+                "nica": "Nicaraguan",
+                "chunche": "Thing/stuff",
+                "tuani": "Cool",
+                "dale pues": "Okay then",
+                "chele/chela": "White person/foreigner",
+                "pinolero": "Nicaraguan (from pinol drink)"
+            }
+        },
+        
+        "real_life_scenarios": {
+            "banking": {
+                "main_banks": ["Banpro", "BAC", "Lafise"],
+                "tips": "USD accepted in tourist areas. Cash preferred."
+            },
+            "healthcare": {
+                "emergency": "118",
+                "tips": "Private healthcare in Managua recommended"
+            }
+        },
+        
+        "cultural_notes": {
+            "affordable": "One of the most affordable countries in Central America",
+            "granada_leon": "Colonial cities popular with expats"
+        }
     },
     
     Country.CUBA: {
         "name": "Cuba",
         "flag": "🇨🇺",
-        "currency": "Cuban Peso (CUP)",
-        "expressions": {"asere": "Friend", "socio": "Buddy"}
+        "currency": "Cuban Peso (CUP), also MLC for foreigners",
+        "timezone": "EST (UTC-5)",
+        "spanish_variant": "cuban",
+        
+        "local_vocabulary": {
+            "expressions": {
+                "asere": "Friend/buddy",
+                "socio": "Buddy/pal",
+                "¿qué bolá?": "What's up?",
+                "chévere": "Cool/great",
+                "guagua": "Bus",
+                "yuma": "Foreigner (especially American)",
+                "resolver": "To figure out/solve (very Cuban concept)",
+                "no es fácil": "It's not easy (common expression)"
+            }
+        },
+        
+        "real_life_scenarios": {
+            "banking": {
+                "tips": "Very limited banking. Bring cash. No US credit cards."
+            },
+            "healthcare": {
+                "tips": "Famous for good healthcare. International clinics for foreigners."
+            }
+        },
+        
+        "cultural_notes": {
+            "resolver": "Cubans are experts at 'resolver' - finding creative solutions",
+            "music": "Salsa, son, and reggaeton everywhere",
+            "internet": "Limited but improving. WiFi hotspots in parks."
+        }
     },
     
     Country.BOLIVIA: {
         "name": "Bolivia",
         "flag": "🇧🇴",
         "currency": "Boliviano (BOB)",
-        "expressions": {"yapa": "A little extra for free"}
+        "timezone": "BOT (UTC-4)",
+        "spanish_variant": "bolivian",
+        
+        "local_vocabulary": {
+            "expressions": {
+                "yapa": "A little extra for free",
+                "cholita": "Indigenous woman in traditional dress",
+                "imilla": "Girl (Aymara origin)",
+                "ñato/ñata": "Friend",
+                "che": "Hey (to get attention)"
+            }
+        },
+        
+        "real_life_scenarios": {
+            "banking": {
+                "main_banks": ["Banco Mercantil", "BNB", "Banco Unión"],
+                "tips": "Cash is king. Limited ATMs outside major cities."
+            },
+            "healthcare": {
+                "tips": "Private clinics in La Paz and Santa Cruz recommended"
+            }
+        },
+        
+        "cultural_notes": {
+            "altitude": "La Paz is 3,640m - prepare for altitude sickness",
+            "indigenous": "Strong indigenous culture, Aymara and Quechua languages"
+        }
     },
     
     Country.PARAGUAY: {
         "name": "Paraguay",
         "flag": "🇵🇾",
         "currency": "Guaraní (PYG)",
-        "notes": "Guaraní language widely spoken alongside Spanish"
+        "timezone": "PYT (UTC-4/-3)",
+        "spanish_variant": "paraguayan",
+        
+        "local_vocabulary": {
+            "expressions": {
+                "nde": "You (Guaraní, very common)",
+                "chake": "Watch out",
+                "mbore": "A lot",
+                "kóga": "How are you? (Guaraní)"
+            },
+            "note": "Guaraní is co-official - many mix Spanish and Guaraní (Jopara)"
+        },
+        
+        "real_life_scenarios": {
+            "banking": {
+                "main_banks": ["Itaú", "Banco Continental", "BBVA"],
+                "tips": "Low taxes attract businesses. USD accepted."
+            },
+            "healthcare": {
+                "tips": "Private healthcare affordable in Asunción"
+            }
+        },
+        
+        "cultural_notes": {
+            "tereré": "National drink - cold yerba mate, essential in hot weather",
+            "bilingual": "Only truly bilingual country in Latin America"
+        }
     },
     
     Country.VENEZUELA: {
         "name": "Venezuela",
         "flag": "🇻🇪",
-        "currency": "Bolívar (VES) - hyperinflation, USD often used",
-        "expressions": {"chamo/chama": "Dude", "chevere": "Cool"}
+        "currency": "Bolívar (VES) - USD widely used due to hyperinflation",
+        "timezone": "VET (UTC-4)",
+        "spanish_variant": "venezuelan",
+        
+        "local_vocabulary": {
+            "expressions": {
+                "chamo/chama": "Dude/girl",
+                "chévere": "Cool/great",
+                "pana": "Friend",
+                "burda": "A lot/very",
+                "¿qué más?": "What's up?",
+                "arrecho": "Angry (or great, depending on context)",
+                "marico": "Dude (can be offensive, use carefully)",
+                "fino": "Fine/cool"
+            }
+        },
+        
+        "real_life_scenarios": {
+            "banking": {
+                "tips": "USD and crypto essential. Zelle popular for transfers."
+            },
+            "healthcare": {
+                "tips": "Private healthcare for expats. Bring medicines from abroad."
+            }
+        },
+        
+        "cultural_notes": {
+            "dollarized": "Effective dollarization - prices often in USD",
+            "arepas": "National food - must try",
+            "diaspora": "Many Venezuelans abroad - strong community"
+        }
     },
     
     Country.PUERTO_RICO: {
         "name": "Puerto Rico",
         "flag": "🇵🇷",
         "currency": "USD",
-        "notes": "US territory, Spanglish very common"
+        "timezone": "AST (UTC-4)",
+        "spanish_variant": "puerto_rican",
+        
+        "local_vocabulary": {
+            "expressions": {
+                "boricua": "Puerto Rican",
+                "wepa": "Awesome!/Let's go!",
+                "brutal": "Awesome/amazing",
+                "chacho": "Dude (shortened from 'muchacho')",
+                "nene/nena": "Boy/girl (or term of endearment)",
+                "mira": "Look (used constantly)",
+                "¿qué es la que hay?": "What's up?"
+            }
+        },
+        
+        "real_life_scenarios": {
+            "banking": {
+                "main_banks": ["Banco Popular", "FirstBank", "Oriental Bank"],
+                "tips": "US banking system. All major US banks work."
+            },
+            "healthcare": {
+                "tips": "US healthcare system applies. Insurance important."
+            },
+            "immigration": {
+                "tips": "US territory - no visa needed for US citizens"
+            }
+        },
+        
+        "cultural_notes": {
+            "spanglish": "Very common - code-switching between Spanish and English",
+            "tax_benefits": "Act 60 tax incentives for businesses and investors",
+            "hurricanes": "Hurricane season June-November - be prepared"
+        }
+    },
+    
+    Country.DOMINICAN_REPUBLIC: {
+        "name": "República Dominicana",
+        "flag": "🇩🇴",
+        "currency": "Dominican Peso (DOP)",
+        "timezone": "AST (UTC-4)",
+        "spanish_variant": "dominican",
+        
+        "local_vocabulary": {
+            "expressions": {
+                "tato": "Okay/alright",
+                "dime a ver": "Tell me",
+                "vaina": "Thing (like Panama)",
+                "jevi": "Cool (from 'heavy')",
+                "un chin": "A little bit",
+                "klk/qué lo qué": "What's up? (very informal)",
+                "manito/manita": "Bro/sis",
+                "tigueraje": "Street smarts"
+            }
+        },
+        
+        "real_life_scenarios": {
+            "banking": {
+                "main_banks": ["Banco Popular", "Banreservas", "Scotiabank"],
+                "tips": "USD accepted in tourist areas. ATMs everywhere."
+            },
+            "immigration": {
+                "tips": "Residency relatively easy. Many visa options."
+            },
+            "healthcare": {
+                "emergency": "911",
+                "tips": "Good private healthcare in Santo Domingo and Punta Cana"
+            },
+            "schools": {
+                "international": ["Carol Morgan School", "AISK"],
+                "tips": "American and international curriculum options"
+            }
+        },
+        
+        "cultural_notes": {
+            "music": "Bachata and merengue - national pride",
+            "baseball": "National passion - MLB players everywhere",
+            "zona_colonial": "Historic district in Santo Domingo, UNESCO site"
+        }
     },
     
     Country.EQUATORIAL_GUINEA: {
         "name": "Guinea Ecuatorial",
         "flag": "🇬🇶",
         "currency": "CFA Franc (XAF)",
-        "notes": "Only Spanish-speaking country in Africa"
+        "timezone": "WAT (UTC+1)",
+        "spanish_variant": "equatorial_guinean",
+        
+        "local_vocabulary": {
+            "note": "Spanish is official but French and Portuguese also spoken"
+        },
+        
+        "real_life_scenarios": {
+            "tips": "Oil-rich nation. Limited infrastructure for expats."
+        },
+        
+        "cultural_notes": {
+            "unique": "Only Spanish-speaking country in Africa",
+            "oil": "Oil industry attracts some expats"
+        }
     }
 }
 
