@@ -559,12 +559,20 @@ class TelegramPayPalSystem:
         return re.match(email_pattern, text) is not None
     
     def link_email(self, user_id: str, email: str) -> Dict[str, Any]:
-        """Link email to Telegram user for subscription verification"""
+        """Link email to Telegram user for subscription verification - REAL-TIME"""
         user_id_str = str(user_id)
         email_lower = email.strip().lower()
         
-        # Check if email has active PayPal subscription
-        paypal_result = self.check_paypal_subscription(email_lower)
+        logging.info(f"LINK EMAIL: Checking {email_lower} for user {user_id_str}")
+        
+        # FIRST: Try real-time search in PayPal (finds NEW subscribers!)
+        realtime_result = self.find_subscription_for_email_realtime(email_lower)
+        if realtime_result and realtime_result.get("is_active"):
+            logging.info(f"FOUND via real-time search: {email_lower}")
+            paypal_result = realtime_result
+        else:
+            # FALLBACK: Check local cache
+            paypal_result = self.check_paypal_subscription(email_lower)
         
         if paypal_result.get("is_active"):
             # Link email to user
@@ -720,6 +728,167 @@ Don't lose access to your AI tutor. Subscribe now:
         self._save_json(self.subscribers_file, subscribers)
         logging.info(f"✅ Manually added subscriber: {email}")
         return True
+
+
+    def find_subscription_for_email_realtime(self, email: str) -> Optional[Dict[str, Any]]:
+        """
+        REAL-TIME subscription finder - queries PayPal API directly for this email
+        This is the PRIMARY method for finding NEW subscribers
+        """
+        try:
+            access_token = self.get_paypal_access_token()
+            if not access_token:
+                logging.warning("No PayPal credentials available")
+                return None
+            
+            headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Accept": "application/json"
+            }
+            
+            email_lower = email.lower()
+            logging.info(f"REAL-TIME SEARCH: Looking for subscription for {email_lower}")
+            
+            # Method 1: Search recent transactions (last 31 days) for this email
+            from datetime import timezone
+            end_date = datetime.now(timezone.utc)
+            start_date = end_date - timedelta(days=31)
+            
+            transactions_url = f"{PAYPAL_BASE_URL}/v1/reporting/transactions"
+            params = {
+                "start_date": start_date.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "end_date": end_date.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "fields": "all",
+                "page_size": 500
+            }
+            
+            res = requests.get(transactions_url, headers=headers, params=params, timeout=30)
+            
+            if res.status_code == 200:
+                data = res.json()
+                transactions = data.get("transaction_details", [])
+                
+                for txn in transactions:
+                    payer_info = txn.get("payer_info", {})
+                    payer_email = payer_info.get("email_address", "").lower()
+                    txn_info = txn.get("transaction_info", {})
+                    paypal_ref = txn_info.get("paypal_reference_id", "")
+                    
+                    if payer_email == email_lower and paypal_ref.startswith("I-"):
+                        # Found a subscription ID for this email!
+                        logging.info(f"FOUND: {email_lower} -> {paypal_ref}")
+                        
+                        # Verify it's active
+                        result = self._verify_subscription_id(headers, paypal_ref, email_lower)
+                        if result and result.get("is_active"):
+                            # Store it for future use
+                            self._store_verified_subscriber(email_lower, paypal_ref)
+                            self._save_discovered_subscription_id(paypal_ref, email_lower)
+                            return result
+            
+            # Method 2: Check all known + discovered subscription IDs
+            all_sub_ids = self._get_all_known_subscription_ids()
+            
+            for sub_id in all_sub_ids:
+                result = self._verify_subscription_id(headers, sub_id, email_lower)
+                if result and result.get("is_active"):
+                    self._store_verified_subscriber(email_lower, sub_id)
+                    return result
+            
+            logging.info(f"No active subscription found for {email_lower}")
+            return None
+            
+        except Exception as e:
+            logging.error(f"Error in real-time subscription search: {e}")
+            return None
+    
+    def _get_all_known_subscription_ids(self) -> list:
+        """Get all known subscription IDs from various sources"""
+        all_ids = set()
+        
+        # 1. Hardcoded known IDs
+        known_ids = [
+            "I-N32S1EJG29S7", "I-JWYRCYFWHL1H", "I-J8DH55UMM6NL",
+            "I-J2PHFSWNB95P", "I-HHD6PWYLS02C", "I-J75NTVBASYVK",
+            "I-8N2TWJCD74XJ", "I-W1XSRABWWBGY", "I-8LT2VUP05DNF",
+            "I-51MYMXG2R006", "I-WG4R7FBU16JT", "I-FN4W31PE8G07",
+        ]
+        all_ids.update(known_ids)
+        
+        # 2. Discovered IDs from file
+        discovered = self._load_discovered_subscription_ids()
+        all_ids.update(discovered)
+        
+        # 3. IDs from existing subscribers
+        subscribers = self._load_json(self.subscribers_file)
+        for email, data in subscribers.items():
+            sub_id = data.get("paypal_subscription_id")
+            if sub_id and sub_id.startswith("I-"):
+                all_ids.add(sub_id)
+        
+        return list(all_ids)
+    
+    def poll_for_new_subscriptions(self) -> int:
+        """
+        Poll PayPal for new subscriptions - runs periodically
+        Returns count of new subscriptions found
+        """
+        try:
+            access_token = self.get_paypal_access_token()
+            if not access_token:
+                return 0
+            
+            headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Accept": "application/json"
+            }
+            
+            # Get recent transactions
+            from datetime import timezone
+            end_date = datetime.now(timezone.utc)
+            start_date = end_date - timedelta(days=7)
+            
+            transactions_url = f"{PAYPAL_BASE_URL}/v1/reporting/transactions"
+            params = {
+                "start_date": start_date.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "end_date": end_date.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "fields": "all",
+                "page_size": 500
+            }
+            
+            res = requests.get(transactions_url, headers=headers, params=params, timeout=30)
+            
+            if res.status_code != 200:
+                return 0
+            
+            data = res.json()
+            transactions = data.get("transaction_details", [])
+            new_count = 0
+            
+            existing_subscribers = self._load_json(self.subscribers_file)
+            
+            for txn in transactions:
+                payer_info = txn.get("payer_info", {})
+                payer_email = payer_info.get("email_address", "").lower()
+                txn_info = txn.get("transaction_info", {})
+                paypal_ref = txn_info.get("paypal_reference_id", "")
+                
+                if paypal_ref.startswith("I-") and payer_email:
+                    # Check if we already have this subscriber
+                    if payer_email not in existing_subscribers:
+                        # Verify and add
+                        result = self._verify_subscription_id(headers, paypal_ref, payer_email)
+                        if result and result.get("is_active"):
+                            self._store_verified_subscriber(payer_email, paypal_ref)
+                            self._save_discovered_subscription_id(paypal_ref, payer_email)
+                            new_count += 1
+                            logging.info(f"POLLER: Found new subscriber {payer_email}")
+            
+            return new_count
+            
+        except Exception as e:
+            logging.error(f"Polling error: {e}")
+            return 0
 
 
 # Global instance
