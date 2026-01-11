@@ -113,7 +113,7 @@ Just send me any message! I understand:
   ↳ 14-day free trial for new users
 
 /subscribe — View subscription options
-  ↳ PayPal: $15/month or $99/year
+  ↳ PayPal: $11/month (14-day FREE trial!)
 
 /link — Link your PayPal email
   ↳ Activates paid subscription

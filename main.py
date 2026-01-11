@@ -3348,8 +3348,7 @@ def handle_link(message):
 You're currently on a FREE TRIAL - enjoy all features!
 
 After trial ends:
-• Monthly: $15/month
-• Annual: $99/year (save 45%!)
+• Monthly: $11/month (includes 14-day FREE trial!)
 
 💳 PayPal (ready now):
 {PAYPAL_SUBSCRIPTION_LINK}
@@ -3417,8 +3416,8 @@ def handle_subscribe(message):
     sub_msg = f"""💳 EspaLuz Subscription
 {trial_info}
 🎯 Simple Pricing:
-• $15/month - Full access, family included
-• $99/year - Save 45%!
+• $11/month - Full access, family included
+• 14-day FREE trial included!
 
 💳 Subscribe via PayPal:
 {PAYPAL_SUBSCRIPTION_LINK}

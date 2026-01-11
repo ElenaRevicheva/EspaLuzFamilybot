@@ -628,7 +628,7 @@ After subscribing, send your PayPal email here."""
 Para continuar usando EspaLuz, suscríbete:
 To continue using EspaLuz, subscribe:
 
-💳 **PayPal** ($15/mes - $15/month)
+💳 **PayPal** ($11/mes - $11/month + 14-day FREE trial!)
 👉 {PAYPAL_SUBSCRIPTION_LINK}
 
 📧 Después de suscribirte, envíame tu email de PayPal para activar tu acceso.
