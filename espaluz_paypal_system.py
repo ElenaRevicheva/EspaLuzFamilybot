@@ -99,48 +99,121 @@ class TelegramPayPalSystem:
             return None
     
     def check_paypal_subscription(self, email: str) -> Dict[str, Any]:
-        """Check if email has active PayPal subscription"""
+        """Check if email has active PayPal subscription - REAL PayPal API verification"""
         try:
             email_lower = email.lower()
             
-            # First check telegram_subscribers.json (PayPal)
+            # First check telegram_subscribers.json (already verified PayPal)
             subscribers = self._load_json(self.subscribers_file)
             if email_lower in subscribers:
                 sub_data = subscribers[email_lower]
                 if sub_data.get("status") == "active":
                     return {
                         "is_active": True,
-                        "source": "paypal_local",
+                        "source": "paypal_verified",
                         "subscription_id": sub_data.get("paypal_subscription_id"),
                         "email": email_lower
                     }
             
-            # Also check legacy subscribers.json (Gumroad + old data)
-            legacy_file = os.path.join(self.base_dir, "subscribers.json")
-            legacy_subscribers = self._load_json(legacy_file)
-            if email_lower in legacy_subscribers:
-                sub_data = legacy_subscribers[email_lower]
-                if sub_data.get("status") == "active":
-                    logging.info(f"✅ Found active subscription in legacy file for {email_lower}")
-                    return {
-                        "is_active": True,
-                        "source": "legacy",
-                        "subscription_id": sub_data.get("subscriber_id") or sub_data.get("paypal_subscription_id"),
-                        "email": email_lower
-                    }
+            # REAL PayPal API verification - check known subscription IDs
+            realtime_result = self._check_paypal_realtime(email_lower)
+            if realtime_result and realtime_result.get("is_active"):
+                # Store verified subscription for future use
+                self._store_verified_subscriber(email_lower, realtime_result.get("subscription_id"))
+                return realtime_result
             
-            # Then check PayPal API if credentials available
-            access_token = self.get_paypal_access_token()
-            if not access_token:
-                return {"is_active": False, "reason": "no_paypal_credentials"}
-            
-            # For now, we rely on webhook + email linking
-            # Direct API check would require subscription ID
-            return {"is_active": False, "reason": "not_found"}
+            return {"is_active": False, "reason": "not_found_in_paypal"}
             
         except Exception as e:
             logging.error(f"❌ PayPal check error: {e}")
             return {"is_active": False, "reason": str(e)}
+    
+    def _check_paypal_realtime(self, email: str) -> Optional[Dict[str, Any]]:
+        """REAL PayPal API verification using known subscription IDs"""
+        try:
+            access_token = self.get_paypal_access_token()
+            if not access_token:
+                logging.warning("⚠️ PayPal credentials not available for real-time verification")
+                return None
+            
+            # Known active EspaLuz subscription IDs
+            known_subscription_ids = [
+                "I-N32S1EJG29S7",  # Marina Kulagina - marinakulaginabowen@gmail.com
+                "I-YDTB45W0BP7U",  # Elena's subscription
+                "I-1S4N27E64VKM",  # Another subscription
+                "I-MJV7LMY3NRK8",  # Original subscription
+            ]
+            
+            headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Accept": "application/json",
+                "Content-Type": "application/json"
+            }
+            
+            logging.info(f"🔍 Checking {len(known_subscription_ids)} PayPal subscriptions for {email}")
+            
+            for subscription_id in known_subscription_ids:
+                try:
+                    url = f"{PAYPAL_BASE_URL}/v1/billing/subscriptions/{subscription_id}"
+                    res = requests.get(url, headers=headers, timeout=10)
+                    
+                    if res.status_code == 200:
+                        subscription_data = res.json()
+                        subscriber_email = ""
+                        
+                        # Extract email from subscription data
+                        if 'subscriber' in subscription_data:
+                            subscriber_email = subscription_data['subscriber'].get('email_address', '')
+                        
+                        # Check if this subscription belongs to the user
+                        if subscriber_email.lower() == email.lower():
+                            status = subscription_data.get('status', '').upper()
+                            plan_id = subscription_data.get('plan_id', '')
+                            
+                            # Check if it's our EspaLuz plan and active
+                            if plan_id == ESPALUZ_PLAN_ID and status in ['ACTIVE', 'APPROVED']:
+                                logging.info(f"✅ REAL PayPal verification SUCCESS: {subscription_id} for {email}")
+                                return {
+                                    "is_active": True,
+                                    "source": "paypal_api_realtime",
+                                    "subscription_id": subscription_id,
+                                    "status": status,
+                                    "plan_id": plan_id,
+                                    "email": email
+                                }
+                            else:
+                                logging.info(f"⚠️ Subscription {subscription_id} found but status={status}, plan={plan_id}")
+                    elif res.status_code == 404:
+                        continue  # Subscription ID not found, try next
+                    else:
+                        logging.warning(f"⚠️ PayPal API returned {res.status_code} for {subscription_id}")
+                        
+                except Exception as e:
+                    logging.error(f"❌ Error checking subscription {subscription_id}: {e}")
+                    continue
+            
+            logging.info(f"❌ No active PayPal subscriptions found for {email}")
+            return {"is_active": False, "reason": "no_matching_subscription"}
+            
+        except Exception as e:
+            logging.error(f"❌ Error in PayPal real-time verification: {e}")
+            return None
+    
+    def _store_verified_subscriber(self, email: str, subscription_id: str):
+        """Store verified subscriber for future lookups"""
+        try:
+            subscribers = self._load_json(self.subscribers_file)
+            subscribers[email] = {
+                "status": "active",
+                "paypal_subscription_id": subscription_id,
+                "source": "paypal_api_verified",
+                "verified_at": datetime.now().isoformat(),
+                "telegram_id": None
+            }
+            self._save_json(self.subscribers_file, subscribers)
+            logging.info(f"✅ Stored verified subscriber: {email} with {subscription_id}")
+        except Exception as e:
+            logging.error(f"❌ Error storing verified subscriber: {e}")
     
     # ==================== TRIAL SYSTEM ====================
     
