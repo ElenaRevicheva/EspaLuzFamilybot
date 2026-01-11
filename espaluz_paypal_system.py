@@ -101,17 +101,31 @@ class TelegramPayPalSystem:
     def check_paypal_subscription(self, email: str) -> Dict[str, Any]:
         """Check if email has active PayPal subscription"""
         try:
-            # First check local subscribers
-            subscribers = self._load_json(self.subscribers_file)
             email_lower = email.lower()
             
+            # First check telegram_subscribers.json (PayPal)
+            subscribers = self._load_json(self.subscribers_file)
             if email_lower in subscribers:
                 sub_data = subscribers[email_lower]
                 if sub_data.get("status") == "active":
                     return {
                         "is_active": True,
-                        "source": "local",
+                        "source": "paypal_local",
                         "subscription_id": sub_data.get("paypal_subscription_id"),
+                        "email": email_lower
+                    }
+            
+            # Also check legacy subscribers.json (Gumroad + old data)
+            legacy_file = os.path.join(self.base_dir, "subscribers.json")
+            legacy_subscribers = self._load_json(legacy_file)
+            if email_lower in legacy_subscribers:
+                sub_data = legacy_subscribers[email_lower]
+                if sub_data.get("status") == "active":
+                    logging.info(f"✅ Found active subscription in legacy file for {email_lower}")
+                    return {
+                        "is_active": True,
+                        "source": "legacy",
+                        "subscription_id": sub_data.get("subscriber_id") or sub_data.get("paypal_subscription_id"),
                         "email": email_lower
                     }
             
