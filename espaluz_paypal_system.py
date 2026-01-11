@@ -129,20 +129,12 @@ class TelegramPayPalSystem:
             return {"is_active": False, "reason": str(e)}
     
     def _check_paypal_realtime(self, email: str) -> Optional[Dict[str, Any]]:
-        """REAL PayPal API verification using known subscription IDs"""
+        """REAL PayPal API verification - search transactions for NEW subscribers"""
         try:
             access_token = self.get_paypal_access_token()
             if not access_token:
                 logging.warning("⚠️ PayPal credentials not available for real-time verification")
                 return None
-            
-            # Known active EspaLuz subscription IDs
-            known_subscription_ids = [
-                "I-N32S1EJG29S7",  # Marina Kulagina - marinakulaginabowen@gmail.com
-                "I-YDTB45W0BP7U",  # Elena's subscription
-                "I-1S4N27E64VKM",  # Another subscription
-                "I-MJV7LMY3NRK8",  # Original subscription
-            ]
             
             headers = {
                 "Authorization": f"Bearer {access_token}",
@@ -150,47 +142,71 @@ class TelegramPayPalSystem:
                 "Content-Type": "application/json"
             }
             
-            logging.info(f"🔍 Checking {len(known_subscription_ids)} PayPal subscriptions for {email}")
+            # METHOD 1: Search recent transactions by email (last 31 days)
+            logging.info(f"🔍 Searching PayPal transactions for {email}...")
+            
+            from datetime import timezone
+            end_date = datetime.now(timezone.utc)
+            start_date = end_date - timedelta(days=31)
+            
+            transactions_url = f"{PAYPAL_BASE_URL}/v1/reporting/transactions"
+            params = {
+                "start_date": start_date.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "end_date": end_date.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "fields": "all",
+                "page_size": 100
+            }
+            
+            try:
+                res = requests.get(transactions_url, headers=headers, params=params, timeout=15)
+                
+                if res.status_code == 200:
+                    data = res.json()
+                    transactions = data.get("transaction_details", [])
+                    logging.info(f"📋 Found {len(transactions)} recent transactions")
+                    
+                    for txn in transactions:
+                        txn_info = txn.get("transaction_info", {})
+                        payer_info = txn.get("payer_info", {})
+                        payer_email = payer_info.get("email_address", "").lower()
+                        
+                        if payer_email == email.lower():
+                            # Found transaction for this email - get subscription ID
+                            txn_event_code = txn_info.get("transaction_event_code", "")
+                            billing_agreement_id = txn_info.get("paypal_reference_id", "")
+                            
+                            # T0002 = subscription payment
+                            if "T0002" in txn_event_code or billing_agreement_id.startswith("I-"):
+                                logging.info(f"✅ Found subscription transaction: {billing_agreement_id}")
+                                
+                                # Verify this subscription is active
+                                if billing_agreement_id:
+                                    sub_check = self._verify_subscription_id(headers, billing_agreement_id, email)
+                                    if sub_check:
+                                        return sub_check
+                                        
+            except Exception as e:
+                logging.warning(f"⚠️ Transaction search failed: {e}")
+            
+            # METHOD 2: Check known subscription IDs (fallback for older subscribers)
+            logging.info(f"🔍 Checking known subscription IDs for {email}...")
+            known_subscription_ids = [
+                "I-N32S1EJG29S7",  # Marina Kulagina
+                "I-YDTB45W0BP7U",
+                "I-1S4N27E64VKM",
+                "I-MJV7LMY3NRK8",
+            ]
             
             for subscription_id in known_subscription_ids:
-                try:
-                    url = f"{PAYPAL_BASE_URL}/v1/billing/subscriptions/{subscription_id}"
-                    res = requests.get(url, headers=headers, timeout=10)
-                    
-                    if res.status_code == 200:
-                        subscription_data = res.json()
-                        subscriber_email = ""
-                        
-                        # Extract email from subscription data
-                        if 'subscriber' in subscription_data:
-                            subscriber_email = subscription_data['subscriber'].get('email_address', '')
-                        
-                        # Check if this subscription belongs to the user
-                        if subscriber_email.lower() == email.lower():
-                            status = subscription_data.get('status', '').upper()
-                            plan_id = subscription_data.get('plan_id', '')
-                            
-                            # Check if it's our EspaLuz plan and active
-                            if plan_id == ESPALUZ_PLAN_ID and status in ['ACTIVE', 'APPROVED']:
-                                logging.info(f"✅ REAL PayPal verification SUCCESS: {subscription_id} for {email}")
-                                return {
-                                    "is_active": True,
-                                    "source": "paypal_api_realtime",
-                                    "subscription_id": subscription_id,
-                                    "status": status,
-                                    "plan_id": plan_id,
-                                    "email": email
-                                }
-                            else:
-                                logging.info(f"⚠️ Subscription {subscription_id} found but status={status}, plan={plan_id}")
-                    elif res.status_code == 404:
-                        continue  # Subscription ID not found, try next
-                    else:
-                        logging.warning(f"⚠️ PayPal API returned {res.status_code} for {subscription_id}")
-                        
-                except Exception as e:
-                    logging.error(f"❌ Error checking subscription {subscription_id}: {e}")
-                    continue
+                result = self._verify_subscription_id(headers, subscription_id, email)
+                if result:
+                    return result
+            
+            # METHOD 3: Search subscriptions for our plan directly
+            logging.info(f"🔍 Searching all plan subscriptions for {email}...")
+            result = self._search_plan_subscriptions(headers, email)
+            if result:
+                return result
             
             logging.info(f"❌ No active PayPal subscriptions found for {email}")
             return {"is_active": False, "reason": "no_matching_subscription"}
@@ -198,6 +214,165 @@ class TelegramPayPalSystem:
         except Exception as e:
             logging.error(f"❌ Error in PayPal real-time verification: {e}")
             return None
+    
+    def _verify_subscription_id(self, headers: dict, subscription_id: str, email: str) -> Optional[Dict[str, Any]]:
+        """Verify a specific subscription ID belongs to the email and is active"""
+        try:
+            url = f"{PAYPAL_BASE_URL}/v1/billing/subscriptions/{subscription_id}"
+            res = requests.get(url, headers=headers, timeout=10)
+            
+            if res.status_code == 200:
+                sub_data = res.json()
+                subscriber_email = sub_data.get('subscriber', {}).get('email_address', '').lower()
+                
+                if subscriber_email == email.lower():
+                    status = sub_data.get('status', '').upper()
+                    plan_id = sub_data.get('plan_id', '')
+                    
+                    if status in ['ACTIVE', 'APPROVED']:
+                        logging.info(f"✅ VERIFIED: {subscription_id} for {email} is {status}")
+                        return {
+                            "is_active": True,
+                            "source": "paypal_api_verified",
+                            "subscription_id": subscription_id,
+                            "status": status,
+                            "plan_id": plan_id,
+                            "email": email
+                        }
+            return None
+        except Exception as e:
+            logging.warning(f"⚠️ Error verifying {subscription_id}: {e}")
+            return None
+    
+    def _search_plan_subscriptions(self, headers: dict, email: str) -> Optional[Dict[str, Any]]:
+        """Search all subscriptions for our plan - finds NEW subscribers"""
+        try:
+            # Load dynamically discovered subscription IDs
+            discovered_ids = self._load_discovered_subscription_ids()
+            
+            for sub_id in discovered_ids:
+                result = self._verify_subscription_id(headers, sub_id, email)
+                if result:
+                    return result
+            
+            return None
+        except Exception as e:
+            logging.warning(f"⚠️ Plan subscription search failed: {e}")
+            return None
+    
+    def _load_discovered_subscription_ids(self) -> list:
+        """Load dynamically discovered subscription IDs"""
+        try:
+            filepath = os.path.join(self.base_dir, "discovered_subscription_ids.json")
+            if os.path.exists(filepath):
+                with open(filepath, 'r') as f:
+                    data = json.load(f)
+                    return data.get("subscription_ids", [])
+            return []
+        except:
+            return []
+    
+    def _save_discovered_subscription_id(self, subscription_id: str, email: str):
+        """Save newly discovered subscription ID"""
+        try:
+            filepath = os.path.join(self.base_dir, "discovered_subscription_ids.json")
+            data = {"subscription_ids": [], "details": {}}
+            
+            if os.path.exists(filepath):
+                with open(filepath, 'r') as f:
+                    data = json.load(f)
+            
+            if subscription_id not in data["subscription_ids"]:
+                data["subscription_ids"].append(subscription_id)
+                data["details"][subscription_id] = {
+                    "email": email,
+                    "discovered_at": datetime.now().isoformat()
+                }
+                
+                with open(filepath, 'w') as f:
+                    json.dump(data, f, indent=2)
+                
+                logging.info(f"✅ Saved new subscription ID: {subscription_id} for {email}")
+        except Exception as e:
+            logging.error(f"❌ Error saving subscription ID: {e}")
+    
+    def lookup_subscription_from_transaction(self, transaction_id: str) -> Optional[Dict[str, Any]]:
+        """Look up subscription ID from a PayPal transaction ID (from IPN)"""
+        try:
+            access_token = self.get_paypal_access_token()
+            if not access_token:
+                return None
+            
+            headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Accept": "application/json"
+            }
+            
+            # Get transaction details
+            url = f"{PAYPAL_BASE_URL}/v2/payments/captures/{transaction_id}"
+            res = requests.get(url, headers=headers, timeout=10)
+            
+            if res.status_code == 200:
+                data = res.json()
+                # Look for billing agreement/subscription reference
+                links = data.get("links", [])
+                for link in links:
+                    if "billing-agreement" in link.get("href", "") or "subscriptions" in link.get("href", ""):
+                        # Extract subscription ID from link
+                        href = link.get("href", "")
+                        if "I-" in href:
+                            sub_id = href.split("/")[-1]
+                            logging.info(f"✅ Found subscription ID from transaction: {sub_id}")
+                            return {"subscription_id": sub_id, "transaction_id": transaction_id}
+            
+            logging.warning(f"⚠️ Could not find subscription from transaction {transaction_id}")
+            return None
+            
+        except Exception as e:
+            logging.error(f"❌ Error looking up transaction: {e}")
+            return None
+    
+    def add_subscription_manually(self, email: str, subscription_id: str) -> Dict[str, Any]:
+        """Manually add a subscription ID for immediate verification (admin function)"""
+        try:
+            access_token = self.get_paypal_access_token()
+            if not access_token:
+                return {"success": False, "error": "No PayPal credentials"}
+            
+            headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Accept": "application/json"
+            }
+            
+            # Verify the subscription exists and is active
+            url = f"{PAYPAL_BASE_URL}/v1/billing/subscriptions/{subscription_id}"
+            res = requests.get(url, headers=headers, timeout=10)
+            
+            if res.status_code == 200:
+                sub_data = res.json()
+                subscriber_email = sub_data.get('subscriber', {}).get('email_address', '').lower()
+                status = sub_data.get('status', '').upper()
+                
+                if status in ['ACTIVE', 'APPROVED']:
+                    # Save to discovered IDs
+                    self._save_discovered_subscription_id(subscription_id, subscriber_email)
+                    
+                    # Save to verified subscribers
+                    self._store_verified_subscriber(subscriber_email, subscription_id)
+                    
+                    return {
+                        "success": True,
+                        "email": subscriber_email,
+                        "subscription_id": subscription_id,
+                        "status": status
+                    }
+                else:
+                    return {"success": False, "error": f"Subscription status is {status}, not ACTIVE"}
+            else:
+                return {"success": False, "error": f"Subscription not found: {res.status_code}"}
+                
+        except Exception as e:
+            return {"success": False, "error": str(e)}
     
     def _store_verified_subscriber(self, email: str, subscription_id: str):
         """Store verified subscriber for future lookups"""
