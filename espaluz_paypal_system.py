@@ -5,6 +5,8 @@ Ported and adapted from WhatsApp implementation
 """
 
 import os
+from dotenv import load_dotenv
+load_dotenv()  # Load .env before reading credentials
 import json
 import requests
 import logging
