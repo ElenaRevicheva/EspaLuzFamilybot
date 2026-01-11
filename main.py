@@ -2622,8 +2622,8 @@ def process_message(user_input, chat_id, user_id, message_obj):
     # Get translation (skip if translation fails)
     translated = translate_to_es_en(user_input)
     if translated:
-        bot.send_message(chat_id, f"📝 Traducción:\n{translated}")
-        print("Translation sent")
+    bot.send_message(chat_id, f"📝 Traducción:\n{translated}")
+    print("Translation sent")
     else:
         print("Translation skipped - API error")
 
@@ -2699,8 +2699,8 @@ def process_message_with_tracking(user_input, chat_id, user_id, message_obj):
     # Get translation (skip if translation fails)
     translated = translate_to_es_en(user_input)
     if translated:
-        bot.send_message(chat_id, f"📝 Traducción:\n{translated}")
-        print("Translation sent")
+    bot.send_message(chat_id, f"📝 Traducción:\n{translated}")
+    print("Translation sent")
     else:
         print("Translation skipped - API error")
 
@@ -3511,10 +3511,58 @@ https://your-deployment-url/admin
 
 Commands:
 /extend [user_id] [days] - Extend trial
-/adduser [email] - Add subscriber"""
+/adduser [email] - Add subscriber
+/addsub [subscription_id] - Add PayPal subscription"""
         bot.reply_to(message, admin_msg)
     else:
         bot.reply_to(message, "⚠️ PayPal system not initialized.")
+
+
+@bot.message_handler(commands=["addsub"])
+def handle_addsub(message):
+    """Admin command to manually add a PayPal subscription ID for verification"""
+    user_id = str(message.from_user.id)
+    ADMIN_IDS = ["1494063516", "YOUR_ADMIN_ID"]
+    
+    if user_id not in ADMIN_IDS:
+        bot.reply_to(message, "⚠️ Admin access required.")
+        return
+    
+    parts = message.text.split()
+    if len(parts) < 2:
+        bot.reply_to(message, """Usage: /addsub I-XXXXXXXXXX
+
+Find subscription ID in PayPal:
+1. PayPal IPN History → Click message
+2. Find 'recurring_payment_id' = I-XXXXXXXXXX
+3. /addsub I-XXXXXXXXXX""")
+        return
+    
+    subscription_id = parts[1].strip()
+    
+    if not subscription_id.startswith("I-"):
+        bot.reply_to(message, "⚠️ Invalid format. Subscription ID should start with 'I-'")
+        return
+    
+    bot.reply_to(message, f"🔍 Verifying subscription {subscription_id}...")
+    
+    if PAYPAL_SYSTEM_AVAILABLE and paypal_system:
+        # Use the manual add function
+        result = paypal_system.add_subscription_manually("", subscription_id)
+        
+        if result.get("success"):
+            bot.send_message(message.chat.id, f"""✅ Subscription added successfully!
+
+📧 Email: {result.get('email')}
+🔑 Subscription ID: {result.get('subscription_id')}
+📊 Status: {result.get('status')}
+
+User can now link with: {result.get('email')}""")
+        else:
+            bot.send_message(message.chat.id, f"❌ Failed: {result.get('error')}")
+    else:
+        bot.reply_to(message, "⚠️ PayPal system not initialized.")
+
 
 @bot.message_handler(func=lambda m: m.text and "@" in m.text and "." in m.text and " " not in m.text.strip())
 def handle_email_link(message):
