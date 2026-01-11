@@ -3008,7 +3008,7 @@ Just chat! Text, voice 🎤, photos 📷
 ━━━━━━━━━━━━━━━━━━━━━━━━
 🔐 *ACCOUNT*
 ━━━━━━━━━━━━━━━━━━━━━━━━
-/link — Link payment email
+/link — Link Subscription ID
 /connect CODE — Web dashboard
 
 ━━━━━━━━━━━━━━━━━━━━━━━━
@@ -3022,7 +3022,7 @@ Just chat! Text, voice 🎤, photos 📷
 /reset – Reset the conversation  
 /progress – View your learning progress  
 /profile – Set your name, role, and age  
-/link – Link your payment email  
+/link – Link your Subscription ID  
 /connect – Connect to your web dashboard  
 /help – Show this help message
 
@@ -3036,7 +3036,7 @@ Just chat! Text, voice 🎤, photos 📷
 
 🔐 To unlock all premium features:  
 1️⃣ Subscribe via PayPal  
-2️⃣ Then use /link to send me the email you used  
+2️⃣ Send your Subscription ID (I-XXXX) to activate  
 3️⃣ Then set up your profile using /profile
 
 Let's learn Spanish together — anywhere, anytime! 💬"""
@@ -3353,7 +3353,9 @@ After trial ends:
 💳 PayPal (ready now):
 {PAYPAL_SUBSCRIPTION_LINK}
 
-📧 After subscribing, send me your PayPal email to activate!
+🔑 After subscribing, send me your Subscription ID to activate!
+   Find it: PayPal → Settings → Payments → Automatic payments
+   Format: I-XXXXXXXXXXXX
 
 Questions? Contact @revicheva"""
     bot.send_message(message.chat.id, link_msg)
@@ -3422,8 +3424,9 @@ def handle_subscribe(message):
 💳 Subscribe via PayPal:
 {PAYPAL_SUBSCRIPTION_LINK}
 
-📧 After subscribing:
-Send me your PayPal email to activate access immediately!
+🔑 After subscribing:
+Send me your Subscription ID (I-XXXXXXXXXXXX) to activate instantly!
+Find it in your PayPal confirmation or Settings → Payments → Automatic payments
 
 ✨ Your Spanish learning journey awaits!"""
     
@@ -3481,7 +3484,7 @@ Your free trial has ended.
 To continue your Spanish learning journey:
 💳 Subscribe: {PAYPAL_SUBSCRIPTION_LINK}
 
-📧 After subscribing, send me your PayPal email!""")
+🔑 After subscribing, send me your Subscription ID (I-XXXX)!""")
 
 
 @bot.message_handler(commands=["admin"])

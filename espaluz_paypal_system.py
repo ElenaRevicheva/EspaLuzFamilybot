@@ -723,8 +723,8 @@ To continue using EspaLuz, subscribe:
 💳 **PayPal** ($11/mes - $11/month + 14-day FREE trial!)
 👉 {PAYPAL_SUBSCRIPTION_LINK}
 
-📧 Después de suscribirte, envíame tu email de PayPal para activar tu acceso.
-📧 After subscribing, send me your PayPal email to activate access.
+🔑 Después de suscribirte, envíame tu ID de suscripción (I-XXXX) para activar.
+🔑 After subscribing, send me your Subscription ID (I-XXXX) to activate.
 
 ✨ ¡No abandones tu viaje de aprendizaje!
 ✨ Don't give up on your learning journey!"""
@@ -750,7 +750,7 @@ Don't lose access to your AI tutor. Subscribe now:
 
 💳 PayPal: {PAYPAL_SUBSCRIPTION_LINK}
 
-📧 After subscribing, send me your PayPal email."""
+🔑 After subscribing, send me your Subscription ID (I-XXXX)."""
         
         elif days_left <= 2:
             return f"""📅 **Actualización de prueba / Trial Update**

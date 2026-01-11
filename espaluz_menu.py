@@ -115,7 +115,7 @@ Just send me any message! I understand:
 /subscribe — View subscription options
   ↳ PayPal: $11/month (14-day FREE trial!)
 
-/link — Link your PayPal email
+/link — Link with Subscription ID (I-XXXX)
   ↳ Activates paid subscription
 
 /connect CODE — Connect to web dashboard
