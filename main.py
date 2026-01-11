@@ -3563,6 +3563,21 @@ User can now link with: {result.get('email')}""")
         bot.reply_to(message, "⚠️ PayPal system not initialized.")
 
 
+@bot.message_handler(func=lambda m: m.text and m.text.strip().upper().startswith("I-") and len(m.text.strip()) >= 10 and " " not in m.text.strip())
+def handle_subscription_id(message):
+    """Handle direct subscription ID verification - REAL PayPal API check"""
+    subscription_id = message.text.strip().upper()
+    user_id = str(message.from_user.id)
+    
+    print(f"🔑 Verifying subscription ID: {subscription_id} for user {user_id}")
+    
+    if PAYPAL_SYSTEM_AVAILABLE and paypal_system:
+        result = paypal_system.verify_subscription_id_direct(user_id, subscription_id)
+        bot.send_message(message.chat.id, result["message"])
+    else:
+        bot.reply_to(message, "⚠️ PayPal system not available. Try again later.")
+
+
 @bot.message_handler(func=lambda m: m.text and "@" in m.text and "." in m.text and " " not in m.text.strip())
 def handle_email_link(message):
     """Handle email linking for PayPal subscriptions"""

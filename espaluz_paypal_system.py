@@ -595,19 +595,111 @@ class TelegramPayPalSystem:
 🎉 ¡Ahora tienes acceso completo! Continúa tu viaje de aprendizaje."""
             }
         
-        # Email not found - provide subscription link
+        # Email not found - ask for subscription ID
         return {
             "success": False,
             "message": f"""⚠️ Email no encontrado / Email not found
 
 No encontramos una suscripción activa para: {email}
 
-Para suscribirte / To subscribe:
+🔑 Si ya te suscribiste, envía tu ID de suscripción:
+   (Lo encuentras en PayPal → Configuración → Pagos → Pagos automáticos)
+   Formato: I-XXXXXXXXXXXX
+
+🆕 Si no tienes suscripción, suscríbete aquí:
 💳 PayPal: {PAYPAL_SUBSCRIPTION_LINK}
 
-Después de suscribirte, envía tu email de PayPal aquí.
-After subscribing, send your PayPal email here."""
+If you already subscribed, send your Subscription ID (I-XXXXXXXXXXXX).
+Find it in PayPal → Settings → Payments → Automatic payments."""
         }
+    
+    def verify_subscription_id_direct(self, user_id: str, subscription_id: str) -> Dict[str, Any]:
+        """
+        REAL-TIME verification of subscription ID via PayPal API.
+        User provides their subscription ID (I-XXXX) and we verify it directly.
+        NO simulation, NO manual adding - REAL PayPal API verification.
+        """
+        user_id_str = str(user_id)
+        subscription_id = subscription_id.strip().upper()
+        
+        # Validate format
+        if not subscription_id.startswith("I-") or len(subscription_id) < 10:
+            return {
+                "success": False,
+                "message": "⚠️ Formato inválido. El ID debe empezar con I- (ejemplo: I-13BWRCW9G2K2)"
+            }
+        
+        try:
+            access_token = self.get_paypal_access_token()
+            if not access_token:
+                return {"success": False, "message": "⚠️ PayPal API no disponible. Intenta más tarde."}
+            
+            headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Accept": "application/json"
+            }
+            
+            # REAL PayPal API call to verify subscription
+            url = f"{PAYPAL_BASE_URL}/v1/billing/subscriptions/{subscription_id}"
+            res = requests.get(url, headers=headers, timeout=15)
+            
+            if res.status_code == 200:
+                data = res.json()
+                status = data.get("status", "").upper()
+                subscriber_email = data.get("subscriber", {}).get("email_address", "").lower()
+                plan_id = data.get("plan_id", "")
+                
+                if status == "ACTIVE":
+                    # Save verified subscription
+                    subscribers = self._load_json(self.subscribers_file)
+                    subscribers[subscriber_email] = {
+                        "status": "active",
+                        "paypal_subscription_id": subscription_id,
+                        "source": "direct_id_verification",
+                        "verified_at": datetime.now().isoformat(),
+                        "telegram_id": user_id_str,
+                        "plan_id": plan_id
+                    }
+                    self._save_json(self.subscribers_file, subscribers)
+                    
+                    # Save mapping
+                    self._store_email_mapping(user_id_str, subscriber_email)
+                    
+                    # Save subscription ID for future lookups
+                    self._save_discovered_subscription_id(subscription_id, subscriber_email)
+                    
+                    return {
+                        "success": True,
+                        "message": f"""✅ ¡Suscripción verificada exitosamente!
+✅ Subscription verified successfully!
+
+📧 Email: {subscriber_email}
+🔑 ID: {subscription_id}
+✅ Status: ACTIVO
+
+🎉 ¡Ahora tienes acceso completo a EspaLuz!
+🎉 You now have full access to EspaLuz!"""
+                    }
+                else:
+                    return {
+                        "success": False,
+                        "message": f"⚠️ Suscripción encontrada pero status es: {status}\nSubscription found but status is: {status}"
+                    }
+            
+            elif res.status_code == 404:
+                return {
+                    "success": False,
+                    "message": "❌ ID de suscripción no encontrado en PayPal.\n❌ Subscription ID not found in PayPal."
+                }
+            else:
+                return {
+                    "success": False,
+                    "message": f"⚠️ Error verificando suscripción: {res.status_code}"
+                }
+                
+        except Exception as e:
+            logging.error(f"Error verifying subscription ID: {e}")
+            return {"success": False, "message": f"⚠️ Error: {str(e)}"}
     
     def _store_email_mapping(self, user_id: str, email: str):
         """Store user_id -> email mapping"""
