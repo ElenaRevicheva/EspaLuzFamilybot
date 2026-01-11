@@ -72,7 +72,7 @@ except ImportError as e:
     PAYPAL_SYSTEM_AVAILABLE = False
     paypal_system = None
     demo_mode = None
-    PAYPAL_SUBSCRIPTION_LINK = "https://www.paypal.com/webapps/billing/plans/subscribe?plan_id=P-38A73508FY163121MNCJXTYY"
+    PAYPAL_SUBSCRIPTION_LINK = "https://www.paypal.com/webapps/billing/plans/subscribe?plan_id=P-6GR95409C95293139NFSBJJY"
     print(f"⚠️ PayPal/Demo modules not available: {e}")
 
 # =============================================================================

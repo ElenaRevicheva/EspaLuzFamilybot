@@ -18,7 +18,7 @@ from typing import Dict, Any, Optional
 PAYPAL_CLIENT_ID = os.getenv("PAYPAL_CLIENT_ID", "")
 PAYPAL_CLIENT_SECRET = os.getenv("PAYPAL_CLIENT_SECRET", "")
 PAYPAL_BASE_URL = "https://api.paypal.com"
-ESPALUZ_PLAN_ID = "P-38A73508FY163121MNCJXTYY"
+ESPALUZ_PLAN_ID = "P-6GR95409C95293139NFSBJJY"
 PAYPAL_SUBSCRIPTION_LINK = f"https://www.paypal.com/webapps/billing/plans/subscribe?plan_id={ESPALUZ_PLAN_ID}"
 
 # Trial Configuration
