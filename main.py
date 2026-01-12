@@ -75,6 +75,17 @@ except ImportError as e:
     PAYPAL_SUBSCRIPTION_LINK = "https://www.paypal.com/webapps/billing/plans/subscribe?plan_id=P-6GR95409C95293139NFSBJJY"
     print(f"⚠️ PayPal/Demo modules not available: {e}")
 
+# === DATABASE MODULE (NEW - Jan 2026) ===
+# PostgreSQL for investor-ready analytics - JSON fallback if unavailable
+try:
+    import espaluz_database as db
+    DATABASE_AVAILABLE = db.db.use_database
+    print(f"{'✅' if DATABASE_AVAILABLE else '⚠️'} Database: {'PostgreSQL connected' if DATABASE_AVAILABLE else 'Using JSON fallback'}")
+except ImportError as e:
+    DATABASE_AVAILABLE = False
+    db = None
+    print(f"⚠️ Database module not available: {e}")
+
 # =============================================================================
 # ONBOARDING SYSTEM (NEW - Jan 2026)
 # Asks new users: Country -> Name -> Role -> Family members
@@ -2622,8 +2633,8 @@ def process_message(user_input, chat_id, user_id, message_obj):
     # Get translation (skip if translation fails)
     translated = translate_to_es_en(user_input)
     if translated:
-        bot.send_message(chat_id, f"📝 Traducción:\n{translated}")
-        print("Translation sent")
+    bot.send_message(chat_id, f"📝 Traducción:\n{translated}")
+    print("Translation sent")
     else:
         print("Translation skipped - API error")
 
@@ -2686,6 +2697,17 @@ def process_message(user_input, chat_id, user_id, message_obj):
 def process_message_with_tracking(user_input, chat_id, user_id, message_obj):
     """Enhanced version of process_message with Supabase tracking"""
     print(f"⭐️ Processing message from user {user_id}: {user_input[:30]}...")
+    
+    # === DATABASE TRACKING (NEW - Jan 2026) ===
+    # Track user and message in PostgreSQL (doesn't affect existing flow)
+    if DATABASE_AVAILABLE and db:
+        try:
+            username = message_obj.from_user.username if message_obj.from_user else None
+            first_name = message_obj.from_user.first_name if message_obj.from_user else None
+            db.track_user(user_id, username=username, first_name=first_name)
+            db.track_message(user_id, 'text')
+        except Exception as e:
+            print(f"⚠️ DB tracking error (non-fatal): {e}")
 
     # Init session
     if user_id not in user_sessions:
@@ -2699,8 +2721,8 @@ def process_message_with_tracking(user_input, chat_id, user_id, message_obj):
     # Get translation (skip if translation fails)
     translated = translate_to_es_en(user_input)
     if translated:
-        bot.send_message(chat_id, f"📝 Traducción:\n{translated}")
-        print("Translation sent")
+    bot.send_message(chat_id, f"📝 Traducción:\n{translated}")
+    print("Translation sent")
     else:
         print("Translation skipped - API error")
 
@@ -3577,6 +3599,18 @@ def handle_subscription_id(message):
     if PAYPAL_SYSTEM_AVAILABLE and paypal_system:
         result = paypal_system.verify_subscription_id_direct(user_id, subscription_id)
         bot.send_message(message.chat.id, result["message"])
+        
+        # === DATABASE: Record subscription if verified (NEW) ===
+        if result.get("success") and DATABASE_AVAILABLE and db:
+            try:
+                # Extract email from result message
+                import re
+                email_match = re.search(r'Email: (\S+@\S+)', result.get("message", ""))
+                email = email_match.group(1) if email_match else "unknown"
+                db.record_subscription(user_id, email, subscription_id, "P-6GR95409C95293139NFSBJJY", "direct_id")
+                print(f"📊 DB: Recorded subscription for {user_id}")
+            except Exception as e:
+                print(f"⚠️ DB subscription tracking error (non-fatal): {e}")
     else:
         bot.reply_to(message, "⚠️ PayPal system not available. Try again later.")
 
@@ -3598,14 +3632,14 @@ def handle_email_link(message):
         subscribers_file = "subscribers.json"
         if os.path.exists(subscribers_file):
             with open(subscribers_file, "r+") as f:
-                data = json.load(f)
-                if user_email in data:
-                    data[user_email]["telegram_id"] = user_id
-                    f.seek(0)
-                    json.dump(data, f, indent=2)
-                    f.truncate()
-                    bot.send_message(message.chat.id, "✅ Email linked! You now have full access to Espaluz.")
-                else:
+            data = json.load(f)
+            if user_email in data:
+                data[user_email]["telegram_id"] = user_id
+                f.seek(0)
+                json.dump(data, f, indent=2)
+                f.truncate()
+                bot.send_message(message.chat.id, "✅ Email linked! You now have full access to Espaluz.")
+            else:
                     bot.send_message(message.chat.id, f"⚠️ Email not found. Subscribe first:\n{PAYPAL_SUBSCRIPTION_LINK}")
         else:
             bot.send_message(message.chat.id, f"⚠️ No subscribers file found. Subscribe first:\n{PAYPAL_SUBSCRIPTION_LINK}")
@@ -3621,6 +3655,13 @@ def handle_voice(message):
     if ENHANCED_BRAIN_AVAILABLE:
         try:
             track_activity(user_id)
+        except:
+            pass
+    
+    # === DATABASE TRACKING (NEW) ===
+    if DATABASE_AVAILABLE and db:
+        try:
+            db.track_message(user_id, 'voice')
         except:
             pass
     
