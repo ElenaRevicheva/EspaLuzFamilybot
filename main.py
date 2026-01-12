@@ -2704,10 +2704,13 @@ def process_message_with_tracking(user_input, chat_id, user_id, message_obj):
         try:
             username = message_obj.from_user.username if message_obj.from_user else None
             first_name = message_obj.from_user.first_name if message_obj.from_user else None
-            db.track_user(user_id, username=username, first_name=first_name)
-            db.track_message(user_id, 'text')
+            result = db.track_user(user_id, username=username, first_name=first_name)
+            msg_result = db.track_message(user_id, 'text')
+            print(f"📊 DB tracked user {user_id}: user={result}, msg={msg_result}")
         except Exception as e:
             print(f"⚠️ DB tracking error (non-fatal): {e}")
+    else:
+        print(f"⚠️ DB not available: DATABASE_AVAILABLE={DATABASE_AVAILABLE}, db={db is not None}")
 
     # Init session
     if user_id not in user_sessions:
