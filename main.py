@@ -2721,8 +2721,8 @@ def process_message_with_tracking(user_input, chat_id, user_id, message_obj):
     # Get translation (skip if translation fails)
     translated = translate_to_es_en(user_input)
     if translated:
-    bot.send_message(chat_id, f"📝 Traducción:\n{translated}")
-    print("Translation sent")
+        bot.send_message(chat_id, f"📝 Traducción:\n{translated}")
+        print("Translation sent")
     else:
         print("Translation skipped - API error")
 
