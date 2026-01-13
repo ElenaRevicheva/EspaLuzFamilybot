@@ -541,6 +541,36 @@ def update_connected_bot_activity(user_id):
 # =============================================================================
 # STRIP ASTERISKS FROM AI RESPONSES (Force clean formatting)
 # =============================================================================
+
+def strip_emojis(text: str) -> str:
+    """Remove ALL emojis from text (for TTS so they're not pronounced)"""
+    import re
+    # Comprehensive emoji pattern covering all Unicode emoji ranges
+    emoji_pattern = re.compile(
+        "["
+        "😀-🙏"  # emoticons
+        "🌀-🗿"  # symbols & pictographs
+        "🚀-🛿"  # transport & map symbols
+        "🜀-🝿"  # alchemical symbols
+        "🞀-🟿"  # Geometric Shapes Extended
+        "🠀-🣿"  # Supplemental Arrows-C
+        "🤀-🧿"  # Supplemental Symbols and Pictographs
+        "🨀-🩯"  # Chess Symbols
+        "🩰-🫿"  # Symbols and Pictographs Extended-A
+        "✂-➰"  # Dingbats
+        "Ⓜ-🉑"  # Enclosed characters
+        "🇠-🇿"  # Flags
+        "☀-⛿"  # Misc symbols (sun, stars, etc)
+        "✀-➿"  # Dingbats
+        "︀-️"  # Variation Selectors
+        "🀀-🀯"  # Mahjong
+        "🂠-🃿"  # Playing cards
+        "✅❌💡🗣️📖🌎🎯☕🎓🏖️"  # Common ones we use
+        "]+"
+    , re.UNICODE)
+    return emoji_pattern.sub('', text).strip()
+
+
 def strip_markdown_formatting(text: str) -> str:
     """Remove **bold** and *italic* markdown from text"""
     import re
@@ -1550,8 +1580,19 @@ ABSOLUTELY NEVER use asterisks (**text** or *text*) anywhere in your response!
 Asterisks appear as raw ** symbols to the user - this looks BROKEN!
 
 INSTEAD of **bold text**, just write: bold text (no formatting)
-Use EMOJIS for emphasis and structure:
-✅ correct   ❌ wrong   💡 tip   🗣️ pronunciation   📖 vocabulary   🌎 culture   🎯 practice
+Use EMOJIS GENEROUSLY for structure and visual appeal:
+✅ for correct answers and confirmations
+❌ for errors to avoid  
+💡 for tips and suggestions
+🗣️ for pronunciation guidance
+📖 for vocabulary sections
+🌎 for cultural notes
+🎯 for practice suggestions
+☕ 🍽️ 🏖️ 🏫 🏥 🏦 for topics (coffee, food, beach, school, hospital, bank)
+🎓 for learning achievements
+
+Use emojis to START each section header - makes the response scannable and friendly!
+Example: "🏫 Top bilingual schools:" not just "Top bilingual schools:"
 
 Example of WRONG formatting: **"Hola"** means hello
 Example of CORRECT formatting: ✅ "Hola" means hello
@@ -2362,7 +2403,9 @@ NO emojis in the video script - they will be pronounced!
 
 📝 FORMATTING RULES:
 - NEVER use **asterisks** for bold - they show raw!
-- Use emojis for structure: ✅ ❌ 💡 🗣️ 📖 🌎"""
+- Use EMOJIS GENEROUSLY: ✅ ❌ 💡 🗣️ 📖 🌎 🎯 ☕ 🍽️ 🏖️ 🏫 🏥 🏦 🎓
+- Start each section with a relevant emoji
+- Emojis will be stripped from video script automatically"""
                     },
                     {"role": "user", "content": content_input}
                 ],
@@ -2683,10 +2726,8 @@ def extract_video_script(full_response):
 
         if start_index < end_index:
             script = full_response[start_index:end_index].strip()
-            # Remove emojis from video script (so they're not pronounced)
-            import re
-            script = re.sub(r'[\U0001F300-\U0001F9FF]|[\U00002600-\U000027BF]|[\U0001F600-\U0001F64F]', '', script)
-            script = script.strip()
+            # Remove ALL emojis from video script (so they're not pronounced)
+            script = strip_emojis(script)
             return script
 
     # Fallback approach: try to find sections that look like Spanish/English pairs
@@ -2712,6 +2753,9 @@ def extract_video_script(full_response):
 def fast_tts_for_video(text, output_file):
     """Generate TTS specifically for video - keeping it brief"""
     try:
+        # Strip emojis so they're not pronounced
+        text = strip_emojis(text)
+        
         # For video audio, we want a concise version
         words = text.split()
         if len(words) > 150:
