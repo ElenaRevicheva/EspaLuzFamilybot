@@ -1528,7 +1528,12 @@ def format_mcp_request(session, new_message, translated_input=None, use_extended
     member_info = FAMILY_MEMBERS.get(family_role, FAMILY_MEMBERS["elena"])
 
     # Customize system prompt based on family member and emotional state
-    system_content = "You are Espaluz, a bilingual emotionally intelligent AI language tutor for a Russian expat family in Panama."
+    system_content = """You are Espaluz, a bilingual emotionally intelligent AI language tutor.
+
+⚠️ FORMATTING RULE: NEVER use asterisks (**text**) for bold - they appear as raw asterisks!
+Instead, use EMOJIS for structure: ✅ ❌ 💡 🗣️ 📖 🌎 🎯
+Keep text clean without Markdown symbols.
+"""
 
     # Add family member customization
     if family_role == "alisa":
@@ -1869,6 +1874,20 @@ I'll adjust my tone to be: {emotional_calibration.get('response_tone', 'supporti
        - ALWAYS use the user's ACTUAL NAME (not Elena!)
        - Tone: warm, clear, and simple for spoken delivery
        - It will be spoken by an avatar on video, so make it suitable for audio (not robotic or boring!)
+       - NO EMOJIS in the video script section (they will be pronounced!)
+       
+📝 CRITICAL FORMATTING RULES:
+   - NEVER use asterisks (**bold**) for emphasis - they show as raw asterisks!
+   - Use EMOJIS to structure your response instead:
+     ✅ for correct answers
+     ❌ for errors to fix
+     💡 for tips
+     🗣️ for pronunciation
+     📖 for vocabulary
+     🌎 for cultural notes
+     🎯 for practice suggestions
+   - Keep formatting clean and readable
+   - Use line breaks and spacing for structure
        - Example:
 
     [VIDEO SCRIPT START]
@@ -2310,11 +2329,16 @@ Your answers must have TWO PARTS:
 2️⃣ Then add a short second section inside [VIDEO SCRIPT START] and [VIDEO SCRIPT END], like:
 
 [VIDEO SCRIPT START]
-¡Hola! Hoy vamos a aprender algo nuevo.
+Hola! Hoy vamos a aprender algo nuevo.
 Hello! Today we will learn something new.
 [VIDEO SCRIPT END]
 
-This second block will be spoken in video, so keep it short, warm, and clear."""
+This second block will be spoken in video, so keep it short, warm, and clear.
+NO emojis in the video script - they will be pronounced!
+
+📝 FORMATTING RULES:
+- NEVER use **asterisks** for bold - they show raw!
+- Use emojis for structure: ✅ ❌ 💡 🗣️ 📖 🌎"""
                     },
                     {"role": "user", "content": content_input}
                 ],
@@ -2635,6 +2659,10 @@ def extract_video_script(full_response):
 
         if start_index < end_index:
             script = full_response[start_index:end_index].strip()
+            # Remove emojis from video script (so they're not pronounced)
+            import re
+            script = re.sub(r'[\U0001F300-\U0001F9FF]|[\U00002600-\U000027BF]|[\U0001F600-\U0001F64F]', '', script)
+            script = script.strip()
             return script
 
     # Fallback approach: try to find sections that look like Spanish/English pairs
