@@ -6,6 +6,14 @@ import requests
 import subprocess
 from datetime import datetime, timedelta
 from gtts import gTTS
+# Neural TTS for beautiful voices (Microsoft Edge)
+try:
+    from espaluz_neural_tts import generate_voice_sync
+    NEURAL_TTS_AVAILABLE = True
+    print("✓ Neural TTS loaded - beautiful voices enabled!")
+except ImportError:
+    NEURAL_TTS_AVAILABLE = False
+    print("⚠️ Neural TTS not available, using gTTS fallback")
 from dotenv import load_dotenv
 import telebot
 import re
@@ -66,6 +74,7 @@ except ImportError as e:
 try:
     from espaluz_paypal_system import paypal_system, PAYPAL_SUBSCRIPTION_LINK
     from espaluz_demo_mode import demo_mode, detect_demo_emotion
+    from espaluz_conversation_mode import conversation_mode, detect_language, get_opposite_language, get_quick_translate_prompt
     PAYPAL_SYSTEM_AVAILABLE = True
     print("✅ PayPal system and Demo mode loaded successfully!")
 except ImportError as e:
@@ -527,6 +536,38 @@ def update_connected_bot_activity(user_id):
         print(f"❌ Error updating bot activity: {e}")
 
 # === TELEBOT SETUP ===
+
+# =============================================================================
+# NEURAL TTS WRAPPER - Use this instead of gTTS directly
+# =============================================================================
+def generate_speech(text: str, lang: str = "es", message_id=None) -> str:
+    """
+    Generate speech using Neural TTS (beautiful) or gTTS (fallback).
+    Returns path to audio file.
+    """
+    import os
+    temp_path = f"speech_{message_id or hash(text) % 100000}.mp3"
+    
+    # Try Neural TTS first (beautiful Microsoft voices)
+    if NEURAL_TTS_AVAILABLE:
+        try:
+            result = generate_voice_sync(text, lang=lang, style="tutor", message_id=message_id)
+            if result and os.path.exists(result):
+                return result
+        except Exception as e:
+            print(f"Neural TTS failed, falling back to gTTS: {e}")
+    
+    # Fallback to gTTS
+    try:
+        from gtts import gTTS
+        tts = gTTS(text=text, lang=lang, slow=False)
+        tts.save(temp_path)
+        return temp_path
+    except Exception as e:
+        print(f"gTTS also failed: {e}")
+        return None
+
+
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 
 # =============================================================================
@@ -3631,6 +3672,131 @@ def handle_scenarios(message):
 
 
 # === SUBSCRIPTION COMMANDS (NEW - Jan 2026) ===
+
+# =============================================================================
+# CONVERSATION MODE - Real-time translation like Google Translate
+# =============================================================================
+
+@bot.message_handler(commands=["convo"])
+def handle_convo(message):
+    """Toggle conversation mode for real-time voice translation"""
+    user_id = str(message.from_user.id)
+    args = message.text.split()[1:] if len(message.text.split()) > 1 else []
+    
+    if args and args[0].lower() == "off":
+        result = conversation_mode.deactivate(user_id)
+        bot.send_message(message.chat.id, result)
+        return
+    
+    # Determine target language
+    target_lang = "es"  # Default
+    if args:
+        arg = args[0].lower()
+        if arg in ["es", "spanish", "español"]:
+            target_lang = "es"
+        elif arg in ["en", "english", "inglés", "ingles"]:
+            target_lang = "en"
+    
+    result = conversation_mode.activate(user_id, target_lang)
+    bot.send_message(message.chat.id, result, parse_mode="Markdown")
+
+
+def handle_conversation_voice(message):
+    """Fast voice translation for conversation mode"""
+    import anthropic
+    from gtts import gTTS
+    import subprocess
+    import os
+    
+    user_id = str(message.from_user.id)
+    chat_id = message.chat.id
+    
+    try:
+        # 1. Download and convert voice
+        file_info = bot.get_file(message.voice.file_id)
+        voice_file = bot.download_file(file_info.file_path)
+        
+        temp_ogg = f"convo_{message.message_id}.ogg"
+        temp_mp3 = f"convo_{message.message_id}.mp3"
+        temp_output = f"convo_out_{message.message_id}.ogg"
+        
+        with open(temp_ogg, "wb") as f:
+            f.write(voice_file)
+        
+        subprocess.run(["ffmpeg", "-y", "-i", temp_ogg, temp_mp3], 
+                      capture_output=True, check=True)
+        
+        # 2. Transcribe with Whisper
+        transcription = transcribe_audio(temp_mp3)
+        if not transcription:
+            bot.reply_to(message, "❌ Couldn't hear that. Try again?")
+            return
+        
+        # 3. Detect language
+        detected_lang = detect_language(transcription)
+        target_lang = conversation_mode.get_target_language(user_id)
+        translate_to = get_opposite_language(detected_lang, target_lang)
+        
+        # 4. Quick translate with Claude
+        client = anthropic.Anthropic(api_key=os.environ.get("CLAUDE_API_KEY"))
+        prompt = get_quick_translate_prompt(transcription, detected_lang, translate_to)
+        
+        response = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=500,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        
+        translation = response.content[0].text.strip()
+        
+        # 5. Generate voice response
+        tts_lang = "es" if translate_to == "es" else "en"
+        # Use Neural TTS for beautiful voice
+        if NEURAL_TTS_AVAILABLE:
+            try:
+                neural_path = generate_voice_sync(translation, lang=tts_lang, style="conversation", message_id=message.message_id)
+                if neural_path:
+                    import shutil
+                    shutil.copy(neural_path, temp_mp3)
+                    if neural_path != temp_mp3:
+                        os.remove(neural_path)
+                else:
+                    raise Exception("Neural TTS returned None")
+            except Exception as e:
+                print(f"Neural TTS failed: {e}, using gTTS")
+                tts = gTTS(text=translation, lang=tts_lang, slow=False)
+                tts.save(temp_mp3)
+        else:
+            tts = gTTS(text=translation, lang=tts_lang, slow=False)
+            tts.save(temp_mp3)
+        
+        # Convert to OGG for Telegram voice note
+        subprocess.run([
+            "ffmpeg", "-y", "-i", temp_mp3,
+            "-c:a", "libopus", "-b:a", "64k",
+            temp_output
+        ], capture_output=True, check=True)
+        
+        # 6. Send voice note + text
+        lang_flag = "🇪🇸" if translate_to == "es" else "🇬🇧"
+        bot.send_message(chat_id, f"🎤 *{transcription}*\n{lang_flag} {translation}", parse_mode="Markdown")
+        
+        with open(temp_output, "rb") as voice:
+            bot.send_voice(chat_id, voice)
+        
+        # Track usage
+        conversation_mode.increment_count(user_id)
+        
+        # Cleanup
+        for f in [temp_ogg, temp_mp3, temp_output]:
+            if os.path.exists(f):
+                os.remove(f)
+                
+    except Exception as e:
+        print(f"Conversation mode error: {e}")
+        bot.reply_to(message, f"❌ Translation error. Try again?")
+
+
 @bot.message_handler(commands=["subscribe"])
 def handle_subscribe(message):
     """Show subscription options"""
@@ -3859,9 +4025,233 @@ def handle_email_link(message):
         print(f"❌ Error linking email: {e}")
         bot.send_message(message.chat.id, "⚠️ Something went wrong. Please try again.")
 
+
+# =============================================================================
+# 🎙️ CONVERSATION MODE - Real-time voice translation (NEW - Jan 2026)
+# =============================================================================
+
+# Track which users are in conversation mode
+conversation_mode_users = {}
+
+def detect_language(text):
+    """Detect language of input text (simple heuristic + can use Claude for accuracy)"""
+    # Russian characters
+    if any('\u0400' <= char <= '\u04FF' for char in text):
+        return 'ru'
+    
+    # Spanish-specific patterns
+    spanish_markers = ['¿', '¡', 'ñ', 'á', 'é', 'í', 'ó', 'ú']
+    spanish_words = ['el', 'la', 'los', 'las', 'un', 'una', 'que', 'de', 'en', 'es', 'por', 'para', 'como', 'pero', 'más', 'este', 'esto', 'esta', 'ese', 'eso', 'esa', 'yo', 'tú', 'él', 'ella', 'nosotros', 'ustedes', 'ellos', 'hola', 'gracias', 'buenos', 'buenas']
+    
+    text_lower = text.lower()
+    spanish_score = sum(1 for marker in spanish_markers if marker in text)
+    spanish_score += sum(1 for word in spanish_words if f' {word} ' in f' {text_lower} ' or text_lower.startswith(f'{word} ') or text_lower.endswith(f' {word}'))
+    
+    # English patterns
+    english_words = ['the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'must', 'shall', 'can', 'need', 'dare', 'ought', 'used', 'to', 'of', 'in', 'for', 'on', 'with', 'at', 'by', 'from', 'as', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'between', 'under', 'again', 'further', 'then', 'once', 'here', 'there', 'when', 'where', 'why', 'how', 'all', 'each', 'few', 'more', 'most', 'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very', 'just', 'hello', 'hi', 'thanks', 'thank', 'please', 'yes', 'no', 'okay', 'ok']
+    
+    english_score = sum(1 for word in english_words if f' {word} ' in f' {text_lower} ' or text_lower.startswith(f'{word} ') or text_lower.endswith(f' {word}'))
+    
+    if spanish_score > english_score:
+        return 'es'
+    elif english_score > spanish_score:
+        return 'en'
+    else:
+        # Default to English if unclear
+        return 'en'
+
+def quick_translate_for_convo(text, source_lang, target_lang):
+    """Fast translation for conversation mode - minimal latency"""
+    try:
+        # Use Claude for accurate translation
+        prompt = f"""Translate the following text from {source_lang} to {target_lang}.
+ONLY output the translation, nothing else. No explanations, no quotes, just the translated text.
+
+Text: {text}
+
+Translation:"""
+        
+        response = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "Content-Type": "application/json",
+                "x-api-key": CLAUDE_API_KEY,
+                "anthropic-version": "2023-06-01"
+            },
+            json={
+                "model": "claude-sonnet-4-20250514",
+                "max_tokens": 500,
+                "messages": [{"role": "user", "content": prompt}]
+            },
+            timeout=10
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            translation = result["content"][0]["text"].strip()
+            return translation
+        else:
+            print(f"Translation API error: {response.status_code}")
+            return None
+    except Exception as e:
+        print(f"Quick translate error: {e}")
+        return None
+
+def generate_voice_note(text, lang='es'):
+    """Generate a voice note file for Telegram"""
+    try:
+        # Use gTTS for voice generation
+        tts = gTTS(text=text, lang=lang, slow=False)
+        timestamp = int(time.time() * 1000)
+        filename = f"convo_voice_{timestamp}.mp3"
+        tts.save(filename)
+        return filename
+    except Exception as e:
+        print(f"Voice generation error: {e}")
+        return None
+
+@bot.message_handler(commands=["convo"])
+def handle_convo_toggle(message):
+    """Toggle conversation mode on/off"""
+    user_id = str(message.from_user.id)
+    
+    # Parse command argument
+    args = message.text.split()
+    if len(args) > 1:
+        arg = args[1].lower()
+        if arg in ['on', 'start', 'begin', '1']:
+            conversation_mode_users[user_id] = {
+                'active': True,
+                'target_lang': 'es',  # Default: translate TO Spanish
+                'started': datetime.now().isoformat()
+            }
+            bot.send_message(message.chat.id, """🎙️ **CONVERSATION MODE ACTIVATED**
+
+How it works:
+1. Send a voice message in ANY language
+2. I'll translate and speak back in the OTHER language
+
+🇬🇧 English → 🇪🇸 Spanish
+🇪🇸 Spanish → 🇬🇧 English  
+🇷🇺 Russian → 🇪🇸 Spanish
+
+Perfect for:
+• Pharmacy visits
+• Doctor appointments
+• Parent-teacher meetings
+• Shopping
+• Any real conversation!
+
+Send /convo off to exit.
+Send /convo es to translate TO Spanish (default)
+Send /convo en to translate TO English
+
+🎤 Start speaking now!""")
+            return
+            
+        elif arg in ['off', 'stop', 'end', '0']:
+            if user_id in conversation_mode_users:
+                del conversation_mode_users[user_id]
+            bot.send_message(message.chat.id, "🔇 Conversation mode OFF. Back to normal tutor mode!")
+            return
+            
+        elif arg == 'es':
+            if user_id in conversation_mode_users:
+                conversation_mode_users[user_id]['target_lang'] = 'es'
+            else:
+                conversation_mode_users[user_id] = {'active': True, 'target_lang': 'es', 'started': datetime.now().isoformat()}
+            bot.send_message(message.chat.id, "🇪🇸 Target language set to SPANISH. I'll translate everything to Spanish.")
+            return
+            
+        elif arg == 'en':
+            if user_id in conversation_mode_users:
+                conversation_mode_users[user_id]['target_lang'] = 'en'
+            else:
+                conversation_mode_users[user_id] = {'active': True, 'target_lang': 'en', 'started': datetime.now().isoformat()}
+            bot.send_message(message.chat.id, "🇬🇧 Target language set to ENGLISH. I'll translate everything to English.")
+            return
+    
+    # No argument - show current status
+    if user_id in conversation_mode_users and conversation_mode_users[user_id].get('active'):
+        target = conversation_mode_users[user_id].get('target_lang', 'es')
+        target_name = 'Spanish' if target == 'es' else 'English'
+        bot.send_message(message.chat.id, f"""🎙️ Conversation mode is ON
+Target language: {target_name}
+
+Commands:
+/convo off - Turn off
+/convo es - Translate to Spanish
+/convo en - Translate to English""")
+    else:
+        bot.send_message(message.chat.id, """🎙️ Conversation mode is OFF
+
+/convo on - Activate real-time voice translation
+/convo es - Activate & translate to Spanish
+/convo en - Activate & translate to English""")
+
+def is_in_conversation_mode(user_id):
+    """Check if user is in conversation mode"""
+    return user_id in conversation_mode_users and conversation_mode_users[user_id].get('active', False)
+
+def process_conversation_mode_voice(message, transcription):
+    """Process voice message in conversation mode - fast translation + voice response"""
+    user_id = str(message.from_user.id)
+    chat_id = message.chat.id
+    
+    try:
+        # Get user's target language
+        target_lang = conversation_mode_users.get(user_id, {}).get('target_lang', 'es')
+        
+        # Detect source language
+        source_lang = detect_language(transcription)
+        source_name = {'en': 'English', 'es': 'Spanish', 'ru': 'Russian'}.get(source_lang, 'Unknown')
+        target_name = {'en': 'English', 'es': 'Spanish'}.get(target_lang, 'Spanish')
+        
+        print(f"🎙️ CONVO MODE: {source_name} → {target_name}")
+        
+        # If source and target are the same, flip target
+        if source_lang == target_lang:
+            target_lang = 'en' if target_lang == 'es' else 'es'
+            target_name = {'en': 'English', 'es': 'Spanish'}.get(target_lang, 'Spanish')
+        
+        # Send processing indicator
+        bot.send_message(chat_id, f"🎙️ {source_name} → {target_name}...")
+        
+        # Quick translate
+        translation = quick_translate_for_convo(transcription, source_lang, target_lang)
+        
+        if not translation:
+            bot.send_message(chat_id, "❌ Translation failed. Try again.")
+            return
+        
+        # Send text translation
+        bot.send_message(chat_id, f"📝 {translation}")
+        
+        # Generate and send voice note
+        voice_file = generate_voice_note(translation, target_lang)
+        
+        if voice_file and os.path.exists(voice_file):
+            with open(voice_file, 'rb') as audio:
+                bot.send_voice(chat_id, audio)
+            os.remove(voice_file)
+            print(f"✅ CONVO MODE: Voice sent successfully")
+        else:
+            print(f"⚠️ CONVO MODE: Could not generate voice")
+            
+    except Exception as e:
+        print(f"❌ CONVO MODE error: {e}")
+        bot.send_message(chat_id, f"❌ Error: {e}")
+
+
 @bot.message_handler(content_types=["voice"])
 def handle_voice(message):
     user_id = str(message.from_user.id)
+    
+    # === CONVERSATION MODE CHECK ===
+    # If conversation mode is active, use fast translation instead of full tutor mode
+    if conversation_mode.is_active(user_id):
+        handle_conversation_voice(message)
+        return
 
     # Track activity for analytics
     if ENHANCED_BRAIN_AVAILABLE:
@@ -3907,6 +4297,17 @@ def handle_voice(message):
             return
 
         print(f"📝 Voice transcription: {transcription}")
+        
+        # === CHECK FOR CONVERSATION MODE ===
+        if is_in_conversation_mode(user_id):
+            print(f"🎙️ User {user_id} is in CONVERSATION MODE")
+            process_conversation_mode_voice(message, transcription)
+            # Clean up
+            os.remove(temp_ogg_path)
+            os.remove(temp_mp3_path)
+            return
+        
+        # === NORMAL TUTOR MODE ===
         bot.send_message(message.chat.id, f"🗣️ Transcripción:\n{transcription}")
 
         process_message_with_tracking(transcription, message.chat.id, str(message.from_user.id), message)

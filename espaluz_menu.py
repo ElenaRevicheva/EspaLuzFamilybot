@@ -122,6 +122,23 @@ Just send me any message! I understand:
   ↳ Sync your progress across devices
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🎙️ *CONVERSATION MODE (NEW!)*
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+/convo on — Start real-time voice translation
+  ↳ Like Google Translate conversation mode!
+
+/convo off — Return to normal tutor mode
+/convo es — Translate TO Spanish
+/convo en — Translate TO English
+
+*How it works:*
+• 🇬🇧 Speak English → Spanish voice reply
+• 🇪🇸 Speak Spanish → English voice reply
+• 🇷🇺 Speak Russian → Spanish voice reply
+
+Perfect for: pharmacy, doctor, shopping!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🎬 *DEMO MODE (For Workshops)*
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 /demo — Toggle demo presentation mode
@@ -141,6 +158,7 @@ Just send me any message! I understand:
 *Culture:* /country /slang /culture  
 *Orgs:* /org /feedback /refer
 *Account:* /trial /subscribe /link /connect
+*Convo:* /convo on /convo off /convo es /convo en
 *Demo:* /demo /scenarios
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
