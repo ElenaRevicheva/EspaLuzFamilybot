@@ -431,6 +431,8 @@ debug_file_paths()
 # === SUPABASE INTEGRATION FUNCTIONS ===
 def track_telegram_conversation(user_id, user_message, bot_reply, session_data):
     """Track Telegram conversation in Supabase database"""
+    # DISABLED: Using PostgreSQL now - Jan 2026
+    return
     try:
         learning_progress = session_data.get("context", {}).get("learning", {}).get("progress", {})
         emotional_state = session_data.get("context", {}).get("emotional_state", {})
@@ -590,6 +592,9 @@ print("🛡️ Webhook killer thread started in background")
 # === GUMROAD SYNC FUNCTION ===
 def poll_subscriptions():
     """Poll Gumroad API and update local subscriber list"""
+    # DISABLED: Gumroad is suspended - Jan 2026
+    print("⏸️ Gumroad polling DISABLED (suspended)")
+    return
     try:
         GUMROAD_API_KEY = os.environ.get("GUMROAD_API_KEY")
         GUMROAD_PRODUCT_ID = os.environ.get("GUMROAD_PRODUCT_ID")
@@ -1708,6 +1713,8 @@ def update_session_learning(session, learned_items):
     return session
 
 def post_progress_to_supabase(user_id, payload):
+    # DISABLED: Using PostgreSQL now - Jan 2026
+    return
     try:
         print(f"📡 Sending progress data to Supabase for user {user_id}...")
         response = requests.post(
@@ -2633,8 +2640,8 @@ def process_message(user_input, chat_id, user_id, message_obj):
     # Get translation (skip if translation fails)
     translated = translate_to_es_en(user_input)
     if translated:
-    bot.send_message(chat_id, f"📝 Traducción:\n{translated}")
-    print("Translation sent")
+        bot.send_message(chat_id, f"📝 Traducción:\n{translated}")
+        print("Translation sent")
     else:
         print("Translation skipped - API error")
 
@@ -2692,10 +2699,10 @@ def process_message(user_input, chat_id, user_id, message_obj):
             "emotional_tone": session["context"]["emotional_state"]["current_emotion"],
             "duration_minutes": 10
         }
-        post_progress_to_supabase(user_id, progress_payload)
+        # post_progress_to_supabase(user_id, progress_payload)  # Disabled - using PostgreSQL
 
 def process_message_with_tracking(user_input, chat_id, user_id, message_obj):
-    """Enhanced version of process_message with Supabase tracking"""
+    """Enhanced version of process_message with PostgreSQL tracking"""
     print(f"⭐️ Processing message from user {user_id}: {user_input[:30]}...")
     
     # === DATABASE TRACKING (NEW - Jan 2026) ===
@@ -2704,13 +2711,10 @@ def process_message_with_tracking(user_input, chat_id, user_id, message_obj):
         try:
             username = message_obj.from_user.username if message_obj.from_user else None
             first_name = message_obj.from_user.first_name if message_obj.from_user else None
-            result = db.track_user(user_id, username=username, first_name=first_name)
-            msg_result = db.track_message(user_id, 'text')
-            print(f"📊 DB tracked user {user_id}: user={result}, msg={msg_result}")
+            db.track_user(user_id, username=username, first_name=first_name)
+            db.track_message(user_id, 'text')
         except Exception as e:
             print(f"⚠️ DB tracking error (non-fatal): {e}")
-    else:
-        print(f"⚠️ DB not available: DATABASE_AVAILABLE={DATABASE_AVAILABLE}, db={db is not None}")
 
     # Init session
     if user_id not in user_sessions:
@@ -2784,7 +2788,7 @@ def process_message_with_tracking(user_input, chat_id, user_id, message_obj):
 
     # Enhanced progress tracking
     if learned_items.get("spanish_words") or learned_items.get("grammar_points"):
-        print("📊 Learning progress detected - tracked in Supabase")
+        print("📊 Learning progress detected")
 
 # === HANDLERS ===
 @bot.message_handler(commands=["start"])
@@ -2962,7 +2966,7 @@ def handle_connect(message):
 
         # 🔍 Debug logs to check if everything is correct
         print("📤 Sending connect payload:", payload)
-        print("🔐 Supabase key present:", os.environ.get('SUPABASE_ANON_KEY') is not None)
+        # Supabase key check removed - using PostgreSQL
 
         response = requests.post(
             "https://euyidvolwqmzijkfrplh.supabase.co/functions/v1/connect-bot",
@@ -3635,14 +3639,14 @@ def handle_email_link(message):
         subscribers_file = "subscribers.json"
         if os.path.exists(subscribers_file):
             with open(subscribers_file, "r+") as f:
-            data = json.load(f)
-            if user_email in data:
-                data[user_email]["telegram_id"] = user_id
-                f.seek(0)
-                json.dump(data, f, indent=2)
-                f.truncate()
-                bot.send_message(message.chat.id, "✅ Email linked! You now have full access to Espaluz.")
-            else:
+                data = json.load(f)
+                if user_email in data:
+                    data[user_email]["telegram_id"] = user_id
+                    f.seek(0)
+                    json.dump(data, f, indent=2)
+                    f.truncate()
+                    bot.send_message(message.chat.id, "✅ Email linked! You now have full access to Espaluz.")
+                else:
                     bot.send_message(message.chat.id, f"⚠️ Email not found. Subscribe first:\n{PAYPAL_SUBSCRIPTION_LINK}")
         else:
             bot.send_message(message.chat.id, f"⚠️ No subscribers file found. Subscribe first:\n{PAYPAL_SUBSCRIPTION_LINK}")
@@ -3661,12 +3665,16 @@ def handle_voice(message):
         except:
             pass
     
-    # === DATABASE TRACKING (NEW) ===
+    # === DATABASE TRACKING ===
     if DATABASE_AVAILABLE and db:
         try:
+            username = message.from_user.username if message.from_user else None
+            first_name = message.from_user.first_name if message.from_user else None
+            db.track_user(user_id, username=username, first_name=first_name)
             db.track_message(user_id, 'voice')
-        except:
-            pass
+            print(f"DB: Tracked voice from {user_id}", flush=True)
+        except Exception as e:
+            print(f"DB voice tracking error: {e}", flush=True)
     
     # Free trial is now active for everyone!
     # Legacy subscription check kept for future PayPal integration
@@ -3707,8 +3715,20 @@ def handle_voice(message):
 
 @bot.message_handler(content_types=["text"])
 def handle_text(message):
+    print(f">>> HANDLE_TEXT ENTERED: {message.from_user.id} - {message.text[:30] if message.text else 'None'}", flush=True)
     user_id = str(message.from_user.id)
     text = message.text.strip()
+    
+    # === DATABASE TRACKING (first thing!) ===
+    if DATABASE_AVAILABLE and db:
+        try:
+            username = message.from_user.username if message.from_user else None
+            first_name = message.from_user.first_name if message.from_user else None
+            db.track_user(user_id, username=username, first_name=first_name)
+            db.track_message(user_id, 'text')
+            print(f"DB: Tracked text from {user_id}", flush=True)
+        except Exception as e:
+            print(f"DB tracking error: {e}", flush=True)
     
     # Track activity for analytics
     if ENHANCED_BRAIN_AVAILABLE:
@@ -3838,6 +3858,17 @@ def handle_photo(message):
     try:
         user_id = str(message.from_user.id)
         print(f"[INFO] Received photo from user {user_id} at {message.date}", flush=True)
+        
+        # === DATABASE TRACKING ===
+        if DATABASE_AVAILABLE and db:
+            try:
+                username = message.from_user.username if message.from_user else None
+                first_name = message.from_user.first_name if message.from_user else None
+                db.track_user(user_id, username=username, first_name=first_name)
+                db.track_message(user_id, 'image')
+                print(f"DB: Tracked photo from {user_id}", flush=True)
+            except Exception as e:
+                print(f"DB photo tracking error: {e}", flush=True)
 
         # Step 1: Send initial processing message
         processing_msg = bot.send_message(message.chat.id, "🔍 Procesando imagen... / Processing image...")
@@ -4214,18 +4245,19 @@ Keep your response concise and helpful."""
 
 print("✅ Espaluz is running THIS UPDATED VERSION: v4.0-paypal-demo-mode (Polling Mode)")
 
-def run_subscription_poller():
-    from poll_subscriptions import fetch_all_subscribers, update_subscriber_file
-    while True:
-        try:
-            print(f"\n🔄 Polling Gumroad API inside bot runtime...")
-            subscribers = fetch_all_subscribers()
-            update_subscriber_file(subscribers)
-        except Exception as e:
-            print(f"❌ Subscription poller crashed: {e}")
-        time.sleep(300)  # poll every 5 minutes
-
-threading.Thread(target=run_subscription_poller, daemon=True).start()
+# DISABLED: Gumroad subscription poller - using PayPal now
+# def run_subscription_poller():
+#     from poll_subscriptions import fetch_all_subscribers, update_subscriber_file
+#     while True:
+#         try:
+#             print(f"\n🔄 Polling Gumroad API inside bot runtime...")
+#             subscribers = fetch_all_subscribers()
+#             update_subscriber_file(subscribers)
+#         except Exception as e:
+#             print(f"❌ Subscription poller crashed: {e}")
+#         time.sleep(300)
+# threading.Thread(target=run_subscription_poller, daemon=True).start()
+print("📌 Gumroad poller disabled - using PayPal subscriptions")
 
 # === TEMP DEBUG: PRINT CURRENT SUBSCRIBERS TO LOGS ===
 try:
