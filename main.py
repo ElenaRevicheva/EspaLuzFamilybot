@@ -537,6 +537,21 @@ def update_connected_bot_activity(user_id):
 
 # === TELEBOT SETUP ===
 
+
+# =============================================================================
+# STRIP ASTERISKS FROM AI RESPONSES (Force clean formatting)
+# =============================================================================
+def strip_markdown_formatting(text: str) -> str:
+    """Remove **bold** and *italic* markdown from text"""
+    import re
+    # Remove **bold** -> bold
+    text = re.sub(r'\*\*([^*]+)\*\*', r'\1', text)
+    # Remove *italic* -> italic (but not inside words)
+    text = re.sub(r'(?<![\w])\*([^*]+)\*(?![\w])', r'\1', text)
+    # Remove any remaining double asterisks
+    text = text.replace('**', '')
+    return text
+
 # =============================================================================
 # NEURAL TTS WRAPPER - Use this instead of gTTS directly
 # =============================================================================
@@ -1530,9 +1545,18 @@ def format_mcp_request(session, new_message, translated_input=None, use_extended
     # Customize system prompt based on family member and emotional state
     system_content = """You are Espaluz, a bilingual emotionally intelligent AI language tutor.
 
-⚠️ FORMATTING RULE: NEVER use asterisks (**text**) for bold - they appear as raw asterisks!
-Instead, use EMOJIS for structure: ✅ ❌ 💡 🗣️ 📖 🌎 🎯
-Keep text clean without Markdown symbols.
+🚫🚫🚫 CRITICAL FORMATTING RULE - MUST FOLLOW 🚫🚫🚫
+ABSOLUTELY NEVER use asterisks (**text** or *text*) anywhere in your response!
+Asterisks appear as raw ** symbols to the user - this looks BROKEN!
+
+INSTEAD of **bold text**, just write: bold text (no formatting)
+Use EMOJIS for emphasis and structure:
+✅ correct   ❌ wrong   💡 tip   🗣️ pronunciation   📖 vocabulary   🌎 culture   🎯 practice
+
+Example of WRONG formatting: **"Hola"** means hello
+Example of CORRECT formatting: ✅ "Hola" means hello
+
+THIS IS MANDATORY. NO ASTERISKS ALLOWED.
 """
 
     # Add family member customization
@@ -2928,7 +2952,7 @@ def process_message(user_input, chat_id, user_id, message_obj):
     print(f"Received Claude response, length: {len(full_reply)}")
 
     # Send the main response
-    bot.send_message(chat_id, f"🤖 Espaluz:\n{full_reply}")
+    bot.send_message(chat_id, f"🤖 Espaluz:\n{strip_markdown_formatting(full_reply)}")
     print("Main text response sent")
 
     # If extended thinking was used, send it as a separate message
@@ -3016,7 +3040,7 @@ def process_message_with_tracking(user_input, chat_id, user_id, message_obj):
     print(f"Received Claude response, length: {len(full_reply)}")
 
     # Send the main response
-    bot.send_message(chat_id, f"🤖 Espaluz:\n{full_reply}")
+    bot.send_message(chat_id, f"🤖 Espaluz:\n{strip_markdown_formatting(full_reply)}")
     print("Main text response sent")
 
     # If extended thinking was used, send it as a separate message
