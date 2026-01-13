@@ -510,27 +510,66 @@ COUNTRY_CONTEXTS = {
         "timezone": "ECT (UTC-5)",
         "spanish_variant": "ecuadorian",
         
+        "expat_hotspots": ["Cuenca (retirement capital)", "Quito (capital)", "Manta (beach)", "Vilcabamba (valley)"],
+        
         "local_vocabulary": {
+            "greetings": {
+                "¿Qué fue?": "What's up?",
+                "Cómo le va": "How's it going (formal)"
+            },
             "expressions": {
-                "chuta": "Darn! (exclamation)",
-                "chévere": "Cool",
+                "chuta": "Darn! (mild exclamation)",
+                "chévere": "Cool/great",
                 "ñaño/ñaña": "Brother/sister (friend)",
-                "man": "Dude (borrowed from English)"
+                "man": "Dude",
+                "achachay": "It's cold!",
+                "arrarray": "It's hot!",
+                "chucha": "Damn (vulgar)",
+                "de ley": "For sure/definitely",
+                "simón": "Yes (informal)"
             }
         },
         
         "real_life_scenarios": {
             "banking": {
-                "main_banks": ["Banco Pichincha", "Banco Guayaquil", "Produbanco"]
+                "main_banks": ["Banco Pichincha (largest)", "Banco Guayaquil", "Produbanco", "Banco del Pacífico"],
+                "phrases": {
+                    "opening_account": "Quisiera abrir una cuenta de ahorros",
+                    "exchange": "No exchange needed - USD is local currency!"
+                },
+                "tips": "Cédula de identidad (foreign ID) needed. Process faster in Cuenca than Quito."
             },
             "immigration": {
-                "tips": "Several visa options, relatively expat-friendly"
+                "office": "Ministerio de Relaciones Exteriores y Movilidad Humana",
+                "visa_types": ["Tourist (90 days)", "Professional", "Investor", "Retirement (Jubilado)", "RIMPE (investor)"],
+                "tips": "Pensionado visa popular with retirees - requires $1,400/month income proof. Cuenca has efficient processing."
+            },
+            "healthcare": {
+                "emergency": "911",
+                "public_system": "IESS (Seguro Social) - decent quality, low cost",
+                "private": ["Hospital Monte Sinaí (Cuenca)", "Hospital del Río", "Clínica Santa Inés"],
+                "pharmacies": ["Fybeca", "Pharmacys", "Cruz Azul"],
+                "tips": "Private healthcare very affordable. Cuenca known for medical tourism."
+            },
+            "housing": {
+                "cuenca_neighborhoods": ["El Centro Histórico", "Gringolandia (popular expat area)", "Puertas del Sol"],
+                "average_rent": "$400-800/month for nice apartment in Cuenca",
+                "tips": "Many furnished rentals available. Check Cuenca High Life Facebook group."
+            },
+            "transportation": {
+                "buses": "Very cheap ($0.25-0.35 in cities)",
+                "taxis": "Use taxímetro (meter) - very affordable",
+                "intercity": "Comfortable buses to Quito (~$15, 8-10 hours from Cuenca)"
             }
         },
         
         "cultural_notes": {
-            "regions": "Costa (coast), Sierra (highlands), Oriente (Amazon) - different cultures",
-            "usd": "Prices often seem cheap to Americans due to USD"
+            "regions": "Costa (coast), Sierra (highlands), Oriente (Amazon) - very different cultures and climates",
+            "cuenca_culture": "Colonial charm, UNESCO heritage, arts scene, known as most polite city",
+            "food": "Try cuy (guinea pig), locro de papa, encebollado (coast)",
+            "siesta": "Some shops close 1-3 PM",
+            "altitude": "Cuenca is 2,500m - take it easy first days",
+            "weather": "Cuenca has 'eternal spring' - sweater weather year-round"
         }
     },
     
