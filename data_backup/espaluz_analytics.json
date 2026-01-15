@@ -1,0 +1,22 @@
+{
+  "users": {
+    "5481526862": {
+      "first_seen": "2026-01-15",
+      "last_seen": "2026-01-15",
+      "total_messages": 2,
+      "org_code": null,
+      "days_active": [
+        "2026-01-15"
+      ]
+    }
+  },
+  "daily_active": {
+    "2026-01-15": [
+      "5481526862"
+    ]
+  },
+  "weekly_active": {},
+  "organizations": {},
+  "testimonials": [],
+  "referrals": {}
+}

@@ -211,7 +211,7 @@
         }
       },
       "learning": {
-        "last_session_date": "2026-01-15T20:13:19.187217",
+        "last_session_date": "2026-01-15T20:39:52.091489",
         "total_sessions": 1,
         "progress": {
           "vocabulary": {
@@ -303,7 +303,9 @@
                 "antibióticos",
                 "alérgico",
                 "algún",
-                "antibiótico"
+                "antibiótico",
+                "cumpleaños",
+                "será"
               ],
               "needs_review": []
             },
@@ -316,7 +318,8 @@
             "spanish": {
               "learned": [
                 "past_tense",
-                "conditional"
+                "conditional",
+                "future_tense"
               ],
               "needs_review": []
             },
