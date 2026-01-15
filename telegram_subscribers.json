@@ -1,0 +1,24 @@
+{
+  "marinakulaginabowen@gmail.com": {
+    "status": "active",
+    "paypal_subscription_id": "I-N32S1EJG29S7",
+    "source": "paypal_api_verified",
+    "verified_at": "2026-01-11T18:48:58.747989",
+    "telegram_id": null
+  },
+  "test@example.com": {
+    "status": "active",
+    "paypal_subscription_id": "I-TEST123",
+    "source": "paypal_webhook_realtime",
+    "verified_at": "2026-01-11T20:25:56.512987",
+    "telegram_id": null
+  },
+  "elena.revicheva2016@gmail.com": {
+    "status": "active",
+    "paypal_subscription_id": "I-HEFU2PR2KHRX",
+    "source": "direct_id_verification",
+    "verified_at": "2026-01-11T22:18:25.668400",
+    "telegram_id": "5481526862",
+    "plan_id": "P-6GR95409C95293139NFSBJJY"
+  }
+}

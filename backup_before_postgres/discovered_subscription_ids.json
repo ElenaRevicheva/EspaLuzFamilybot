@@ -1,0 +1,22 @@
+{
+  "subscription_ids": [
+    "I-TEST123",
+    "I-6S1TM7NVJT5J",
+    "I-HEFU2PR2KHRX"
+  ],
+  "details": {
+    "I-TEST123": {
+      "email": "test@example.com",
+      "discovered_at": "2026-01-11T20:25:56.513232",
+      "source": "webhook"
+    },
+    "I-6S1TM7NVJT5J": {
+      "email": "elena.revicheva2016@gmail.com",
+      "discovered_at": "2026-01-11T22:17:21.934587"
+    },
+    "I-HEFU2PR2KHRX": {
+      "email": "elena.revicheva2016@gmail.com",
+      "discovered_at": "2026-01-11T22:18:25.668761"
+    }
+  }
+}

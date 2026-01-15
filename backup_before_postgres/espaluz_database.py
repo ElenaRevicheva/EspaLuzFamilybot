@@ -513,16 +513,10 @@ db = EspaluzDatabase()
 
 # Convenience functions
 def track_user(user_id: str, **kwargs) -> bool:
-    print(f"[DB MODULE] track_user called for {user_id}, use_database={db.use_database}", flush=True)
-    result = db.track_user(user_id, **kwargs)
-    print(f"[DB MODULE] track_user result: {result}", flush=True)
-    return result
+    return db.track_user(user_id, **kwargs)
 
 def track_message(user_id: str, message_type: str = 'text') -> bool:
-    print(f"[DB MODULE] track_message called for {user_id}, type={message_type}", flush=True)
-    result = db.track_message(user_id, message_type)
-    print(f"[DB MODULE] track_message result: {result}", flush=True)
-    return result
+    return db.track_message(user_id, message_type)
 
 def start_trial(user_id: str, trial_days: int = 14) -> bool:
     return db.start_trial(user_id, trial_days)

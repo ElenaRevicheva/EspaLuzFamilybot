@@ -1,0 +1,46 @@
+{
+  "users": {
+    "5481526862": {
+      "first_seen": "2026-01-10",
+      "last_seen": "2026-01-11",
+      "total_messages": 11,
+      "org_code": null,
+      "days_active": [
+        "2026-01-10",
+        "2026-01-11"
+      ]
+    },
+    "8139276235": {
+      "first_seen": "2026-01-10",
+      "last_seen": "2026-01-10",
+      "total_messages": 10,
+      "org_code": null,
+      "days_active": [
+        "2026-01-10"
+      ]
+    },
+    "6153390723": {
+      "first_seen": "2026-01-11",
+      "last_seen": "2026-01-11",
+      "total_messages": 1,
+      "org_code": null,
+      "days_active": [
+        "2026-01-11"
+      ]
+    }
+  },
+  "daily_active": {
+    "2026-01-10": [
+      "5481526862",
+      "8139276235"
+    ],
+    "2026-01-11": [
+      "5481526862",
+      "6153390723"
+    ]
+  },
+  "weekly_active": {},
+  "organizations": {},
+  "testimonials": [],
+  "referrals": {}
+}

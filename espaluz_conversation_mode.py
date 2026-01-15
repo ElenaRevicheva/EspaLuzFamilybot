@@ -103,21 +103,23 @@ def detect_language(text):
     return 'en'
 
 
-def get_opposite_language(lang):
+def get_opposite_language(lang, target_lang=None):
     """
     Get the opposite language for translation.
-    Spanish <-> English, Russian -> Spanish
+    If target_lang is specified, use that. Otherwise, flip the language.
     """
+    if target_lang:
+        return target_lang
     if lang == 'es':
         return 'en'
     elif lang == 'en':
         return 'es'
     elif lang == 'ru':
-        return 'es'  # Russian speakers usually want Spanish
+        return 'es'
     return 'es'
 
 
-def get_quick_translate_prompt(source_lang, target_lang):
+def get_quick_translate_prompt(text, source_lang, target_lang):
     """
     Get a quick translation prompt for Claude.
     Used for real-time conversation mode.
@@ -131,14 +133,7 @@ def get_quick_translate_prompt(source_lang, target_lang):
     source_name = lang_names.get(source_lang, 'English')
     target_name = lang_names.get(target_lang, 'Spanish')
     
-    return f"""You are a real-time voice translator for a conversation.
-Translate the following from {source_name} to {target_name}.
+    return f"""You are a real-time voice translator. Translate from {source_name} to {target_name}.
+Just provide the translation, nothing else. Keep it natural and conversational.
 
-RULES:
-1. Keep the translation natural and conversational
-2. Just provide the translation - no explanations or alternatives
-3. Preserve the tone and emotion of the original
-4. If there's an important cultural nuance, add it briefly in parentheses
-5. Keep it concise - this will be spoken aloud
-
-Translate now:"""
+Text to translate: {text}"""
