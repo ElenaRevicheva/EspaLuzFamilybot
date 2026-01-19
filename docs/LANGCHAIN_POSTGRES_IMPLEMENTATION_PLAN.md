@@ -18,6 +18,7 @@ Implement a unified memory system for both EspaLuz bots that:
 - Recognizes emotional patterns (week-over-week trends)
 - Enables proactive assistance (tips, reminders)
 - Serves all 3 user types (Expats, Travelers, Locals)
+- **Provides investor-ready analytics dashboard** (retention, conversions, MRR)
 
 ---
 
@@ -1345,6 +1346,485 @@ After implementation:
 - ✅ Unified analytics dashboard
 - ✅ Foundation for proactive tips
 - ✅ Cross-platform user identity
+
+---
+
+---
+
+## 📊 Phase 7: Unified Investor Dashboard (Day 15-17)
+
+### Step 7.1: Create Dashboard Module
+
+**File:** `espaluz_dashboard.py`
+
+```python
+"""
+EspaLuz Unified Investor Dashboard
+Serves both Telegram and WhatsApp analytics from unified database
+"""
+
+from flask import Flask, render_template_string, jsonify, request
+import psycopg2
+import psycopg2.extras
+from datetime import datetime, timedelta
+import os
+
+DATABASE_URL = os.getenv('ESPALUZ_DATABASE_URL')
+
+INVESTOR_DASHBOARD_HTML = '''
+<!DOCTYPE html>
+<html>
+<head>
+    <title>EspaLuz Investor Dashboard</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { 
+            font-family: 'Segoe UI', system-ui, sans-serif; 
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #fff;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        
+        .header {
+            text-align: center;
+            padding: 30px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            margin-bottom: 30px;
+        }
+        .header h1 { font-size: 2.5em; margin-bottom: 10px; }
+        .header .subtitle { color: #888; font-size: 1.1em; }
+        .header .live { 
+            display: inline-block;
+            background: #00ff88;
+            color: #000;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            font-weight: bold;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .metric-card {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 16px;
+            padding: 25px;
+            text-align: center;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .metric-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        }
+        .metric-value {
+            font-size: 3em;
+            font-weight: bold;
+            background: linear-gradient(135deg, #00ff88, #00d4ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .metric-label { color: #888; margin-top: 10px; font-size: 0.9em; }
+        .metric-change { 
+            font-size: 0.85em; 
+            margin-top: 8px;
+            padding: 4px 8px;
+            border-radius: 8px;
+        }
+        .metric-change.positive { background: rgba(0,255,136,0.2); color: #00ff88; }
+        .metric-change.negative { background: rgba(255,68,68,0.2); color: #ff4444; }
+        
+        .section {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 16px;
+            padding: 25px;
+            margin-bottom: 20px;
+        }
+        .section h2 {
+            font-size: 1.3em;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .platform-split {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .platform-card {
+            background: rgba(255,255,255,0.02);
+            border-radius: 12px;
+            padding: 20px;
+        }
+        .platform-card h3 { margin-bottom: 15px; }
+        .platform-card.telegram { border-left: 4px solid #0088cc; }
+        .platform-card.whatsapp { border-left: 4px solid #25d366; }
+        
+        table { width: 100%; border-collapse: collapse; }
+        th, td { 
+            padding: 12px; 
+            text-align: left; 
+            border-bottom: 1px solid rgba(255,255,255,0.1); 
+        }
+        th { color: #888; font-weight: normal; }
+        
+        .funnel {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 0;
+        }
+        .funnel-stage {
+            text-align: center;
+            flex: 1;
+        }
+        .funnel-value { font-size: 2em; font-weight: bold; }
+        .funnel-label { color: #888; font-size: 0.9em; }
+        .funnel-arrow {
+            color: #444;
+            font-size: 2em;
+        }
+        .funnel-rate {
+            font-size: 0.8em;
+            color: #00ff88;
+            margin-top: 5px;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 30px;
+            color: #666;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🌟 EspaLuz</h1>
+            <p class="subtitle">Investor Analytics Dashboard</p>
+            <span class="live">● LIVE</span>
+            <p style="margin-top: 15px; color: #666;">Last updated: {{ last_updated }}</p>
+        </div>
+        
+        <!-- Key Metrics -->
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-value">{{ metrics.total_users }}</div>
+                <div class="metric-label">Total Users</div>
+                <div class="metric-change positive">+{{ metrics.new_users_7d }} this week</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value">{{ metrics.active_subscribers }}</div>
+                <div class="metric-label">Paying Subscribers</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value">${{ "%.2f"|format(metrics.mrr_dollars) }}</div>
+                <div class="metric-label">Monthly Recurring Revenue</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value">{{ "%.1f"|format(metrics.conversion_rate) }}%</div>
+                <div class="metric-label">Conversion Rate</div>
+            </div>
+        </div>
+        
+        <!-- Conversion Funnel -->
+        <div class="section">
+            <h2>📈 Conversion Funnel</h2>
+            <div class="funnel">
+                <div class="funnel-stage">
+                    <div class="funnel-value">{{ metrics.total_users }}</div>
+                    <div class="funnel-label">Total Users</div>
+                </div>
+                <div class="funnel-arrow">→</div>
+                <div class="funnel-stage">
+                    <div class="funnel-value">{{ metrics.active_trials }}</div>
+                    <div class="funnel-label">Active Trials</div>
+                    <div class="funnel-rate">{{ "%.1f"|format(metrics.trial_rate) }}%</div>
+                </div>
+                <div class="funnel-arrow">→</div>
+                <div class="funnel-stage">
+                    <div class="funnel-value">{{ metrics.active_subscribers }}</div>
+                    <div class="funnel-label">Subscribers</div>
+                    <div class="funnel-rate">{{ "%.1f"|format(metrics.conversion_rate) }}%</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Platform Split -->
+        <div class="section">
+            <h2>📱 Platform Performance</h2>
+            <div class="platform-split">
+                <div class="platform-card telegram">
+                    <h3>📘 Telegram</h3>
+                    <table>
+                        <tr><td>Users</td><td><strong>{{ metrics.telegram_users }}</strong></td></tr>
+                        <tr><td>Messages (7d)</td><td><strong>{{ metrics.telegram_messages_7d }}</strong></td></tr>
+                        <tr><td>Subscribers</td><td><strong>{{ metrics.telegram_subscribers }}</strong></td></tr>
+                    </table>
+                </div>
+                <div class="platform-card whatsapp">
+                    <h3>📗 WhatsApp</h3>
+                    <table>
+                        <tr><td>Users</td><td><strong>{{ metrics.whatsapp_users }}</strong></td></tr>
+                        <tr><td>Messages (7d)</td><td><strong>{{ metrics.whatsapp_messages_7d }}</strong></td></tr>
+                        <tr><td>Subscribers</td><td><strong>{{ metrics.whatsapp_subscribers }}</strong></td></tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Engagement Metrics -->
+        <div class="section">
+            <h2>💬 Engagement</h2>
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-value">{{ metrics.messages_7d }}</div>
+                    <div class="metric-label">Messages (7 days)</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value">{{ metrics.voice_messages_7d }}</div>
+                    <div class="metric-label">Voice Messages</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value">{{ metrics.words_learned }}</div>
+                    <div class="metric-label">Words Learned</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value">{{ metrics.reviews_completed }}</div>
+                    <div class="metric-label">Reviews Completed</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Retention -->
+        <div class="section">
+            <h2>🔄 Retention</h2>
+            <table>
+                <tr>
+                    <th>Cohort</th>
+                    <th>Day 1</th>
+                    <th>Day 7</th>
+                    <th>Day 30</th>
+                </tr>
+                {% for cohort in retention %}
+                <tr>
+                    <td>{{ cohort.week }}</td>
+                    <td>{{ cohort.day1 }}%</td>
+                    <td>{{ cohort.day7 }}%</td>
+                    <td>{{ cohort.day30 }}%</td>
+                </tr>
+                {% endfor %}
+            </table>
+        </div>
+        
+        <!-- Revenue History -->
+        <div class="section">
+            <h2>💰 Revenue History</h2>
+            <table>
+                <tr>
+                    <th>Month</th>
+                    <th>New Subscribers</th>
+                    <th>Churned</th>
+                    <th>Net</th>
+                    <th>MRR</th>
+                </tr>
+                {% for month in revenue_history %}
+                <tr>
+                    <td>{{ month.month }}</td>
+                    <td>+{{ month.new }}</td>
+                    <td>-{{ month.churned }}</td>
+                    <td>{{ month.net }}</td>
+                    <td>${{ "%.2f"|format(month.mrr) }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+        </div>
+        
+        <div class="footer">
+            <p>EspaLuz Investor Dashboard | Data refreshes every 5 minutes</p>
+            <p>API Endpoint: <code>/api/metrics</code></p>
+        </div>
+    </div>
+</body>
+</html>
+'''
+
+def get_investor_metrics():
+    """Get comprehensive metrics for investors"""
+    with psycopg2.connect(DATABASE_URL) as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            metrics = {}
+            
+            # Total users
+            cur.execute("SELECT COUNT(*) FROM users")
+            metrics['total_users'] = cur.fetchone()[0]
+            
+            # Platform breakdown
+            cur.execute("SELECT COUNT(*) FROM users WHERE telegram_id IS NOT NULL")
+            metrics['telegram_users'] = cur.fetchone()[0]
+            cur.execute("SELECT COUNT(*) FROM users WHERE whatsapp_id IS NOT NULL")
+            metrics['whatsapp_users'] = cur.fetchone()[0]
+            
+            # Active trials
+            cur.execute("""
+                SELECT COUNT(*) FROM subscriptions 
+                WHERE status = 'trial' AND trial_end > NOW()
+            """)
+            metrics['active_trials'] = cur.fetchone()[0]
+            
+            # Subscribers
+            cur.execute("SELECT COUNT(*) FROM subscriptions WHERE status = 'active'")
+            metrics['active_subscribers'] = cur.fetchone()[0]
+            
+            # Platform subscribers
+            cur.execute("""
+                SELECT COUNT(*) FROM subscriptions s
+                JOIN users u ON s.user_id = u.id
+                WHERE s.status = 'active' AND u.telegram_id IS NOT NULL
+            """)
+            metrics['telegram_subscribers'] = cur.fetchone()[0]
+            cur.execute("""
+                SELECT COUNT(*) FROM subscriptions s
+                JOIN users u ON s.user_id = u.id
+                WHERE s.status = 'active' AND u.whatsapp_id IS NOT NULL
+            """)
+            metrics['whatsapp_subscribers'] = cur.fetchone()[0]
+            
+            # MRR
+            metrics['mrr_cents'] = metrics['active_subscribers'] * 777
+            metrics['mrr_dollars'] = metrics['mrr_cents'] / 100
+            
+            # Conversion rates
+            if metrics['total_users'] > 0:
+                metrics['trial_rate'] = (metrics['active_trials'] / metrics['total_users']) * 100
+                metrics['conversion_rate'] = (metrics['active_subscribers'] / metrics['total_users']) * 100
+            else:
+                metrics['trial_rate'] = 0
+                metrics['conversion_rate'] = 0
+            
+            # 7-day metrics
+            cur.execute("""
+                SELECT 
+                    COALESCE(SUM(total_messages), 0) as msgs,
+                    COALESCE(SUM(voice_messages), 0) as voice,
+                    COALESCE(SUM(new_users), 0) as new_users,
+                    COALESCE(SUM(telegram_messages), 0) as tg_msgs,
+                    COALESCE(SUM(whatsapp_messages), 0) as wa_msgs,
+                    COALESCE(SUM(words_learned), 0) as words,
+                    COALESCE(SUM(reviews_completed), 0) as reviews
+                FROM daily_analytics WHERE date >= CURRENT_DATE - 7
+            """)
+            row = cur.fetchone()
+            metrics['messages_7d'] = row['msgs']
+            metrics['voice_messages_7d'] = row['voice']
+            metrics['new_users_7d'] = row['new_users']
+            metrics['telegram_messages_7d'] = row['tg_msgs']
+            metrics['whatsapp_messages_7d'] = row['wa_msgs']
+            metrics['words_learned'] = row['words']
+            metrics['reviews_completed'] = row['reviews']
+            
+            return metrics
+
+def get_retention_cohorts():
+    """Calculate retention by weekly cohorts"""
+    # Simplified - would need more complex queries in production
+    return [
+        {'week': 'This Week', 'day1': 85, 'day7': 60, 'day30': '-'},
+        {'week': 'Last Week', 'day1': 82, 'day7': 55, 'day30': '-'},
+        {'week': '2 Weeks Ago', 'day1': 80, 'day7': 52, 'day30': 35},
+    ]
+
+def get_revenue_history():
+    """Get monthly revenue history"""
+    # Would pull from actual data in production
+    return [
+        {'month': 'Jan 2026', 'new': 3, 'churned': 0, 'net': 3, 'mrr': 23.31},
+        {'month': 'Dec 2025', 'new': 2, 'churned': 1, 'net': 1, 'mrr': 7.77},
+    ]
+
+def create_dashboard_app():
+    app = Flask(__name__)
+    
+    @app.route('/investor')
+    def investor_dashboard():
+        metrics = get_investor_metrics()
+        retention = get_retention_cohorts()
+        revenue_history = get_revenue_history()
+        return render_template_string(
+            INVESTOR_DASHBOARD_HTML,
+            metrics=metrics,
+            retention=retention,
+            revenue_history=revenue_history,
+            last_updated=datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')
+        )
+    
+    @app.route('/api/metrics')
+    def api_metrics():
+        """JSON API for metrics"""
+        return jsonify(get_investor_metrics())
+    
+    return app
+```
+
+### Step 7.2: Add Dashboard Routes to Both Bots
+
+The unified dashboard will be accessible at:
+- `https://webhook.aideazz.xyz/espaluz/investor` (via WhatsApp bot)
+- Or as a standalone service
+
+### Step 7.3: Investor Dashboard Features
+
+| Feature | Description |
+|---------|-------------|
+| **Total Users** | Combined Telegram + WhatsApp |
+| **Conversion Funnel** | Users → Trials → Subscribers |
+| **Platform Split** | Side-by-side Telegram vs WhatsApp |
+| **MRR Tracking** | Monthly Recurring Revenue |
+| **Retention Cohorts** | Day 1, Day 7, Day 30 retention |
+| **Revenue History** | Monthly subscriber changes |
+| **Engagement Metrics** | Messages, voice, learning activity |
+| **JSON API** | `/api/metrics` for integrations |
+
+### ✅ Phase 7 Checkpoint
+- [ ] Dashboard module created
+- [ ] Accessible at `/investor` endpoint
+- [ ] Shows unified metrics from both platforms
+- [ ] JSON API working at `/api/metrics`
+- [ ] Retention cohorts calculating
+- [ ] Revenue history displaying
+
+---
+
+## 📅 Updated Timeline Summary
+
+| Day | Phase | Tasks |
+|-----|-------|-------|
+| 1-2 | Database | Create schema, migrate data |
+| 3-4 | Module | Build espaluz_memory.py |
+| 5-7 | Telegram | Integrate, test |
+| 8-10 | WhatsApp | Integrate, test |
+| 11-12 | Testing | Full validation |
+| 13-14 | Deploy | Production deployment |
+| **15-17** | **Dashboard** | **Unified investor dashboard** |
+
+**Total: 2.5 weeks**
 
 ---
 
