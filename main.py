@@ -95,6 +95,16 @@ except ImportError as e:
     db = None
     print(f"⚠️ Database module not available: {e}")
 
+# === UNIFIED MEMORY MODULE (NEW - Jan 2026) ===
+# LangChain + PostgreSQL for cross-platform memory (Telegram + WhatsApp)
+try:
+    from espaluz_memory import EspaLuzMemory, LANGCHAIN_AVAILABLE
+    UNIFIED_MEMORY_AVAILABLE = True
+    print(f"✅ Unified memory loaded - LangChain: {LANGCHAIN_AVAILABLE}")
+except ImportError as e:
+    UNIFIED_MEMORY_AVAILABLE = False
+    print(f"⚠️ Unified memory not available: {e}")
+
 # =============================================================================
 # ONBOARDING SYSTEM (NEW - Jan 2026)
 # Asks new users: Country -> Name -> Role -> Family members
@@ -3163,6 +3173,31 @@ def process_message_with_tracking(user_input, chat_id, user_id, message_obj):
     # Enhanced progress tracking
     if learned_items.get("spanish_words") or learned_items.get("grammar_points"):
         print("📊 Learning progress detected")
+
+    # === UNIFIED MEMORY TRACKING (NEW - Jan 2026) ===
+    # Store conversation in unified database for cross-platform memory
+    if UNIFIED_MEMORY_AVAILABLE:
+        try:
+            memory = EspaLuzMemory(platform='telegram', platform_user_id=user_id)
+            memory.track_message()
+            # Store conversation in LangChain memory
+            if memory.chat_history:
+                memory.chat_history.add_user_message(user_input)
+                memory.chat_history.add_ai_message(full_reply)
+            # Track vocabulary learned
+            if learned_items.get("spanish_words"):
+                for word in learned_items["spanish_words"][:5]:
+                    try:
+                        memory.add_vocabulary(word, word, "word")
+                    except:
+                        pass
+            # Track emotional state
+            emotion = session.get("context", {}).get("emotional_state", {}).get("current_emotion")
+            if emotion:
+                memory.track_emotion(emotion, user_input[:100])
+            print(f"✅ Unified memory updated for {user_id}")
+        except Exception as e:
+            print(f"⚠️ Unified memory error (non-fatal): {e}")
 
 # === HANDLERS ===
 @bot.message_handler(commands=["start"])
