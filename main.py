@@ -3188,7 +3188,7 @@ def process_message_with_tracking(user_input, chat_id, user_id, message_obj):
             if learned_items.get("spanish_words"):
                 for word in learned_items["spanish_words"][:5]:
                     try:
-                        memory.add_vocabulary(word, word, "word")
+                        memory.add_vocab(word, word, "word")
                     except:
                         pass
             # Track emotional state

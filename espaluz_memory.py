@@ -150,21 +150,90 @@ class EspaLuzMemory:
         memory.add_vocabulary(user.id, 'hola', 'hello', 'es')
     """
     
-    def __init__(self, platform: str = 'telegram', database_url: str = None):
+    def __init__(self, platform: str = 'telegram', platform_user_id: str = None, database_url: str = None):
         """
-        Initialize memory system.
+        Initialize memory system for a specific user session.
         
         Args:
             platform: 'telegram' or 'whatsapp'
+            platform_user_id: User's ID on that platform (telegram_id or whatsapp_id)
             database_url: PostgreSQL connection string (uses env var if not provided)
         """
         self.platform = platform
+        self.platform_user_id = platform_user_id
         self.database_url = database_url or os.getenv(
             'ESPALUZ_UNIFIED_DB_URL',
             os.getenv('DATABASE_URL_UNIFIED', 'postgresql://espaluz:EspaLuz2026!@localhost:5432/espaluz_unified')
         )
         self._connection = None
+        self._user = None
+        self._chat_history = None
         self._test_connection()
+        
+        # Auto-create user if platform_user_id provided
+        if platform_user_id:
+            self._init_user()
+    
+    def _init_user(self):
+        """Initialize user based on platform_user_id"""
+        if self.platform == 'telegram':
+            self._user = self.get_or_create_user(telegram_id=self.platform_user_id)
+        else:
+            self._user = self.get_or_create_user(whatsapp_id=self.platform_user_id)
+        
+        # Initialize chat history for this user
+        if LANGCHAIN_AVAILABLE and self._user:
+            self._chat_history = self.get_conversation_memory(self._user.id)
+    
+    @property
+    def user(self) -> UserProfile:
+        """Get the current user profile"""
+        return self._user
+    
+    @property
+    def user_id(self) -> int:
+        """Get the current user's database ID"""
+        return self._user.id if self._user else None
+    
+    @property
+    def chat_history(self):
+        """Get LangChain chat history for this user"""
+        return self._chat_history
+    
+    # ==================== SIMPLE TRACKING METHODS ====================
+    
+    def track_message(self, message_type: str = 'text'):
+        """Track a message from the current user"""
+        if self._user:
+            self.increment_message_count(self._user.id, message_type)
+    
+    def add_message(self, role: str, content: str):
+        """Add a message to conversation history"""
+        if self._user:
+            self.add_message_to_history(self._user.id, role, content)
+    
+    def save_memory(self, content: str, memory_type: str = 'fact', importance: int = 5):
+        """Store a memory about the current user"""
+        if self._user:
+            self.store_user_memory(self._user.id, memory_type, content, importance)
+    
+    def track_emotion(self, emotion: str, trigger: str = None, intensity: float = 0.5):
+        """Track emotional state for current user"""
+        if self._user:
+            self.record_emotion(self._user.id, emotion, intensity, trigger_summary=trigger)
+    
+    def add_vocab(self, word: str, translation: str = None, category: str = None):
+        """Simple wrapper to add vocabulary for current user"""
+        if self._user:
+            # Detect language (assume Spanish if not English characters)
+            lang = 'es' if any(c in word for c in 'áéíóúñ¿¡') else 'es'
+            self.add_vocabulary(
+                self._user.id, 
+                word, 
+                translation or word, 
+                lang,
+                category=category
+            )
     
     def _test_connection(self):
         """Test database connection on init"""
@@ -309,20 +378,29 @@ class EspaLuzMemory:
     
     def increment_message_count(self, user_id: int, message_type: str = 'text'):
         """Increment message counter for user"""
-        column = {
-            'text': 'total_messages',
-            'voice': 'voice_messages',
-            'image': 'image_messages'
-        }.get(message_type, 'total_messages')
-        
         with self._get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(f"""
-                    UPDATE users SET 
-                        {column} = {column} + 1,
-                        total_messages = total_messages + 1
-                    WHERE id = %s
-                """, (user_id,))
+                if message_type == 'voice':
+                    cur.execute("""
+                        UPDATE users SET 
+                            voice_messages = voice_messages + 1,
+                            total_messages = total_messages + 1
+                        WHERE id = %s
+                    """, (user_id,))
+                elif message_type == 'image':
+                    cur.execute("""
+                        UPDATE users SET 
+                            image_messages = image_messages + 1,
+                            total_messages = total_messages + 1
+                        WHERE id = %s
+                    """, (user_id,))
+                else:
+                    # text or default
+                    cur.execute("""
+                        UPDATE users SET 
+                            total_messages = total_messages + 1
+                        WHERE id = %s
+                    """, (user_id,))
     
     # ==================== LANGCHAIN CONVERSATION MEMORY ====================
     
