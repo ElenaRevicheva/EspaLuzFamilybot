@@ -1,24 +1,31 @@
 # EspaLuz Telegram Bot - SWOT Analysis & Implementation Status
 
-**Last Updated:** January 20, 2026  
-**Version:** v5.0-unified-memory-infrastructure  
+**Last Updated:** January 22, 2026  
+**Version:** v5.1-unified-memory-integrated  
 **Deployed:** Oracle Cloud (170.9.242.90)
 
 ---
 
-## 🆕 JANUARY 20, 2026 UPDATE: Unified Memory Infrastructure
+## 🆕 JANUARY 22, 2026 UPDATE: Unified Memory INTEGRATED
 
-**MAJOR PROGRESS:** The `espaluz_memory.py` module has been created and tested, providing the infrastructure for all previously missing features:
+**MAJOR MILESTONE:** The `espaluz_memory.py` module is now fully integrated into BOTH bots and actively tracking conversations!
 
 | Feature | Old Status | New Status |
 |---------|------------|------------|
-| Long-Term Learning Memory | ❌ Missing | ✅ Infrastructure READY |
-| Spaced Repetition System | ❌ Missing | ✅ Infrastructure READY |
-| Deep Emotional Intelligence | ❌ Surface-level | ✅ Infrastructure READY |
-| Family Profiles | ⚠️ Basic | ✅ Infrastructure READY |
-| Cross-Session Memory | ❌ Missing | ✅ Infrastructure READY |
+| Long-Term Learning Memory | ❌ Missing | ✅ INTEGRATED & WORKING |
+| Spaced Repetition System | ❌ Missing | ✅ Infrastructure ready, tables exist |
+| Deep Emotional Intelligence | ❌ Surface-level | ✅ INTEGRATED & TRACKING |
+| Family Profiles | ⚠️ Basic | ✅ Infrastructure ready |
+| Cross-Session Memory | ❌ Missing | ✅ INTEGRATED & WORKING |
+| Message Tracking | ❌ Missing | ✅ WORKING (verified 51+ messages tracked) |
+| Chat History (LangChain) | ❌ Missing | ✅ WORKING (PostgresChatMessageHistory) |
 
-**Next Step:** Integrate `espaluz_memory.py` into Telegram bot (Phase 3)
+**Verified Working (Jan 22):**
+- Telegram: `total_messages` incrementing, `last_active_telegram` updating
+- WhatsApp: `total_messages` incrementing, `last_active_whatsapp` updating
+- Chat history stored in `chat_message_history` table via LangChain
+
+**Next Step:** Phase 7 - Investor Dashboard (MRR, retention, conversions)
 
 ---
 
@@ -26,7 +33,7 @@
 
 EspaLuz Telegram is a bilingual AI Spanish tutor for expat families, travelers, and locals. This document tracks both the **strategic SWOT analysis** and **actual implementation status**.
 
-**Overall Implementation: 65-70%** of promised features are truly functional.
+**Overall Implementation: 80-85%** of promised features are truly functional (up from 65-70% after unified memory integration).
 
 ---
 
