@@ -105,6 +105,26 @@ except ImportError as e:
     UNIFIED_MEMORY_AVAILABLE = False
     print(f"⚠️ Unified memory not available: {e}")
 
+# === ENHANCEMENT MODULE (8 Features - Jan 2026) ===
+try:
+    from espaluz_enhancements import (
+        build_enhanced_context,
+        get_emotional_context_for_prompt,
+        get_country_context_full,
+        get_user_type_context,
+        get_relocation_context,
+        get_emergency_context,
+        is_emergency_message,
+        get_family_context,
+        get_memory_context,
+        COUNTRY_CONTEXTS_FULL
+    )
+    ENHANCEMENTS_AVAILABLE = True
+    print("✅ Enhancement module loaded (all 21 countries + 8 features)!")
+except ImportError as e:
+    ENHANCEMENTS_AVAILABLE = False
+    print(f"⚠️ Enhancements not available: {e}")
+
 # =============================================================================
 # ONBOARDING SYSTEM (NEW - Jan 2026)
 # Asks new users: Country -> Name -> Role -> Family members
@@ -1322,8 +1342,31 @@ def enhance_language_learning_detection(text, family_member, session):
 # === MCP CONTEXT STRUCTURE ===
 def create_initial_session(user_id, user_info, chat_info, message_text=""):
     """Create a rich context for Claude's MCP with emotional intelligence features"""
+    
+    # ========================================================
+    # LOAD SAVED ONBOARDING DATA (Fix for returning users)
+    # ========================================================
+    saved_onboarding = get_user_onboarding(user_id)
+    saved_name = saved_onboarding.get("name") if saved_onboarding.get("step") == "complete" else None
+    saved_country = saved_onboarding.get("country") if saved_onboarding.get("step") == "complete" else None
+    saved_role = saved_onboarding.get("role") if saved_onboarding.get("step") == "complete" else None
+    saved_family = {}
+    if saved_onboarding.get("spouse"):
+        saved_family["spouse"] = saved_onboarding["spouse"]
+    if saved_onboarding.get("children"):
+        saved_family["children"] = saved_onboarding["children"]
+    # Also sync to unified database if available
+    if UNIFIED_MEMORY_AVAILABLE and saved_name:
+        try:
+            memory = EspaLuzMemory(platform='telegram', platform_user_id=user_id)
+            if not memory._user.display_name:
+                memory.update_user(display_name=saved_name, current_country=saved_country)
+                print(f"🔄 Synced to unified DB: {saved_name}, {saved_country}")
+        except Exception as e:
+            print(f"⚠️ DB sync error (non-fatal): {e}")
+    
     # Detect family member
-    family_member = detect_family_member(user_info, message_text) 
+    family_member = saved_role or detect_family_member(user_info, message_text) 
     member_info = FAMILY_MEMBERS.get(family_member, FAMILY_MEMBERS["elena"])
 
     return {
@@ -1343,7 +1386,11 @@ def create_initial_session(user_id, user_info, chat_info, message_text=""):
                     "primary_language": "russian",
                     "target_languages": ["spanish", "english"],
                     "difficult_words": [],
-                    "mastered_words": []
+                    "mastered_words": [],
+                    # LOADED FROM SAVED ONBOARDING
+                    "user_name": saved_name,
+                    "country": saved_country or "panama",
+                    "family_members": saved_family
                 }
             },
             "emotional_state": {
@@ -1453,7 +1500,7 @@ def add_country_cultural_context(prompt, session):
     # Get user's actual country from onboarding
     user_country = session["context"]["user"]["preferences"].get("country", "panama")
     family_role = session["context"]["user"]["preferences"].get("family_role", "parent")
-    user_name = session["context"]["user"]["preferences"].get("user_name", "friend")
+    user_name = session["context"]["user"]["preferences"].get("user_name")
     family_members = session["context"]["user"]["preferences"].get("family_members", {})
     
     # Country-specific contexts
@@ -1657,24 +1704,54 @@ Focus on practical, everyday phrases that would be useful in Panama.
 """
     else:  # default adult user
         # Get user name from onboarding or session
-        user_name = session["context"]["user"]["preferences"].get("user_name", 
-                    session["context"]["user"].get("first_name", "friend"))
+        user_name = session["context"]["user"]["preferences"].get("user_name") or session["context"]["user"].get("first_name")
         user_country = session["context"]["user"]["preferences"].get("country", "Panama").replace("_", " ").title()
         user_role = session["context"]["user"]["preferences"].get("family_role", "learner")
         family_info = session["context"]["user"]["preferences"].get("family_members", {})
         
-        system_content += f"""
-You're speaking with {user_name}, who is learning Spanish and English in {user_country}.
-Role: {user_role}. At an intermediate level.
+        if user_name:
+            system_content += f"""
+👤 USER: {user_name} from {user_country}
+Role: {user_role}. Level: intermediate.
+⚠️ ALWAYS address them as "{user_name}" - NEVER say "friend" or "amigo"!
 """
+        else:
+            system_content += f"""
+👤 USER: Name unknown (from {user_country})
+⚠️ IMPORTANT: You don't know this user's name yet!
+- DO NOT say "Hola, friend" or "amigo" - this is impersonal!
+- Naturally ask: "By the way, ¿cómo te llamas?" or "What's your name?"
+- Once they tell you, use their actual name in all responses!
+"""
+        
         # Add family context if available
         if family_info:
             system_content += f"Family: {family_info}\n"
         
         system_content += """
-Provide nuanced language assistance focused on natural conversation, idioms, and practical vocabulary. 
-Use vocabulary appropriate for their level. ALWAYS address them by their actual name, not "Elena".
+Provide nuanced language assistance focused on natural conversation, idioms, and practical vocabulary.
 """
+        
+        # === ENHANCEMENT CONTEXT (8 Features - All 21 Countries) ===
+        if ENHANCEMENTS_AVAILABLE and UNIFIED_MEMORY_AVAILABLE:
+            try:
+                user_country = session["context"]["user"]["preferences"].get("country", "panama")
+                user_type_val = session["context"]["user"]["preferences"].get("user_type", "expat")
+                learning_dir = session["context"]["user"]["preferences"].get("learning_direction", "spanish")
+                
+                enhancement_ctx = build_enhanced_context(
+                    memory_instance=memory,
+                    user_type=user_type_val,
+                    country=user_country,
+                    learning_direction=learning_dir,
+                    current_message=new_message
+                )
+                
+                if enhancement_ctx:
+                    system_content += f"\n{enhancement_ctx}\n"
+                    print(f"✅ Enhanced: country={user_country}, type={user_type_val}")
+            except Exception as e:
+                print(f"⚠️ Enhancement error: {e}")
 
     # =========================================================================
     # 🧠 ENHANCED EMOTIONAL INTELLIGENCE INTEGRATION
