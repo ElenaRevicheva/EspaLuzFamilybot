@@ -242,6 +242,28 @@ def finish_onboarding(user_id, message, onboarding):
         family_members["children"] = onboarding["children"]
     prefs["family_members"] = family_members
     
+    # === SYNC TO UNIFIED DATABASE (Fix: Jan 22, 2026) ===
+    if UNIFIED_MEMORY_AVAILABLE:
+        try:
+            memory = EspaLuzMemory(platform='telegram', platform_user_id=str(user_id))
+            # Update user profile with onboarding data
+            memory.update_user(
+                display_name=onboarding.get("name"),
+                current_country=onboarding.get("country"),
+                user_type=onboarding.get("role", "expat")
+            )
+            # Store family members in unified DB
+            if family_members and (family_members.get("spouse") or family_members.get("children")):
+                family_id = f"family_{user_id}"
+                if family_members.get("spouse"):
+                    memory.save_memory(f"Spouse: {family_members['spouse']}", "family", importance=8)
+                if family_members.get("children"):
+                    for child in family_members["children"]:
+                        memory.save_memory(f"Child: {child['name']}, age {child['age']}", "family", importance=8)
+            print(f"✅ Onboarding synced to unified DB: {onboarding.get('name')} from {onboarding.get('country')}")
+        except Exception as e:
+            print(f"⚠️ DB sync error (non-fatal): {e}")
+    
     # Build family line for completion message
     family_line = ""
     if family_members:
@@ -1707,13 +1729,24 @@ Focus on practical, everyday phrases that would be useful in Panama.
         user_name = session["context"]["user"]["preferences"].get("user_name") or session["context"]["user"].get("first_name")
         user_country = session["context"]["user"]["preferences"].get("country", "Panama").replace("_", " ").title()
         user_role = session["context"]["user"]["preferences"].get("family_role", "learner")
+        user_age = session["context"]["user"]["preferences"].get("age", 30)  # Default adult age
         family_info = session["context"]["user"]["preferences"].get("family_members", {})
         
         if user_name:
             system_content += f"""
 👤 USER: {user_name} from {user_country}
+👶 AGE: {user_age} years old
+🎭 ROLE: {user_role}
 Role: {user_role}. Level: intermediate.
 ⚠️ ALWAYS address them as "{user_name}" - NEVER say "friend" or "amigo"!
+
+🎯 AGE-APPROPRIATE RESPONSES:
+- If age 0-6 (toddler/young child): Use VERY simple words, short sentences, playful tone, emojis, simple vocabulary (colores, animales, números). Make it FUN like talking to a preschooler!
+- If age 7-12 (child): Use simple language, school-related vocab, games, stories. Keep it engaging and educational.
+- If age 13-17 (teen): Use casual tone, relatable topics, social media references. Don't be condescending.
+- If age 18+ (adult): Normal conversation, practical vocabulary, cultural context.
+
+Current user {user_name} is {user_age} years old - ADAPT YOUR RESPONSE ACCORDINGLY!
 """
         else:
             system_content += f"""
@@ -1735,6 +1768,9 @@ Provide nuanced language assistance focused on natural conversation, idioms, and
         # === ENHANCEMENT CONTEXT (8 Features - All 21 Countries) ===
         if ENHANCEMENTS_AVAILABLE and UNIFIED_MEMORY_AVAILABLE:
             try:
+                # Create memory instance for this user
+                memory = EspaLuzMemory(platform='telegram', platform_user_id=str(user_id))
+                
                 user_country = session["context"]["user"]["preferences"].get("country", "panama")
                 user_type_val = session["context"]["user"]["preferences"].get("user_type", "expat")
                 learning_dir = session["context"]["user"]["preferences"].get("learning_direction", "spanish")
@@ -3404,6 +3440,7 @@ def handle_family(message):
             age = int(age_str)
             user_sessions[user_id]["context"]["user"]["preferences"]["family_role"] = role.lower()
             user_sessions[user_id]["context"]["user"]["preferences"]["name"] = name.capitalize()
+            user_sessions[user_id]["context"]["user"]["preferences"]["user_name"] = name.capitalize()  # Also update user_name for prompts!
             user_sessions[user_id]["context"]["user"]["preferences"]["age"] = age
 
             bot.reply_to(
@@ -3617,21 +3654,100 @@ Necesito una ambulancia = I need an ambulance
 
 @bot.message_handler(commands=["slang"])
 def handle_slang(message):
-    """Show local slang for a country"""
-    if not ENHANCED_BRAIN_AVAILABLE:
+    """Show local slang for a country - supports all 21 Spanish-speaking countries"""
+    if not ENHANCEMENTS_AVAILABLE:
         bot.reply_to(message, "Slang module not available.")
         return
     
+    from espaluz_enhancements import COUNTRY_CONTEXTS_FULL
+    
     parts = message.text.split()
+    
+    # Country aliases for common names
+    country_aliases = {
+        "el_salvador": "el_salvador", "elsalvador": "el_salvador", "salvador": "el_salvador",
+        "costa_rica": "costa_rica", "costarica": "costa_rica",
+        "dominican_republic": "dominican_republic", "dominicana": "dominican_republic", "dr": "dominican_republic",
+        "puerto_rico": "puerto_rico", "puertorico": "puerto_rico", "pr": "puerto_rico",
+        "equatorial_guinea": "equatorial_guinea", "guinea": "equatorial_guinea",
+    }
+    
     if len(parts) > 1:
-        country = parts[1].lower()
-        slang_text = get_slang(country)
-        bot.reply_to(message, slang_text, parse_mode="Markdown")
+        # Handle multi-word countries like "El Salvador"
+        country_raw = "_".join(parts[1:]).lower().strip()
+        country = country_aliases.get(country_raw, country_raw)
+        
+        if country in COUNTRY_CONTEXTS_FULL:
+            ctx = COUNTRY_CONTEXTS_FULL[country]
+            flag = ctx.get("flag", "")
+            name = ctx.get("name", country.replace("_", " ").title())
+            slang_list = ctx.get("slang", [])
+            greeting = ctx.get("greeting", "¡Hola!")
+            currency = ctx.get("currency", "Local currency")
+            emergency = ctx.get("emergency", "911")
+            
+            response = f"{flag} SLANG & PRACTICALITIES: {name}\n\n"
+            response += f"👋 Common greeting: {greeting}\n\n"
+            response += "🗣️ Local slang:\n"
+            if isinstance(slang_list, dict):
+                for word, meaning in slang_list.items():
+                    response += f"  • {word} = {meaning}\n"
+            else:
+                for word in slang_list:
+                    response += f"  • {word}\n"
+            response += f"\n💰 Currency: {currency}"
+            if isinstance(emergency, dict):
+                response += f"\n📞 Emergency: {emergency.get('police', '911')} (police), {emergency.get('ambulance', '911')} (ambulance)"
+            else:
+                response += f"\n📞 Emergency: {emergency}"
+            response += "\n\n💡 Tip: Use these with locals to sound more natural!"
+            
+            bot.reply_to(message, response)
+        else:
+            # Country not found - show available options
+            available = ", ".join(sorted(COUNTRY_CONTEXTS_FULL.keys())[:10])
+            bot.reply_to(message, f"Country '{country_raw}' not found.\n\nAvailable: {available}...")
     else:
-        # Default to Panama, show available options
-        response = SLANG_PANAMA + "\n\n💡 *Other countries:*\n"
-        response += "/slang mexico\n/slang colombia\n/slang argentina\n/slang costa_rica"
-        bot.reply_to(message, response, parse_mode="Markdown")
+        # No country specified - use user's current country or show list
+        user_id = str(message.from_user.id)
+        user_country = "panama"  # Default
+        if user_id in user_sessions:
+            user_country = user_sessions[user_id]["context"]["user"]["preferences"].get("country", "panama")
+        
+        if user_country in COUNTRY_CONTEXTS_FULL:
+            ctx = COUNTRY_CONTEXTS_FULL[user_country]
+            flag = ctx.get("flag", "")
+            name = ctx.get("name", user_country.replace("_", " ").title())
+            slang_list = ctx.get("slang", [])
+            greeting = ctx.get("greeting", "¡Hola!")
+            currency = ctx.get("currency", "Local currency")
+            
+            response = f"{flag} SLANG & PRACTICALITIES: {name}\n\n"
+            response += f"👋 Common greeting: {greeting}\n\n"
+            response += "🗣️ Local slang:\n"
+            if isinstance(slang_list, dict):
+                for word, meaning in slang_list.items():
+                    response += f"  • {word} = {meaning}\n"
+            else:
+                for word in slang_list:
+                    response += f"  • {word}\n"
+            response += f"\n💰 Currency: {currency}"
+            response += "\n\n💡 Other countries: /slang [country]\n"
+            response += "Examples: /slang mexico, /slang el salvador, /slang argentina"
+            
+            bot.reply_to(message, response)
+        else:
+            # Fallback - show list of countries
+            countries = list(COUNTRY_CONTEXTS_FULL.keys())[:15]
+            response = "🌎 Available slang for 21 countries!\n\n"
+            response += "Usage: /slang [country]\n\n"
+            response += "Examples:\n"
+            response += "• /slang mexico\n"
+            response += "• /slang el salvador\n"
+            response += "• /slang argentina\n"
+            response += "• /slang colombia\n"
+            response += "• /slang spain\n"
+            bot.reply_to(message, response)
 
 @bot.message_handler(commands=["org"])
 def handle_org(message):
@@ -3735,43 +3851,64 @@ Example: /country panama
 I'll use local expressions and cultural tips!""", parse_mode="Markdown")
         return
     
-    country_name = parts[1].lower().strip()
+    country_name = "_".join(parts[1:]).lower().strip()  # Handle multi-word: "El Salvador" -> "el_salvador"
     
     # Map common names
+    # All 21 Spanish-speaking countries (with aliases)
     country_map = {
-        "panama": Country.PANAMA,
-        "panamá": Country.PANAMA,
-        "mexico": Country.MEXICO,
-        "méxico": Country.MEXICO,
-        "colombia": Country.COLOMBIA,
-        "argentina": Country.ARGENTINA,
-        "spain": Country.SPAIN,
-        "españa": Country.SPAIN,
-        "costa_rica": Country.COSTA_RICA,
-        "costarica": Country.COSTA_RICA,
-        "peru": Country.PERU,
-        "perú": Country.PERU,
-        "chile": Country.CHILE,
-        "ecuador": Country.ECUADOR
+        # Central America
+        "panama": "panama", "panamá": "panama",
+        "costa_rica": "costa_rica", "costarica": "costa_rica",
+        "el_salvador": "el_salvador", "elsalvador": "el_salvador", "salvador": "el_salvador",
+        "guatemala": "guatemala",
+        "honduras": "honduras",
+        "nicaragua": "nicaragua",
+        # Mexico
+        "mexico": "mexico", "méxico": "mexico",
+        # South America
+        "colombia": "colombia",
+        "venezuela": "venezuela",
+        "ecuador": "ecuador",
+        "peru": "peru", "perú": "peru",
+        "bolivia": "bolivia",
+        "chile": "chile",
+        "argentina": "argentina",
+        "uruguay": "uruguay",
+        "paraguay": "paraguay",
+        # Caribbean
+        "cuba": "cuba",
+        "dominican_republic": "dominican_republic", "dominicana": "dominican_republic", "rd": "dominican_republic",
+        "puerto_rico": "puerto_rico", "puertorico": "puerto_rico",
+        # Europe/Africa
+        "spain": "spain", "españa": "spain",
+        "equatorial_guinea": "equatorial_guinea", "guinea_ecuatorial": "equatorial_guinea",
     }
     
     if country_name in country_map:
-        country = country_map[country_name]
-        context = get_country_context(country)
+        normalized_country = country_map[country_name]
+        # Get context from enhancement module if available
+        if ENHANCEMENTS_AVAILABLE:
+            from espaluz_enhancements import COUNTRY_CONTEXTS_FULL
+            context = COUNTRY_CONTEXTS_FULL.get(normalized_country, {})
+        else:
+            context = get_country_context(Country.PANAMA)  # Fallback
         
         user_id = str(message.from_user.id)
         if user_id in user_sessions:
             user_sessions[user_id]["context"]["user"]["preferences"]["country"] = country_name
         
-        response = f"""✅ *Country set: {context.get('flag', '')} {context.get('name', country_name.title())}*
+        # Escape underscores for Markdown
+        display_country = country_name.replace("_", " ").title()
+        
+        response = f"""✅ Country set: {context.get('flag', '')} {context.get('name', display_country)}
 
 💰 Currency: {context.get('currency', 'Local currency')}
 🕐 Timezone: {context.get('timezone', 'Local time')}
 
 I'll now use local vocabulary and expressions!
 
-Try: /slang {country_name} to see local expressions."""
-        bot.reply_to(message, response, parse_mode="Markdown")
+Try: /slang to see local expressions."""
+        bot.reply_to(message, response)
     else:
         bot.reply_to(message, f"❌ Country '{country_name}' not found.\n\nTry: panama, mexico, colombia, argentina, spain, costa_rica")
 

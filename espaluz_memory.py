@@ -354,8 +354,10 @@ class EspaLuzMemory:
             last_active_whatsapp=row.get('last_active_whatsapp')
         )
     
-    def update_user(self, user_id: int, **updates) -> bool:
-        """Update user profile fields"""
+    def update_user(self, user_id: int = None, **updates) -> bool:
+        """Update user profile fields for the current user or specified user_id"""
+        if user_id is None:
+            user_id = self.user_id
         if not updates:
             return False
         
