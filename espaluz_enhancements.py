@@ -146,7 +146,7 @@ COUNTRY_CONTEXTS_FULL = {
     "panama": {
         "flag": "🇵🇦",
         "greeting": "¡Qué xopa!",
-        "slang": ["xopa", "fren", "pela'o", "chombo", "yeye", "juega vivo"],
+        "slang": {"xopa": "what's up", "fren": "friend/buddy", "pela'o": "broke/no money", "chombo": "Afro-Panamanian (can be offensive)", "yeye": "fancy/posh", "juega vivo": "be street smart"},
         "currency": "Balboa/USD",
         "topics": ["Canal", "Casco Viejo", "Bocas del Toro", "sancocho", "ceviche", "Carnival"],
         "relocation": {
@@ -165,7 +165,7 @@ COUNTRY_CONTEXTS_FULL = {
     "costa_rica": {
         "flag": "🇨🇷",
         "greeting": "¡Pura vida!",
-        "slang": ["pura vida", "mae", "tuanis", "tico/a", "chunche", "birra"],
+        "slang": {"pura vida": "awesome/great/hello/goodbye (universal)", "mae": "dude/bro", "tuanis": "cool/nice", "tico/a": "Costa Rican person", "chunche": "thing/stuff", "birra": "beer"},
         "currency": "Colón (CRC)",
         "topics": ["playas", "volcanes", "biodiversidad", "gallo pinto", "café"],
         "relocation": {
@@ -179,7 +179,7 @@ COUNTRY_CONTEXTS_FULL = {
     "mexico": {
         "flag": "🇲🇽",
         "greeting": "¡Qué onda!",
-        "slang": ["güey/wey", "chido", "neta", "órale", "chamba", "padre", "no manches"],
+        "slang": {"güey/wey": "dude/bro", "chido": "cool/awesome", "neta": "really?/truth", "órale": "wow/ok/let's go", "chamba": "work/job", "padre": "cool/great", "no manches": "no way!/you're kidding"},
         "currency": "Peso Mexicano (MXN)",
         "topics": ["tacos", "tequila", "mariachi", "CDMX", "playas", "pirámides"],
         "relocation": {
@@ -193,7 +193,7 @@ COUNTRY_CONTEXTS_FULL = {
     "guatemala": {
         "flag": "🇬🇹",
         "greeting": "¡Qué onda!",
-        "slang": ["qué onda", "canche", "patojo", "chilero", "shuco", "chapin"],
+        "slang": {"qué onda": "what's up", "canche": "blonde person", "patojo": "kid/young person", "chilero": "cool/nice", "shuco": "dirty hot dog (street food)", "chapin": "Guatemalan person"},
         "currency": "Quetzal (GTQ)",
         "topics": ["Antigua", "Tikal", "volcanes", "textiles", "tamales", "Maya"],
         "relocation": {
@@ -207,7 +207,7 @@ COUNTRY_CONTEXTS_FULL = {
     "honduras": {
         "flag": "🇭🇳",
         "greeting": "¡Qué ondas!",
-        "slang": ["maje", "catracho", "cipote", "alero", "cheque"],
+        "slang": {"maje": "dude/buddy", "catracho": "Honduran person", "cipote": "kid/child", "alero": "close friend", "cheque": "ok/sure"},
         "currency": "Lempira (HNL)",
         "topics": ["Copán", "Roatán", "baleadas", "café", "mariscos"],
         "relocation": {
@@ -221,7 +221,7 @@ COUNTRY_CONTEXTS_FULL = {
     "el_salvador": {
         "flag": "🇸🇻",
         "greeting": "¡Qué onda!",
-        "slang": ["chivo", "bicho", "cipote", "chucho", "guanaco"],
+        "slang": {"chivo": "cool/awesome", "bicho": "kid/dude", "cipote": "kid/child", "chucho": "dog/stingy person", "guanaco": "Salvadoran person"},
         "currency": "USD",
         "topics": ["pupusas", "playas", "volcanes", "Bitcoin", "artesanías"],
         "relocation": {
@@ -235,7 +235,7 @@ COUNTRY_CONTEXTS_FULL = {
     "nicaragua": {
         "flag": "🇳🇮",
         "greeting": "¡Qué onda!",
-        "slang": ["tuani", "nica", "maje", "chunche", "pinolero"],
+        "slang": {"tuani": "cool/great", "nica": "Nicaraguan person", "maje": "dude/buddy", "chunche": "thing/stuff", "pinolero": "Nicaraguan (from pinol drink)"},
         "currency": "Córdoba (NIO)",
         "topics": ["Granada", "León", "volcanes", "gallo pinto", "poesía"],
         "relocation": {
@@ -251,7 +251,7 @@ COUNTRY_CONTEXTS_FULL = {
     "cuba": {
         "flag": "🇨🇺",
         "greeting": "¡Oye, qué bolá!",
-        "slang": ["qué bolá", "asere", "yuma", "guagua", "fula", "paladar"],
+        "slang": {"qué bolá": "what's up", "asere": "friend/buddy", "yuma": "foreigner/American", "guagua": "bus", "fula": "dollar/money", "paladar": "private restaurant"},
         "currency": "Peso Cubano (CUP)",
         "topics": ["salsa", "Habana Vieja", "mojitos", "béisbol", "carros clásicos"],
         "relocation": {"popular_areas": ["Havana", "Varadero"], "cost_of_living": "Complex system"},
@@ -260,7 +260,7 @@ COUNTRY_CONTEXTS_FULL = {
     "dominican_republic": {
         "flag": "🇩🇴",
         "greeting": "¡Klk! (Qué lo que)",
-        "slang": ["klk", "tato", "vaina", "tigueraje", "jevi", "dique"],
+        "slang": {"klk": "what's up (qué lo qué)", "tato": "ok/sure", "vaina": "thing/stuff/situation", "tigueraje": "street smarts/hustle", "jevi": "cool/heavy (from English)", "dique": "supposedly/apparently"},
         "currency": "Peso Dominicano (DOP)",
         "topics": ["merengue", "bachata", "playas", "mangú", "béisbol"],
         "relocation": {
@@ -274,7 +274,7 @@ COUNTRY_CONTEXTS_FULL = {
     "puerto_rico": {
         "flag": "🇵🇷",
         "greeting": "¡Wepa!",
-        "slang": ["wepa", "brutal", "chavos", "janguear", "corillo", "boricua"],
+        "slang": {"wepa": "wow!/yay!", "brutal": "awesome/amazing", "chavos": "money", "janguear": "hang out", "corillo": "friend group/crew", "boricua": "Puerto Rican person"},
         "currency": "USD",
         "topics": ["reggaetón", "Old San Juan", "mofongo", "playas", "El Yunque"],
         "relocation": {
@@ -290,7 +290,7 @@ COUNTRY_CONTEXTS_FULL = {
     "colombia": {
         "flag": "🇨🇴",
         "greeting": "¡Quiubo!",
-        "slang": ["parcero/parce", "bacano", "chévere", "berraco", "qué más", "listo"],
+        "slang": {"parcero/parce": "buddy/friend", "bacano": "cool/awesome", "chévere": "great/nice", "berraco": "awesome/badass (or angry)", "qué más": "what's up", "listo": "ok/ready/smart"},
         "currency": "Peso Colombiano (COP)",
         "topics": ["café", "Cartagena", "Medellín", "arepas", "cumbia", "salsa"],
         "relocation": {
@@ -304,7 +304,7 @@ COUNTRY_CONTEXTS_FULL = {
     "venezuela": {
         "flag": "🇻🇪",
         "greeting": "¡Épale!",
-        "slang": ["pana", "chévere", "fino", "marico", "arrecho", "burda"],
+        "slang": {"pana": "friend/buddy", "chévere": "cool/great", "fino": "great/perfect", "marico": "dude (casual, can be vulgar)", "arrecho": "angry/awesome", "burda": "a lot/very much"},
         "currency": "Bolívar (VES)",
         "topics": ["arepas", "Salto Ángel", "béisbol", "hallacas", "playas"],
         "relocation": {"popular_areas": ["Caracas", "Margarita"], "cost_of_living": "Complex"},
@@ -313,7 +313,7 @@ COUNTRY_CONTEXTS_FULL = {
     "ecuador": {
         "flag": "🇪🇨",
         "greeting": "¡Qué más!",
-        "slang": ["ñaño/a", "chuchaqui", "bacán", "simon", "nel"],
+        "slang": {"ñaño/a": "brother/sister/friend", "chuchaqui": "hangover", "bacán": "cool/awesome", "simon": "yes/yeah", "nel": "no/nope"},
         "currency": "USD",
         "topics": ["Galápagos", "Quito", "ceviche", "sombreros", "volcanes", "Cuenca"],
         "relocation": {
@@ -327,7 +327,7 @@ COUNTRY_CONTEXTS_FULL = {
     "peru": {
         "flag": "🇵🇪",
         "greeting": "¡Habla!",
-        "slang": ["causa", "pata", "chévere", "jato", "bravazo", "al toque"],
+        "slang": {"causa": "friend/buddy (also a dish)", "pata": "friend/buddy", "chévere": "cool/great", "jato": "house/home", "bravazo": "awesome/great", "al toque": "right away/immediately"},
         "currency": "Sol (PEN)",
         "topics": ["ceviche", "Machu Picchu", "pisco", "Lima", "quinoa", "Cusco"],
         "relocation": {
@@ -341,7 +341,7 @@ COUNTRY_CONTEXTS_FULL = {
     "bolivia": {
         "flag": "🇧🇴",
         "greeting": "¡Qué tal!",
-        "slang": ["yapa", "chango", "jailón", "polera", "trufi"],
+        "slang": {"yapa": "extra/bonus (free extra)", "chango": "kid/young person", "jailón": "snobby/posh person", "polera": "t-shirt", "trufi": "shared taxi"},
         "currency": "Boliviano (BOB)",
         "topics": ["Salar de Uyuni", "La Paz", "cholitas", "salteñas", "Carnaval"],
         "relocation": {
@@ -355,7 +355,7 @@ COUNTRY_CONTEXTS_FULL = {
     "chile": {
         "flag": "🇨🇱",
         "greeting": "¡Hola po!",
-        "slang": ["po", "weón/weona", "cachai", "fome", "bacán", "al tiro"],
+        "slang": {"po": "emphasis word (pues)", "weón/weona": "dude/friend (can be vulgar)", "cachai": "you know?/understand?", "fome": "boring/lame", "bacán": "cool/awesome", "al tiro": "right away"},
         "currency": "Peso Chileno (CLP)",
         "topics": ["vino", "Patagonia", "Atacama", "empanadas", "pisco", "Santiago"],
         "relocation": {
@@ -369,7 +369,7 @@ COUNTRY_CONTEXTS_FULL = {
     "argentina": {
         "flag": "🇦🇷",
         "greeting": "¡Che, qué onda!",
-        "slang": ["che", "boludo/a", "bárbaro", "quilombo", "morfar", "laburo", "bondi"],
+        "slang": {"che": "hey/dude", "boludo/a": "dude/idiot (friendly)", "bárbaro": "great/awesome", "quilombo": "mess/chaos", "morfar": "to eat", "laburo": "work/job", "bondi": "bus"},
         "currency": "Peso Argentino (ARS)",
         "topics": ["tango", "asado", "fútbol", "mate", "Buenos Aires", "Messi"],
         "relocation": {
@@ -383,7 +383,7 @@ COUNTRY_CONTEXTS_FULL = {
     "uruguay": {
         "flag": "🇺🇾",
         "greeting": "¡Bo, qué hacés!",
-        "slang": ["bo", "ta", "championes", "celeste", "gurí", "botija"],
+        "slang": {"bo": "hey/dude", "ta": "ok/yeah", "championes": "sneakers", "celeste": "light blue (national pride)", "gurí": "kid/child", "botija": "kid/buddy"},
         "currency": "Peso Uruguayo (UYU)",
         "topics": ["mate", "asado", "fútbol", "Punta del Este", "candombe"],
         "relocation": {
@@ -397,7 +397,7 @@ COUNTRY_CONTEXTS_FULL = {
     "paraguay": {
         "flag": "🇵🇾",
         "greeting": "¡Mba'éichapa! (Guaraní)",
-        "slang": ["che", "mita'i", "kuña", "karai", "guapo"],
+        "slang": {"che": "hey/friend (Guaraní)", "mita'i": "child (Guaraní)", "kuña": "woman (Guaraní)", "karai": "sir/mister (Guaraní)", "guapo": "hard-working/brave"},
         "currency": "Guaraní (PYG)",
         "topics": ["tereré", "chipa", "Guaraní", "arpa", "Itaipú"],
         "relocation": {
@@ -413,7 +413,7 @@ COUNTRY_CONTEXTS_FULL = {
     "spain": {
         "flag": "🇪🇸",
         "greeting": "¡Hola, qué tal!",
-        "slang": ["tío/tía", "mola", "guay", "currar", "flipar", "quedamos"],
+        "slang": {"tío/tía": "dude/girl", "mola": "it's cool", "guay": "cool/great", "currar": "to work", "flipar": "to freak out/be amazed", "quedamos": "let's meet up"},
         "currency": "Euro (EUR)",
         "topics": ["tapas", "paella", "fútbol", "flamenco", "Madrid", "Barcelona", "siesta"],
         "relocation": {
