@@ -191,7 +191,14 @@ EspaLuz Telegram is a bilingual AI Spanish tutor for expat families, travelers, 
 
 ## 🎯 OPPORTUNITIES
 
-1. **Panama Pilot** - AmCham, ISD, expat communities ready for pilots
+1. **Panama Pilot** - Comprehensive outreach strategy ready
+   - See: `PANAMA_PILOT_OPPORTUNITIES.md` for full details
+   - 8 business chambers (AmCham, CCIAP, BritCham)
+   - 10+ Facebook expat groups (100,000+ combined members)
+   - 15+ international schools (ISP, Balboa, King's College)
+   - 20+ multinational companies (Dell, HP, Copa Airlines)
+   - Coworking spaces (Selina, WeWork, Workhouse)
+   - Relocation companies and real estate agents
 2. **B2B Expansion** - Corporate language training packages
 3. **Voice-First Market** - WhatsApp voice notes are huge in LATAM
 4. **Underserved Expat Niche** - 280M+ expats, no good solution exists
