@@ -2,9 +2,9 @@
 
 ## PostgreSQL + LangChain Integration
 
-**Status:** 🟢 PHASE 1-6 COMPLETE, DASHBOARD PENDING  
+**Status:** 🟢 PHASE 1-6 COMPLETE, BUG FIXES APPLIED, DASHBOARD PENDING  
 **Created:** January 19, 2026  
-**Updated:** January 22, 2026  
+**Updated:** January 25, 2026  
 **Estimated Time:** 2-3 weeks  
 **Cost:** $0 (all free tools)
 
@@ -20,7 +20,19 @@
 | Phase 4: WhatsApp Integration | ✅ COMPLETE | Jan 22, 2026 |
 | Phase 5: Testing | ✅ COMPLETE | Jan 22, 2026 |
 | Phase 6: Deployment | ✅ COMPLETE | Jan 22, 2026 |
+| Phase 6.5: Bug Fixes | ✅ COMPLETE | Jan 25, 2026 |
 | Phase 7: Investor Dashboard | ⏳ NEXT | - |
+
+### January 25, 2026 Update - BUG FIXES
+- ✅ **FIXED:** `message_text` bug in WhatsApp voice handler (lines 3181, 3186)
+  - Changed to `spanish_input` (correct scoped variable)
+  - No more "Unified memory error: name 'message_text' is not defined"
+- ✅ **ADDED:** `add_family()` wrapper method in `espaluz_memory.py` (line 238)
+- ✅ **ENHANCED:** Telegram `main.py` now saves family to BOTH tables:
+  - `user_memories` (backward compatible)
+  - `family_members` (proper PostgreSQL relational storage)
+- ✅ **VERIFIED:** LangChain = True, all services active on Oracle
+- ✅ **SYNCED:** Local → GitHub → Oracle (all at latest commits)
 
 ### January 22, 2026 Update
 - ✅ Fixed `espaluz_memory.py` - added `platform_user_id` parameter
@@ -29,6 +41,15 @@
 - ✅ Integrated into WhatsApp bot (`espaluz_bridge.py`)
 - ✅ Verified: messages being tracked in `espaluz_unified` database
 - ✅ Synced codebases: Oracle → GitHub → Local
+
+### Database Counts (Jan 25, 2026)
+| Table | Records |
+|-------|---------|
+| users | 15 |
+| family_members | 0 (ready for new onboarding) |
+| chat_message_history | 88 |
+| emotional_history | 33 |
+| vocabulary | 39 |
 
 ---
 
