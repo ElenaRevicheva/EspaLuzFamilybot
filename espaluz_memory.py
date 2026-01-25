@@ -235,6 +235,36 @@ class EspaLuzMemory:
                 category=category
             )
     
+    def add_family(self, name: str, relationship: str, age: int = None, age_group: str = None):
+        """Simple wrapper to add a family member for current user.
+        
+        Args:
+            name: Name of the family member
+            relationship: 'spouse', 'child', 'parent', etc.
+            age: Age in years (optional)
+            age_group: 'toddler', 'child', 'teen', 'adult' (optional)
+        """
+        if self._user:
+            # Create family_id based on user's platform ID
+            family_id = self._user.family_id or f"family_{self.platform_user_id}"
+            
+            # Update user's family_id if not set
+            if not self._user.family_id:
+                self.update_user(family_id=family_id)
+            
+            try:
+                return self.add_family_member(
+                    user_id=self._user.id,
+                    family_id=family_id,
+                    name=name,
+                    relationship=relationship,
+                    age=age,
+                    age_group=age_group
+                )
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to add family member {name}: {e}")
+                return None
+    
     def _test_connection(self):
         """Test database connection on init"""
         try:

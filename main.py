@@ -252,14 +252,27 @@ def finish_onboarding(user_id, message, onboarding):
                 current_country=onboarding.get("country"),
                 user_type=onboarding.get("role", "expat")
             )
-            # Store family members in unified DB
+            # Store family members in unified DB (BOTH user_memories AND family_members tables)
             if family_members and (family_members.get("spouse") or family_members.get("children")):
                 family_id = f"family_{user_id}"
                 if family_members.get("spouse"):
+                    # Store in user_memories for backward compatibility
                     memory.save_memory(f"Spouse: {family_members['spouse']}", "family", importance=8)
+                    # Store in dedicated family_members table (PostgreSQL + LangChain)
+                    memory.add_family(name=family_members['spouse'], relationship='spouse')
+                    print(f"Added spouse to family_members table: {family_members['spouse']}")
                 if family_members.get("children"):
                     for child in family_members["children"]:
+                        # Store in user_memories for backward compatibility
                         memory.save_memory(f"Child: {child['name']}, age {child['age']}", "family", importance=8)
+                        # Store in dedicated family_members table (PostgreSQL + LangChain)
+                        memory.add_family(
+                            name=child['name'], 
+                            relationship='child', 
+                            age=child.get('age'),
+                            age_group=child.get('age_group', 'child')
+                        )
+                        print(f"Added child to family_members table: {child['name']}, age {child.get('age')}")
             print(f"✅ Onboarding synced to unified DB: {onboarding.get('name')} from {onboarding.get('country')}")
         except Exception as e:
             print(f"⚠️ DB sync error (non-fatal): {e}")
