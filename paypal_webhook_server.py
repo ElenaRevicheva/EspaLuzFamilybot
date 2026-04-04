@@ -82,6 +82,21 @@ def save_discovered_subscription_id(subscription_id, email):
         return False
 
 
+def _emit_paypal_event(action, email, subscription_id, paypal_event_type):
+    """Fire-and-forget wiring event for PayPal activity"""
+    try:
+        from wiring_emitter import emit_event
+        emit_event(action, {
+            "email": email,
+            "subscription_id": subscription_id,
+            "paypal_event": paypal_event_type,
+            "amount": 7.77,
+            "timestamp": datetime.now().isoformat()
+        })
+    except Exception:
+        pass  # Never crash the webhook handler
+
+
 @app.route('/paypal-webhook', methods=['POST'])
 def paypal_webhook():
     """Handle PayPal webhook notifications - REAL-TIME subscription events"""
@@ -105,32 +120,36 @@ def paypal_webhook():
                 logging.info(f'NEW SUBSCRIPTION: {email} -> {subscription_id}')
                 save_subscriber(email, subscription_id, 'active')
                 save_discovered_subscription_id(subscription_id, email)
+                _emit_paypal_event("payment_received", email, subscription_id, event_type)
                 return jsonify({'status': 'success', 'message': 'Subscription saved'}), 200
-        
+
         # Handle subscription cancelled
         elif event_type == 'BILLING.SUBSCRIPTION.CANCELLED':
             if email:
                 logging.info(f'CANCELLED: {email}')
                 save_subscriber(email, subscription_id, 'cancelled')
+                _emit_paypal_event("subscription_cancelled", email, subscription_id, event_type)
                 return jsonify({'status': 'success'}), 200
-        
+
         # Handle subscription suspended
         elif event_type == 'BILLING.SUBSCRIPTION.SUSPENDED':
             if email:
                 logging.info(f'SUSPENDED: {email}')
                 save_subscriber(email, subscription_id, 'suspended')
+                _emit_paypal_event("subscription_cancelled", email, subscription_id, event_type)
                 return jsonify({'status': 'success'}), 200
-        
+
         # Handle payment completed - extracts subscription from sale
         elif event_type == 'PAYMENT.SALE.COMPLETED':
             billing_agreement_id = resource.get('billing_agreement_id', '')
             payer = resource.get('payer', {}).get('payer_info', {})
             payer_email = payer.get('email', '') or payer.get('email_address', '')
-            
+
             if billing_agreement_id and payer_email:
                 logging.info(f'PAYMENT: {payer_email} -> {billing_agreement_id}')
                 save_subscriber(payer_email, billing_agreement_id, 'active')
                 save_discovered_subscription_id(billing_agreement_id, payer_email)
+                _emit_paypal_event("payment_received", payer_email, billing_agreement_id, event_type)
                 return jsonify({'status': 'success'}), 200
         
         logging.info(f'Event logged: {event_type}')

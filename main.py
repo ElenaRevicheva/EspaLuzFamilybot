@@ -3167,6 +3167,17 @@ def process_message(user_input, chat_id, user_id, message_obj):
     bot.send_message(chat_id, f"🤖 Espaluz:\n{strip_markdown_formatting(full_reply)}")
     print("Main text response sent")
 
+    # Wiring: emit lesson event to CTO AIPA
+    try:
+        from wiring_emitter import emit_event
+        emit_event("lesson_sent", {
+            "user_id": user_id,
+            "lesson_type": "text",
+            "message_count": session.get("context", {}).get("conversation", {}).get("message_count", 0)
+        })
+    except Exception:
+        pass
+
     # If extended thinking was used, send it as a separate message
     if thinking_process:
         thinking_summary = f"🧠 *Thinking Process*:\n\n{thinking_process[:500]}..."
@@ -3254,6 +3265,17 @@ def process_message_with_tracking(user_input, chat_id, user_id, message_obj):
     # Send the main response
     bot.send_message(chat_id, f"🤖 Espaluz:\n{strip_markdown_formatting(full_reply)}")
     print("Main text response sent")
+
+    # Wiring: emit lesson event to CTO AIPA
+    try:
+        from wiring_emitter import emit_event
+        emit_event("lesson_sent", {
+            "user_id": user_id,
+            "lesson_type": "text",
+            "message_count": session.get("context", {}).get("conversation", {}).get("message_count", 0)
+        })
+    except Exception:
+        pass
 
     # If extended thinking was used, send it as a separate message
     if thinking_process:
@@ -3344,6 +3366,17 @@ def handle_start(message):
     welcome_msg = ONBOARDING_MESSAGES["country"]
     
     bot.send_message(message.chat.id, welcome_msg)
+
+    # Wiring: emit signup event to CTO AIPA
+    try:
+        from wiring_emitter import emit_event
+        emit_event("user_signup", {
+            "user_id": user_id,
+            "access_type": "onboarding_started",
+            "timestamp": datetime.now().isoformat()
+        })
+    except Exception:
+        pass  # Never crash the bot
 
 @bot.message_handler(commands=["reset"])
 def handle_reset(message):
