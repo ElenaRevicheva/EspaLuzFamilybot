@@ -3139,9 +3139,20 @@ def process_message(user_input, chat_id, user_id, message_obj):
     print(f"⭐️ Processing message from user {user_id}: {user_input[:30]}...")
 
     # Init session
-    if user_id not in user_sessions:
+    is_new_user = user_id not in user_sessions
+    if is_new_user:
         user_sessions[user_id] = create_initial_session(user_id, message_obj.from_user, message_obj.chat, user_input)
         print(f"Created new session for user {user_id}")
+        try:
+            from wiring_emitter import emit_event
+            emit_event("user_signup", {
+                "user_id": user_id,
+                "access_type": "first_message",
+                "first_message": user_input[:50],
+                "timestamp": datetime.now().isoformat()
+            })
+        except Exception:
+            pass
 
     session = user_sessions[user_id]
     session["context"]["conversation"]["message_count"] += 1
@@ -3238,9 +3249,20 @@ def process_message_with_tracking(user_input, chat_id, user_id, message_obj):
             print(f"⚠️ DB tracking error (non-fatal): {e}")
 
     # Init session
-    if user_id not in user_sessions:
+    is_new_user = user_id not in user_sessions
+    if is_new_user:
         user_sessions[user_id] = create_initial_session(user_id, message_obj.from_user, message_obj.chat, user_input)
         print(f"Created new session for user {user_id}")
+        try:
+            from wiring_emitter import emit_event
+            emit_event("user_signup", {
+                "user_id": user_id,
+                "access_type": "first_message",
+                "first_message": user_input[:50],
+                "timestamp": datetime.now().isoformat()
+            })
+        except Exception:
+            pass
 
     session = user_sessions[user_id]
     session["context"]["conversation"]["message_count"] += 1
