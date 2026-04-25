@@ -1724,28 +1724,48 @@ Example of CORRECT formatting: ✅ "Hola" means hello
 THIS IS MANDATORY. NO ASTERISKS ALLOWED.
 """
 
-    # === LANGCHAIN MEMORY RETRIEVAL — cross-session persistent context ===
-    # Pulls who this user is + what they discussed in previous sessions
-    # Non-fatal: if memory fails, Claude gets normal prompt with no crash
+    # === LANGCHAIN + RAG MEMORY RETRIEVAL ===
+    # Layer 1: User profile + last 5 turns from LangChain (exact history)
+    # Layer 2: Semantic RAG — top-3 relevant past turns via pgvector cosine search
+    # Both non-fatal: Claude gets normal prompt if anything fails
     if UNIFIED_MEMORY_AVAILABLE:
         try:
             _uid = str(session.get("user_id", ""))
             if _uid:
                 _mem = EspaLuzMemory(platform='telegram', platform_user_id=_uid)
                 if _mem.user_id:
+                    memory_block = "\n\n--- PERSISTENT MEMORY ---"
+
+                    # Layer 1a: User profile (name, level, country, learning direction)
                     _profile_ctx = _mem.get_context_for_prompt(_mem.user_id)
-                    _recent = _mem.get_recent_messages(_mem.user_id, limit=5)
-                    if _profile_ctx or _recent:
-                        system_content += "\n\n--- MEMORY FROM PREVIOUS SESSIONS ---"
-                        if _profile_ctx:
-                            system_content += f"\n{_profile_ctx}"
-                        if _recent:
-                            turns = "\n".join(
-                                f"{m['role'].upper()}: {m['content'][:200]}"
-                                for m in _recent
-                            )
-                            system_content += f"\n\nRecent history:\n{turns}"
-                        system_content += "\n--- END MEMORY ---\n"
+                    if _profile_ctx:
+                        memory_block += f"\n{_profile_ctx}"
+
+                    # Layer 1b: Last 5 turns from LangChain (real UUID session_id)
+                    if _mem.chat_history:
+                        try:
+                            _msgs = _mem.chat_history.messages[-5:]
+                            if _msgs:
+                                turns = "\n".join(
+                                    f"{'User' if 'Human' in type(m).__name__ else 'EspaLuz'}: {str(m.content)[:200]}"
+                                    for m in _msgs
+                                )
+                                memory_block += f"\n\nRecent conversation:\n{turns}"
+                        except Exception as _e:
+                            print(f"⚠️ LangChain messages fetch: {_e}")
+
+                    # Layer 2: RAG — semantic search over all embedded turns
+                    try:
+                        from espaluz_rag import retrieve_context, get_session_id_for_user
+                        _session_id = get_session_id_for_user('telegram', _mem.user_id)
+                        _rag_ctx = retrieve_context(_session_id, new_message, top_k=3)
+                        if _rag_ctx:
+                            memory_block += f"\n\n{_rag_ctx}"
+                    except Exception as _e:
+                        print(f"⚠️ RAG retrieve non-fatal: {_e}")
+
+                    if memory_block != "\n\n--- PERSISTENT MEMORY ---":
+                        system_content += memory_block + "\n--- END MEMORY ---\n"
         except Exception as e:
             print(f"⚠️ Memory retrieval non-fatal: {e}")
 
@@ -3379,6 +3399,15 @@ def process_message_with_tracking(user_input, chat_id, user_id, message_obj):
             if memory.chat_history:
                 memory.chat_history.add_user_message(user_input)
                 memory.chat_history.add_ai_message(full_reply)
+                # RAG: embed and store both turns for semantic retrieval
+                try:
+                    from espaluz_rag import save_turn, get_session_id_for_user
+                    _rag_sid = get_session_id_for_user('telegram', memory.user_id)
+                    save_turn(_rag_sid, 'user', user_input)
+                    save_turn(_rag_sid, 'assistant', full_reply)
+                    print(f"✅ RAG embeddings saved for session {_rag_sid[:8]}...")
+                except Exception as _rag_e:
+                    print(f"⚠️ RAG save non-fatal: {_rag_e}")
             # Track vocabulary learned
             if learned_items.get("spanish_words"):
                 for word in learned_items["spanish_words"][:5]:
