@@ -1724,6 +1724,31 @@ Example of CORRECT formatting: ✅ "Hola" means hello
 THIS IS MANDATORY. NO ASTERISKS ALLOWED.
 """
 
+    # === LANGCHAIN MEMORY RETRIEVAL — cross-session persistent context ===
+    # Pulls who this user is + what they discussed in previous sessions
+    # Non-fatal: if memory fails, Claude gets normal prompt with no crash
+    if UNIFIED_MEMORY_AVAILABLE:
+        try:
+            _uid = str(session.get("user_id", ""))
+            if _uid:
+                _mem = EspaLuzMemory(platform='telegram', platform_user_id=_uid)
+                if _mem.user_id:
+                    _profile_ctx = _mem.get_context_for_prompt(_mem.user_id)
+                    _recent = _mem.get_recent_messages(_mem.user_id, limit=5)
+                    if _profile_ctx or _recent:
+                        system_content += "\n\n--- MEMORY FROM PREVIOUS SESSIONS ---"
+                        if _profile_ctx:
+                            system_content += f"\n{_profile_ctx}"
+                        if _recent:
+                            turns = "\n".join(
+                                f"{m['role'].upper()}: {m['content'][:200]}"
+                                for m in _recent
+                            )
+                            system_content += f"\n\nRecent history:\n{turns}"
+                        system_content += "\n--- END MEMORY ---\n"
+        except Exception as e:
+            print(f"⚠️ Memory retrieval non-fatal: {e}")
+
     # Add family member customization
     if family_role == "alisa":
         system_content += """
