@@ -4240,13 +4240,28 @@ def handle_conversation_voice(message):
         client = anthropic.Anthropic(api_key=os.environ.get("CLAUDE_API_KEY"))
         prompt = get_quick_translate_prompt(transcription, detected_lang, translate_to)
         
-        response = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=500,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        
-        translation = response.content[0].text.strip()
+        _tg_msgs = [{"role": "user", "content": prompt}]
+        try:
+            response = client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=500,
+                messages=_tg_msgs,
+            )
+            translation = response.content[0].text.strip()
+        except Exception as _claude_err:
+            if getattr(_claude_err, 'status_code', None) not in {400, 529, 503}:
+                raise
+            import urllib.request as _ur
+            _groq_key = os.environ.get("GROQ_API_KEY", "").strip()
+            if not _groq_key:
+                raise
+            _pl = json.dumps({"model": "llama-3.3-70b-versatile", "messages": _tg_msgs, "max_tokens": 500}).encode()
+            _req = _ur.Request("https://api.groq.com/openai/v1/chat/completions", data=_pl, method="POST",
+                headers={"Content-Type": "application/json", "Authorization": f"Bearer {_groq_key}"})
+            with _ur.urlopen(_req, timeout=30) as _r:
+                _d = json.loads(_r.read())
+            translation = _d["choices"][0]["message"]["content"].strip()
+            print("[EspaLuz Telegram] Groq fallback (400 credit exhaustion) succeeded")
         
         # 5. Generate voice response
         tts_lang = "es" if translate_to == "es" else "en"
