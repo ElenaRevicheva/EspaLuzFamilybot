@@ -1,0 +1,26 @@
+# Install on Oracle Ubuntu (canonical path per ORACLE_ALL_PRODUCTS_RESILIENCE.md):
+#   sudo cp deploy/espaluz-payments-webhook.service /etc/systemd/system/espaluz-payments-webhook.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now espaluz-payments-webhook
+#
+# Prerequisites: nginx (or TLS terminator) fronts webhook.aideazz.xyz -> 127.0.0.1:5000
+# Repo checkout: /home/ubuntu/EspaLuzFamilybot (Telegram codebase hosts shared payment webhooks).
+
+[Unit]
+Description=EspaLuz PayPal + PagueloFacil webhook receiver (Flask :5000)
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/EspaLuzFamilybot
+Environment=PYTHONUNBUFFERED=1
+# Optional: EnvironmentFile=/home/ubuntu/EspaLuzFamilybot/.env
+# ExecStart: use `.venv/bin/python` if you use a virtualenv under the repo checkout.
+ExecStart=/usr/bin/python3 /home/ubuntu/EspaLuzFamilybot/paypal_webhook_server.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

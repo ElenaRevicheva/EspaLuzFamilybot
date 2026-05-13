@@ -1,0 +1,24 @@
+=== Oracle: enable PagueloFacil webhook (one URL for WhatsApp + Telegram) ===
+Public URL for Paguelofacil support: https://webhook.aideazz.xyz/paguelofacil-webhook
+
+On VM (Ubuntu), from repo /home/ubuntu/EspaLuzFamilybot:
+  sudo apt-get update && sudo apt-get install -y python3-flask python3-dotenv python3-requests
+  # OR: pip install -r requirements.txt (user/venv model you prefer)
+
+  sudo cp deploy/espaluz-payments-webhook.service /etc/systemd/system/
+  sudo systemctl daemon-reload
+  sudo systemctl enable --now espaluz-payments-webhook
+  sudo systemctl status espaluz-payments-webhook --no-pager
+
+Verify locally on VM:
+  curl -sS http://127.0.0.1:5000/health | head -c 200
+  curl -sS http://127.0.0.1:5000/paguelofacil-webhook | head -c 300
+
+Via public hostname (HTTPS must already terminate at nginx/cloudflare pointing to :5000):
+  curl -sS https://webhook.aideazz.xyz/paguelofacil-webhook
+  curl -sS -X POST https://webhook.aideazz.xyz/paguelofacil-webhook -H "Content-Type: application/json" -d "{\"test\":true}"
+
+Nginx proxy example: see nginx-webhook.conf in repo (server_name webhook.aideazz.xyz -> proxy_pass http://127.0.0.1:5000).
+
+Journal logs:
+  journalctl -u espaluz-payments-webhook -f

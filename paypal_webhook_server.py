@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """
-PayPal Webhook Server - Receives REAL-TIME subscription notifications
-Runs alongside the Telegram bot to capture new subscriptions INSTANTLY
-No manual adding, no searching history - REAL webhooks!
+PayPal webhook + PagueloFacil webhook — receives server-side payment notifications.
+
+PayPal: /paypal-webhook
+PagueloFacil: /paguelofacil-webhook (HTTPS via webhook.aideazz.xyz)
+Runs alongside Telegram bot infra; nginx proxies the hostname to this Flask app (port 5000).
 """
 
 import os
@@ -97,9 +99,54 @@ def _emit_paypal_event(action, email, subscription_id, paypal_event_type):
         pass  # Never crash the webhook handler
 
 
+@app.route('/paguelofacil-webhook', methods=['GET', 'POST', 'HEAD'])
+@app.route('/paguelofacil-webhook/', methods=['GET', 'POST', 'HEAD'])
+def paguelofacil_webhook():
+    """
+    PagueloFacil notifies via POST per https://developers.paguelofacil.com/guias/enlace-de-pago
+    ('Configuración de webhook'). Body is typically JSON: merchantDescriptor, codOper, status,
+    totalPay, operationType (e.g. RECURRENT, AUTH_CAPTURE).
+
+    One URL serves all EspaLuz charges (customers may pay after WhatsApp OR Telegram—we attribute
+    in app logic via metadata / subscriber records).
+
+    Configure in PagueloFacil (HTTPS): https://webhook.aideazz.xyz/paguelofacil-webhook
+
+    GET/HEAD: simple probe for uptime / support sanity checks (not a secret channel).
+    """
+    if request.method in ('GET', 'HEAD'):
+        payload = {
+            "ok": True,
+            "service": "espaluz-payments-webhook",
+            "paguelofacil_post_path": "/paguelofacil-webhook",
+            "note": "EspaLuz operates on WhatsApp and Telegram (two systemd apps); Paguelofacil uses this single centralized URL for payment notifications.",
+        }
+        if request.method == 'HEAD':
+            return '', 200
+        return jsonify(payload), 200
+
+    raw = request.get_data(cache=True) or b""
+    ctype = request.content_type or ""
+    try:
+        payload_json = json.loads(raw.decode(request.charset or "utf-8"))
+        cod = payload_json.get("codOper") or payload_json.get("relatedTx") or "n/a"
+        logging.info(
+            "PAGUELOFACIL WEBHOOK ctype=%s codOper=%s status=%s op=%s",
+            ctype,
+            cod,
+            payload_json.get("status"),
+            payload_json.get("operationType") or payload_json.get("merchantDescriptor"),
+        )
+        logging.info("PAGUELOFACIL WEBHOOK body (trunc): %s", json.dumps(payload_json)[:4000])
+    except Exception:
+        logging.info("PAGUELOFACIL WEBHOOK (non-json or empty) ctype=%s raw=%s", ctype, repr(raw[:2000]))
+
+    return jsonify({"status": "received"}), 200
+
+
 @app.route('/paypal-webhook', methods=['POST'])
 def paypal_webhook():
-    """Handle PayPal webhook notifications - REAL-TIME subscription events"""
+    """Handle PayPal webhook notifications - REAL-TIME subscription events (unchanged behavior)."""
     try:
         webhook_data = request.get_json() or {}
         event_type = webhook_data.get('event_type', '')
@@ -165,14 +212,18 @@ def health():
     """Health check endpoint"""
     return jsonify({
         'status': 'healthy',
-        'service': 'EspaLuz PayPal Webhook',
+        'service': 'EspaLuz payments webhooks (PayPal + PagueloFacil)',
         'timestamp': datetime.now().isoformat()
     }), 200
 
 
 @app.route('/', methods=['GET'])
 def home():
-    return 'EspaLuz PayPal Webhook Server - Running', 200
+    return (
+        'EspaLuz payments webhooks — PayPal /paypal-webhook — '
+        'PagueloFacil POST /paguelofacil-webhook (centralized for WhatsApp + Telegram)',
+        200,
+    )
 
 
 if __name__ == '__main__':
