@@ -9,6 +9,36 @@ All existing code continues to work - this adds database tracking alongside it.
 import os
 import json
 import logging
+import threading
+
+def _push_espaluz_tg_to_crm(user_id: str, trial_days: int):
+    """Fire-and-forget: push EspaLuz Telegram user to HubSpot as [ESPALUZ] deal."""
+    import os, json
+    from urllib.request import urlopen, Request as URLRequest
+    secret = os.environ.get('OUTREACH_SECRET', '').strip()
+    base = (os.environ.get('CTO_AIPA_WEBHOOK_URL') or 'https://webhook.aideazz.xyz/cto').rstrip('/')
+    if not secret:
+        return
+    try:
+        payload = json.dumps({
+            'source': 'espaluz_telegram',
+            'type': 'espaluz_user',
+            'pipeline': 'client',
+            'dealName': f'[ESPALUZ] TG {user_id} — {trial_days}d trial',
+            'name': f'TG user {user_id}',
+            'context': f'EspaLuz Telegram | Trial: {trial_days} days',
+            'signalStrength': 'medium',
+            'stage': 'appointmentscheduled',
+        }).encode('utf-8')
+        req = URLRequest(f'{base}/api/crm-event', data=payload,
+            headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {secret}'},
+            method='POST')
+        with urlopen(req, timeout=6) as resp:
+            if 200 <= resp.status < 300:
+                print(f'[espaluz_crm] [ESPALUZ] TG deal pushed: {user_id}')
+    except Exception as e:
+        print(f'[espaluz_crm] TG non-fatal: {e}')
+
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, List
 import threading
@@ -215,6 +245,8 @@ class EspaluzDatabase:
                     """, (today,))
                     
                     conn.commit()
+                    threading.Thread(target=_push_espaluz_tg_to_crm,
+                        args=(user_id, trial_days), daemon=True).start()
                     return True
         except Exception as e:
             logging.error(f"Error starting trial: {e}")
