@@ -382,7 +382,7 @@ TELEGRAM_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 CLAUDE_API_KEY = os.environ["CLAUDE_API_KEY"]
 OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
 SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY")
-CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL_NAME", "claude-sonnet-4-20250514")
+CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL_NAME", "claude-sonnet-4-5-20250929")
 CLAUDE_API_VERSION = os.environ.get("CLAUDE_API_VERSION", "2023-06-01")
 MAX_HISTORY_MESSAGES = int(os.getenv("MAX_HISTORY_MESSAGES", 10))
 
@@ -4243,7 +4243,7 @@ def handle_conversation_voice(message):
         _tg_msgs = [{"role": "user", "content": prompt}]
         try:
             response = client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model="claude-sonnet-4-5-20250929",
                 max_tokens=500,
                 messages=_tg_msgs,
             )
@@ -4593,7 +4593,7 @@ Translation:"""
                 "anthropic-version": "2023-06-01"
             },
             json={
-                "model": "claude-sonnet-4-20250514",
+                "model": "claude-sonnet-4-5-20250929",
                 "max_tokens": 500,
                 "messages": [{"role": "user", "content": prompt}]
             },
