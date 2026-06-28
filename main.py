@@ -84,6 +84,20 @@ except ImportError as e:
     PAYPAL_SUBSCRIPTION_LINK = "https://www.paypal.com/webapps/billing/plans/subscribe?plan_id=P-6GR95409C95293139NFSBJJY"
     print(f"⚠️ PayPal/Demo modules not available: {e}")
 
+# === PAGUELOFACIL ONE-TIME PAYMENTS (Panama / LATAM cards) ===
+try:
+    from espaluz_paguelofacil import paguelofacil_system, PAGUELOFACIL_AMOUNT
+    PAGUELOFACIL_AVAILABLE = paguelofacil_system.is_configured()
+    if PAGUELOFACIL_AVAILABLE:
+        print("✅ PagueloFacil one-time payments configured")
+    else:
+        print("ℹ️ PagueloFacil module loaded — set PAGUELOFACIL_CCLW in .env to enable /pagar")
+except ImportError as e:
+    PAGUELOFACIL_AVAILABLE = False
+    paguelofacil_system = None
+    PAGUELOFACIL_AMOUNT = "11.00"
+    print(f"⚠️ PagueloFacil module not available: {e}")
+
 # === DATABASE MODULE (NEW - Jan 2026) ===
 # PostgreSQL for investor-ready analytics - JSON fallback if unavailable
 try:
@@ -877,9 +891,26 @@ def is_subscribed(user_id):
     except Exception as e:
         print(f"⚠️ Legacy subscription check error: {e}")
     
-    # === FUTURE: PayPal subscription check will go here ===
+    # === PAGUELOFACIL PREPAID (automatic — no /link needed) ===
+    try:
+        from espaluz_paguelofacil import has_active_access
+        if has_active_access(user_id):
+            print(f"✅ User {user_id} has active PagueloFacil prepaid access")
+            return True
+    except ImportError:
+        pass
+
+    # === PAYPAL SUBSCRIPTION (via /link, I-XXXX, or webhook) ===
+    if PAYPAL_SYSTEM_AVAILABLE and paypal_system:
+        try:
+            sub = paypal_system._check_user_subscription(user_id)
+            if sub.get("is_active"):
+                print(f"✅ User {user_id} has active PayPal/PF subscription check")
+                return True
+        except Exception as e:
+            print(f"⚠️ PayPal subscription check error: {e}")
     
-    # Default: Allow access (for now - remove blocking)
+    # Default: Allow access (transition period — trial enforcement soft)
     print(f"ℹ️ User {user_id} - allowing access (trial system active)")
     return True  # Changed from False to True - no blocking!
 
@@ -3682,7 +3713,10 @@ Just chat! Text, voice 🎤, photos 📷
 ━━━━━━━━━━━━━━━━━━━━━━━━
 🔐 *ACCOUNT*
 ━━━━━━━━━━━━━━━━━━━━━━━━
-/link — Link Subscription ID
+/trial — Check free trial status
+/pagar — Pay $11 via PagueloFacil (30 days)
+/subscribe — PayPal & payment options
+/link — Link PayPal Subscription ID
 /connect CODE — Web dashboard
 
 ━━━━━━━━━━━━━━━━━━━━━━━━
@@ -4124,7 +4158,10 @@ You're currently on a FREE TRIAL - enjoy all features!
 After trial ends:
 • Monthly: $11/month (includes 14-day FREE trial!)
 
-💳 PayPal (ready now):
+🇵🇦 PagueloFacil (Panama cards, one-time):
+  Send /pagar for secure checkout link ($11 → 30 days)
+
+💳 PayPal (monthly subscription):
 {PAYPAL_SUBSCRIPTION_LINK}
 
 🔑 After subscribing, send me your Subscription ID to activate!
@@ -4332,19 +4369,82 @@ def handle_subscribe(message):
     sub_msg = f"""💳 EspaLuz Subscription
 {trial_info}
 🎯 Simple Pricing:
-• $11/month - Full access, family included
+• ${PAGUELOFACIL_AMOUNT if PAGUELOFACIL_AVAILABLE else '11'}/month — full access, family included
 • 14-day FREE trial included!
 
-💳 Subscribe via PayPal:
+🇵🇦 **Panamá / tarjeta local:** /pagar — pago único con PagueloFacil (Visa, Mastercard, PagoCash)
+💳 **PayPal** (suscripción mensual):
 {PAYPAL_SUBSCRIPTION_LINK}
 
-🔑 After subscribing:
+🔑 After PayPal subscribe:
 Send me your Subscription ID (I-XXXXXXXXXXXX) to activate instantly!
 Find it in your PayPal confirmation or Settings → Payments → Automatic payments
 
 ✨ Your Spanish learning journey awaits!"""
     
     bot.send_message(message.chat.id, sub_msg)
+
+
+@bot.message_handler(commands=["pagar", "pay"])
+def handle_pagar(message):
+    """Generate PagueloFacil one-time payment link (Panama / LATAM cards)."""
+    user_id = str(message.from_user.id)
+
+    if not paguelofacil_system:
+        bot.reply_to(
+            message,
+            "⚠️ PagueloFacil no está disponible aún.\n"
+            f"Usa PayPal: {PAYPAL_SUBSCRIPTION_LINK}",
+        )
+        return
+
+    if not PAGUELOFACIL_AVAILABLE:
+        bot.reply_to(
+            message,
+            "⚠️ PagueloFacil aún no está activado en el servidor.\n"
+            "Estamos esperando el código CCLW del comercio.\n\n"
+            f"Mientras tanto, PayPal: {PAYPAL_SUBSCRIPTION_LINK}",
+        )
+        return
+
+    access = paguelofacil_system.get_access_info(user_id)
+    if access.get("active"):
+        bot.reply_to(
+            message,
+            f"✅ Ya tienes acceso activo hasta {access['paid_until']} ({access['days_remaining']} días).\n"
+            "You already have active access.\n\n"
+            "Para renovar antes de que expire, usa /pagar de nuevo.",
+        )
+        return
+
+    bot.reply_to(message, "🔗 Generando enlace de pago seguro… / Creating secure payment link…")
+    result = paguelofacil_system.create_payment_link(user_id)
+
+    if not result.get("success"):
+        bot.send_message(
+            message.chat.id,
+            f"❌ No pude crear el enlace: {result.get('error', 'error desconocido')}\n\n"
+            f"Prueba PayPal: {PAYPAL_SUBSCRIPTION_LINK}",
+        )
+        return
+
+    url = result["url"]
+    amount = result.get("amount", PAGUELOFACIL_AMOUNT)
+    bot.send_message(
+        message.chat.id,
+        f"""💳 **Pago único EspaLuz — ${amount}**
+
+🇵🇦 PagueloFacil (tarjeta Visa/Mastercard o PagoCash en Panamá)
+
+👉 {url}
+
+• Acceso: **30 días** completos
+• Tras pagar, **no necesitas /link** — te confirmamos aquí automáticamente
+• El enlace expira en 1 hora
+
+¿Problemas? Escríbenos o usa PayPal: {PAYPAL_SUBSCRIPTION_LINK}""",
+        disable_web_page_preview=False,
+    )
 
 
 @bot.message_handler(commands=["trial"])
@@ -5227,11 +5327,18 @@ import os
 
 # === Register custom bot commands ===
 custom_commands = [
-    BotCommand("start", "Start Espaluz"),
-    BotCommand("reset", "Reset learning session"),
-    BotCommand("progress", "Show learning progress"),
+    BotCommand("start", "Welcome & quick start"),
+    BotCommand("menu", "Full command menu"),
+    BotCommand("help", "Help and instructions"),
+    BotCommand("trial", "Check your free trial status"),
+    BotCommand("pagar", "Pay $11 via PagueloFacil — 30 days access"),
+    BotCommand("subscribe", "Payment options: PayPal & PagueloFacil"),
+    BotCommand("link", "Link PayPal subscription ID (I-XXXX)"),
+    BotCommand("convo", "Real-time voice translation mode"),
+    BotCommand("progress", "Your learning progress"),
+    BotCommand("profile", "View your profile"),
+    BotCommand("reset", "Reset conversation"),
     BotCommand("family", "Switch family member"),
-    BotCommand("help", "Help and instructions")
 ]
 
 def register_commands_with_retry(max_retries=5, initial_delay=10):

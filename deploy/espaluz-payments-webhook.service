@@ -17,8 +17,13 @@ Group=ubuntu
 WorkingDirectory=/home/ubuntu/EspaLuzFamilybot
 Environment=PYTHONUNBUFFERED=1
 # Optional: EnvironmentFile=/home/ubuntu/EspaLuzFamilybot/.env
+# Required for PagueloFacil + Telegram payment notifications:
+#   PAGUELOFACIL_CCLW=...
+#   PAGUELOFACIL_SANDBOX=true   # false in production
+#   TELEGRAM_BOT_TOKEN=...
+EnvironmentFile=-/home/ubuntu/EspaLuzFamilybot/.env
 # ExecStart: use `.venv/bin/python` if you use a virtualenv under the repo checkout.
-ExecStart=/usr/bin/python3 /home/ubuntu/EspaLuzFamilybot/paypal_webhook_server.py
+ExecStart=/home/ubuntu/EspaLuzFamilybot/venv/bin/python /home/ubuntu/EspaLuzFamilybot/paypal_webhook_server.py
 Restart=always
 RestartSec=5
 

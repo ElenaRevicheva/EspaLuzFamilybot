@@ -531,7 +531,14 @@ class TelegramPayPalSystem:
         }
     
     def _check_user_subscription(self, user_id: str) -> Dict[str, Any]:
-        """Check if user has active subscription via email linking"""
+        """Check if user has active subscription via email linking or PagueloFacil prepay"""
+        try:
+            from espaluz_paguelofacil import has_active_access
+            if has_active_access(user_id):
+                return {"is_active": True, "source": "paguelofacil"}
+        except ImportError:
+            pass
+
         # Check phone-email mapping
         mappings = self._load_json(self.mapping_file)
         
@@ -720,6 +727,7 @@ Find it in PayPal → Settings → Payments → Automatic payments."""
 Para continuar usando EspaLuz, suscríbete:
 To continue using EspaLuz, subscribe:
 
+🇵🇦 **PagueloFacil** (pago único, tarjeta local Panamá): envía /pagar
 💳 **PayPal** ($11/mes - $11/month + 14-day FREE trial!)
 👉 {PAYPAL_SUBSCRIPTION_LINK}
 

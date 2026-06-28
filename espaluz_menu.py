@@ -112,11 +112,15 @@ Just send me any message! I understand:
 /trial — Check your trial status
   ↳ 14-day free trial for new users
 
-/subscribe — View subscription options
-  ↳ PayPal: $11/month (14-day FREE trial!)
+/pagar — Pay with PagueloFacil (Panama)
+  ↳ $11 one-time → 30 days (Visa, MC, PagoCash)
+  ↳ No extra step — access unlocks automatically after payment
 
-/link — Link with Subscription ID (I-XXXX)
-  ↳ Activates paid subscription
+/subscribe — View subscription options
+  ↳ PayPal monthly or PagueloFacil /pagar
+
+/link — Link PayPal subscription only (I-XXXX)
+  ↳ Not for PagueloFacil — PF users just pay via /pagar
 
 /connect CODE — Connect to web dashboard
   ↳ Sync your progress across devices
@@ -157,7 +161,7 @@ Perfect for: pharmacy, doctor, shopping!
         /help_shopping /help_transport /help_emergency
 *Culture:* /country /slang /culture  
 *Orgs:* /org /feedback /refer
-*Account:* /trial /subscribe /link /connect
+*Account:* /trial /pagar /subscribe /link /connect
 *Convo:* /convo on /convo off /convo es /convo en
 *Demo:* /demo /scenarios
 

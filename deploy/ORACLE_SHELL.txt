@@ -1,6 +1,16 @@
 === Oracle: enable PagueloFacil webhook (one URL for WhatsApp + Telegram) ===
 Public URL for Paguelofacil support: https://webhook.aideazz.xyz/paguelofacil-webhook
 
+Add to /home/ubuntu/EspaLuzFamilybot/.env (after Paguelofacil sends CCLW):
+  PAGUELOFACIL_CCLW=<merchant CCLW from Paguelofacil>
+  PAGUELOFACIL_SANDBOX=true          # false when going live
+  PAGUELOFACIL_AMOUNT=11.00
+  PAGUELOFACIL_ACCESS_DAYS=30
+  TELEGRAM_BOT_TOKEN=<same as familybot>
+
+Telegram users pay with: /pagar  (generates secure Paguelofacil checkout link)
+Webhook auto-grants 30 days and sends Telegram confirmation.
+
 On VM (Ubuntu), from repo /home/ubuntu/EspaLuzFamilybot:
   sudo apt-get update && sudo apt-get install -y python3-flask python3-dotenv python3-requests
   # OR: pip install -r requirements.txt (user/venv model you prefer)

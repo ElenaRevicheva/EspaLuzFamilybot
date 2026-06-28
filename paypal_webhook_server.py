@@ -127,6 +127,7 @@ def paguelofacil_webhook():
 
     raw = request.get_data(cache=True) or b""
     ctype = request.content_type or ""
+    payload_json = None
     try:
         payload_json = json.loads(raw.decode(request.charset or "utf-8"))
         cod = payload_json.get("codOper") or payload_json.get("relatedTx") or "n/a"
@@ -140,8 +141,16 @@ def paguelofacil_webhook():
         logging.info("PAGUELOFACIL WEBHOOK body (trunc): %s", json.dumps(payload_json)[:4000])
     except Exception:
         logging.info("PAGUELOFACIL WEBHOOK (non-json or empty) ctype=%s raw=%s", ctype, repr(raw[:2000]))
+        return jsonify({"status": "received"}), 200
 
-    return jsonify({"status": "received"}), 200
+    try:
+        from espaluz_paguelofacil import process_webhook
+        result = process_webhook(payload_json)
+        logging.info("PAGUELOFACIL processed: %s", result)
+        return jsonify({"status": "received", "result": result}), 200
+    except Exception as exc:
+        logging.error("PAGUELOFACIL handler error: %s", exc)
+        return jsonify({"status": "received", "handler_error": str(exc)}), 200
 
 
 @app.route('/paypal-webhook', methods=['POST'])
