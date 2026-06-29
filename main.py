@@ -3459,6 +3459,10 @@ def process_message_with_tracking(user_input, chat_id, user_id, message_obj):
 def handle_start(message):
     user_id = str(message.from_user.id)
     
+    # Atlas micro-test: t.me/EspaLuzFamily_bot?start=expat_language_2026-06-28
+    start_arg = (message.text or "").split(maxsplit=1)[1].strip() if len((message.text or "").split()) > 1 else ""
+    atlas_concept_id = start_arg if start_arg and "_" in start_arg and len(start_arg) <= 64 else None
+    
     # Track activity if enhanced brain available
     if ENHANCED_BRAIN_AVAILABLE:
         try:
@@ -3477,11 +3481,17 @@ def handle_start(message):
     # Wiring: emit signup event to CTO AIPA
     try:
         from wiring_emitter import emit_event
-        emit_event("user_signup", {
+        signup_data = {
             "user_id": user_id,
             "access_type": "onboarding_started",
-            "timestamp": datetime.now().isoformat()
-        })
+            "timestamp": datetime.now().isoformat(),
+        }
+        if atlas_concept_id:
+            signup_data["atlas_concept_id"] = atlas_concept_id
+            signup_data["utm_term"] = atlas_concept_id
+        emit_event("user_signup", signup_data)
+        if atlas_concept_id:
+            emit_event("trial_started", signup_data)
     except Exception:
         pass  # Never crash the bot
 

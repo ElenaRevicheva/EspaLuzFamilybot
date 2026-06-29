@@ -247,6 +247,15 @@ class EspaluzDatabase:
                     conn.commit()
                     threading.Thread(target=_push_espaluz_tg_to_crm,
                         args=(user_id, trial_days), daemon=True).start()
+                    try:
+                        from wiring_emitter import emit_event
+                        emit_event('trial_started', {
+                            'user_id': user_id,
+                            'trial_days': trial_days,
+                            'timestamp': datetime.now().isoformat(),
+                        })
+                    except Exception:
+                        pass
                     return True
         except Exception as e:
             logging.error(f"Error starting trial: {e}")
