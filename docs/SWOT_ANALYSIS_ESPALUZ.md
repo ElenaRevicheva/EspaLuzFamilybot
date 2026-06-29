@@ -110,12 +110,14 @@ EspaLuz Telegram is a bilingual AI Spanish tutor for expat families, travelers, 
 - Stores in session memory
 - **Status:** EXISTS but NOT deeply used
 
-### 10. PagueloFacil One-Time Payments (95% Complete) — **NEW June 2026**
-- `/pagar` (alias `/pay`) — secure checkout link for Panama/LATAM (card, no PayPal account)
+### 10. PagueloFacil One-Time Payments (98% Complete) — **June 2026**
+- `/pagar` (Telegram) · `pagar` (WhatsApp) — secure checkout for Panama/LATAM cards
 - $11 USD → 30 days access (PagueloFacil has no recurring billing)
 - Automatic activation via webhook — **no `/link` step**
+- Shared webhook + `paguelofacil_payments.json` for both platforms
+- Iron-clad access + expiry reminders (trial 2d/24h, PF 3d/24h)
 - Merchant: `aideazz` on PagueloFacil; public webhook registered with support
-- **Status:** LIVE on Oracle VM — see **💳 PAGUELOFACIL PAYMENTS** section below
+- **Status:** LIVE on WhatsApp + Telegram — see **💳 PAGUELOFACIL PAYMENTS** section below
 
 ---
 
@@ -495,6 +497,13 @@ When asked about any threat, use this structure:
 
 ## 📝 CHANGELOG
 
+### June 29, 2026
+- ✅ Iron-clad access on **Telegram** — removed grace period + default-allow in `is_subscribed()`; voice/text/photo gated via `enforce_learning_access()`
+- ✅ Expiry reminders on **both platforms** — trial (2d, 24h) + PagueloFacil (3d, 24h); bilingual; deduped
+- ✅ PagueloFacil **WhatsApp** live — `pagar`, shared webhook, help menu payment section
+- ✅ `espaluz_paguelofacil.py` — `hours_remaining`, `format_paid_until_display`, reminder flag reset on grant
+- ✅ PayPangea removed from WhatsApp repo (archived)
+
 ### June 28, 2026
 - ✅ PagueloFacil one-time payments for Telegram (`/pagar`, `/pay`)
 - ✅ Webhook auto-grant 30-day access + Telegram confirmation (no manual `/link`)
@@ -601,16 +610,16 @@ SELECT memory_type, content FROM user_memories WHERE memory_type = 'family';
 
 ## 💳 PAGUELOFACIL PAYMENTS (June 2026)
 
-**Why:** PagueloFacil does not support recurring subscriptions. EspaLuz Telegram offers a one-time $11 payment for 30 days of access — aimed at Panama and LATAM users who prefer local card checkout over PayPal.
+**Why:** PagueloFacil does not support recurring subscriptions. EspaLuz offers a one-time $11 payment for 30 days — Panama and LATAM users who prefer local card checkout over PayPal.
 
-### Two payment paths (Telegram)
+### Two payment paths (Telegram + WhatsApp)
 
-| Path | Command | After payment | Billing |
-|------|---------|---------------|---------|
-| **PagueloFacil** | `/pagar` or `/pay` | Automatic — webhook grants access | One-time $11 / 30 days |
-| **PayPal** | `/subscribe` then `/link` | User sends `I-XXXX…` or PayPal email | Recurring subscription |
+| Path | Telegram | WhatsApp | After payment | Billing |
+|------|----------|----------|---------------|---------|
+| **PagueloFacil** | `/pagar` | `pagar` | Automatic webhook | $11 / 30 days |
+| **PayPal** | `/subscribe` + `/link` | Subscribe link + email/ID | Manual link | Recurring |
 
-`/menu` and `/help` explain both options. `is_subscribed()` in `main.py` and `_check_user_subscription()` in `espaluz_paypal_system.py` honor PagueloFacil prepaid access.
+`is_user_allowed()` / `enforce_learning_access()` honor PagueloFacil prepaid access. When expired, learning **pauses** until renewal.
 
 ### Architecture (Oracle VM `170.9.242.90`)
 
@@ -685,5 +694,5 @@ curl -sS https://webhook.aideazz.xyz/paguelofacil-webhook
 ### Not yet done
 
 - PagueloFacil access stored in `paguelofacil_payments.json` only — not synced to PostgreSQL `subscriptions` table
-- WhatsApp `/pagar` — same module can be reused; not wired in EspaLuzWhatsApp yet
-- PagueloFacil has no auto-renewal; users must `/pagar` again after 30 days
+- PagueloFacil has no auto-renewal; users must `/pagar` or `pagar` again after 30 days (reminders help)
+- Proactive push reminders (cron) not implemented — reminders fire when user messages

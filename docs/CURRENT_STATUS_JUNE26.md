@@ -1,6 +1,6 @@
-# EspaLuz Current Status - June 26, 2026
+# EspaLuz Current Status - June 29, 2026
 
-## Vision Achievement: ~93%
+## Vision Achievement: ~94%
 
 EspaLuz is a truly emotionally intelligent AI personal assistant and bilingual Spanish-English tutor serving:
 - Expats and Expat Families
@@ -11,13 +11,42 @@ EspaLuz is a truly emotionally intelligent AI personal assistant and bilingual S
 
 ## Platform Status
 
-| Platform | Status | Commit | Last Fix |
-|----------|--------|--------|----------|
-| **WhatsApp** | Running | `3ae4f82` | message_text bug fixed |
-| **Telegram** | Running | `686a5e4` | PagueloFacil `/pagar` + webhook fix |
-| **Payment webhooks** | Running | `686a5e4` | `espaluz-payments-webhook` on Oracle :5000 |
+| Platform | Status | Last Update |
+|----------|--------|-------------|
+| **WhatsApp** | ✅ Running | June 29 — PagueloFacil `pagar`, iron-clad access, expiry reminders |
+| **Telegram** | ✅ Running | June 29 — iron-clad access fix, PF/trial expiry reminders |
+| **Payment webhooks** | ✅ Running | `espaluz-payments-webhook` on Oracle :5000 |
 
 **Oracle Server:** 170.9.242.90 (bot + webhook services active)
+
+**Canonical repos:** [EspaLuzWhatsApp](https://github.com/ElenaRevicheva/EspaLuzWhatsApp) · [EspaLuzFamilybot](https://github.com/ElenaRevicheva/EspaLuzFamilybot)
+
+---
+
+## June 29, 2026 — Iron-Clad Access + Expiry Reminders (Both Platforms)
+
+### Problem solved
+Users could continue learning after trial or PagueloFacil expired. Telegram `is_subscribed()` had a 7-day grace period and defaulted to `True` — effectively no enforcement.
+
+### Solution (WhatsApp + Telegram)
+
+| Feature | WhatsApp | Telegram |
+|---------|----------|----------|
+| Access gate | `trial_system.is_user_allowed()` in `espaluz_bridge.py` | `enforce_learning_access()` → `paypal_system.is_user_allowed()` |
+| Blocked message | *"Tu viaje de aprendizaje está en pausa"* | Same (bilingual) |
+| Trial reminders | 2 days + 24 hours before end | Same |
+| PagueloFacil reminders | 3 days + 24 hours before `paid_until` | Same |
+| Reminder dedupe | Once per threshold; PF flags in `paguelofacil_payments.json` | Same |
+| Still works when blocked | `pagar`, email/sub ID | `/pagar`, `/subscribe`, `/link`, `/trial`, `/help` |
+
+### PagueloFacil WhatsApp (June 27–29)
+
+- `espaluz_paguelofacil_wa.py` — loads live CCLW from Familybot `.env`
+- `pagar` before access gate; webhook grants 30 days + WhatsApp notify
+- Shared store: `paguelofacil_payments.json` with `WA:` / `TG:` keys
+- Help menu includes payment section
+
+See EspaLuzWhatsApp `docs/CURRENT_STATUS_JUNE29.md` for WhatsApp-specific detail.
 
 ---
 

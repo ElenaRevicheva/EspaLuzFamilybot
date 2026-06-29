@@ -827,61 +827,22 @@ def poll_subscriptions():
 
 def is_subscribed(user_id):
     """
-    Check if user has access. Now includes FREE TRIAL for everyone!
-    
-    Access granted if:
-    1. User is within free trial period (14 days, 60 for org members)
-    2. User has PayPal subscription (future)
-    3. User has valid org code
-    4. User is in legacy subscribers.json
+    Iron-clad access check: trial, PagueloFacil prepaid, or PayPal subscription.
+    No grace period — expired users must pay to continue learning.
     """
     user_id = str(user_id)
-    
-    # === FREE TRIAL SYSTEM (NEW - Jan 2026) ===
+
+    if PAYPAL_SYSTEM_AVAILABLE and paypal_system:
+        return paypal_system.is_user_allowed(user_id)["allowed"]
+
+    # Fallback when PayPal system unavailable
     try:
-        # Check free trial status
-        trial_file = "user_trials.json"
-        trials = {}
-        
-        if os.path.exists(trial_file):
-            with open(trial_file, "r") as f:
-                trials = json.load(f)
-        
-        if user_id in trials:
-            # User exists, check trial status
-            user_trial = trials[user_id]
-            start_date = datetime.fromisoformat(user_trial.get("start_date", datetime.now().isoformat()))
-            trial_days = user_trial.get("trial_days", 14)
-            org_code = user_trial.get("org_code")
-            
-            # Check if trial is still valid
-            days_elapsed = (datetime.now() - start_date).days
-            if days_elapsed <= trial_days:
-                print(f"✅ User {user_id} has valid trial ({days_elapsed}/{trial_days} days)")
-                return True
-            else:
-                # Trial expired, but still allow access during transition period
-                if days_elapsed <= trial_days + 7:  # 7 day grace period
-                    print(f"⚠️ User {user_id} trial expired but in grace period")
-                    return True
-        else:
-            # New user - automatically start free trial!
-            trials[user_id] = {
-                "start_date": datetime.now().isoformat(),
-                "trial_days": 14,  # Default 14 days
-                "org_code": None,
-                "status": "trial"
-            }
-            with open(trial_file, "w") as f:
-                json.dump(trials, f, indent=2)
-            print(f"🎉 New user {user_id} - started 14-day free trial!")
+        from espaluz_paguelofacil import has_active_access
+        if has_active_access(user_id):
             return True
-            
-    except Exception as e:
-        print(f"⚠️ Trial check error: {e} - allowing access")
-        return True  # On error, allow access
-    
-    # === LEGACY: Check old Gumroad subscribers ===
+    except ImportError:
+        pass
+
     try:
         with open("subscribers.json", "r") as f:
             subscribers = json.load(f)
@@ -890,29 +851,35 @@ def is_subscribed(user_id):
                 return True
     except Exception as e:
         print(f"⚠️ Legacy subscription check error: {e}")
-    
-    # === PAGUELOFACIL PREPAID (automatic — no /link needed) ===
-    try:
-        from espaluz_paguelofacil import has_active_access
-        if has_active_access(user_id):
-            print(f"✅ User {user_id} has active PagueloFacil prepaid access")
-            return True
-    except ImportError:
-        pass
 
-    # === PAYPAL SUBSCRIPTION (via /link, I-XXXX, or webhook) ===
-    if PAYPAL_SYSTEM_AVAILABLE and paypal_system:
-        try:
-            sub = paypal_system._check_user_subscription(user_id)
-            if sub.get("is_active"):
-                print(f"✅ User {user_id} has active PayPal/PF subscription check")
-                return True
-        except Exception as e:
-            print(f"⚠️ PayPal subscription check error: {e}")
-    
-    # Default: Allow access (transition period — trial enforcement soft)
-    print(f"ℹ️ User {user_id} - allowing access (trial system active)")
-    return True  # Changed from False to True - no blocking!
+    return False
+
+
+def enforce_learning_access(message, user_id: str) -> bool:
+    """
+    Gate tutor/voice/photo learning. Sends pause message if blocked;
+    sends expiry reminders when access is active but nearing end.
+    """
+    user_id = str(user_id)
+    if not PAYPAL_SYSTEM_AVAILABLE or not paypal_system:
+        if not is_subscribed(user_id):
+            bot.reply_to(
+                message,
+                "🔐 Tu viaje de aprendizaje está en pausa. / Your learning journey is paused.\n\n"
+                "Envía /pagar o /subscribe para continuar. / Send /pagar or /subscribe to continue.",
+            )
+            return False
+        return True
+
+    result = paypal_system.is_user_allowed(user_id)
+    if not result["allowed"]:
+        bot.reply_to(message, result["message"], parse_mode="Markdown")
+        return False
+
+    reminder = paypal_system.get_payment_reminder_message(user_id, result)
+    if reminder:
+        bot.reply_to(message, reminder, parse_mode="Markdown")
+    return True
 
 # === EMOTIONAL INTELLIGENCE & PERSONALIZATION ===
 FAMILY_MEMBERS = {
@@ -4895,11 +4862,7 @@ def handle_voice(message):
         except Exception as e:
             print(f"DB voice tracking error: {e}", flush=True)
     
-    # Free trial is now active for everyone!
-    # Legacy subscription check kept for future PayPal integration
-    if not is_subscribed(user_id):
-        # This should rarely trigger now with free trial
-        bot.reply_to(message, "🎉 Welcome! Your 14-day free trial has started.\n\nSend me a voice message to practice!")
+    if not enforce_learning_access(message, user_id):
         return
 
     try:
@@ -4967,9 +4930,7 @@ def handle_text(message):
         except:
             pass
 
-    # Free trial is now active for everyone!
-    if not is_subscribed(user_id):
-        bot.reply_to(message, "🎉 Welcome! Your 14-day free trial has started.\n\nJust send me any message to start learning!")
+    if not enforce_learning_access(message, user_id):
         return
 
     # === ONBOARDING FLOW ===
@@ -5099,6 +5060,9 @@ def handle_photo(message):
                 print(f"DB: Tracked photo from {user_id}", flush=True)
             except Exception as e:
                 print(f"DB photo tracking error: {e}", flush=True)
+
+        if not enforce_learning_access(message, user_id):
+            return
 
         # Step 1: Send initial processing message
         processing_msg = bot.send_message(message.chat.id, "🔍 Procesando imagen... / Processing image...")

@@ -275,20 +275,57 @@ def has_active_access(user_id: str, platform: Optional[str] = None) -> bool:
         return False
 
 
+def format_paid_until_display(paid_until_iso: Optional[str]) -> str:
+    """Human-readable expiry for user-facing messages."""
+    if not paid_until_iso:
+        return "30 días / 30 days"
+    try:
+        dt = datetime.fromisoformat(paid_until_iso)
+        return dt.strftime("%Y-%m-%d")
+    except ValueError:
+        return paid_until_iso[:10]
+
+
 def get_access_info(user_id: str, platform: Optional[str] = None) -> Dict[str, Any]:
     found = _find_user_entry(user_id, platform)
     if not found or not has_active_access(user_id, platform):
-        return {"active": False, "paid_until": None, "days_remaining": 0}
+        return {
+            "active": False,
+            "paid_until": None,
+            "days_remaining": 0,
+            "hours_remaining": 0,
+        }
     _, entry = found
     paid_until = datetime.fromisoformat(entry["paid_until"])
-    days = max(0, (paid_until - datetime.now()).days)
+    delta = paid_until - datetime.now()
+    days = max(0, delta.days)
+    hours = max(0, delta.total_seconds() / 3600)
     return {
         "active": True,
         "paid_until": entry["paid_until"],
+        "paid_until_display": format_paid_until_display(entry["paid_until"]),
         "days_remaining": days,
+        "hours_remaining": hours,
+        "reminders_sent": list(entry.get("reminders_sent") or []),
         "last_cod_oper": entry.get("last_cod_oper"),
         "platform": entry.get("platform"),
     }
+
+
+def mark_pf_reminder_sent(user_id: str, reminder_key: str, platform: Optional[str] = None) -> bool:
+    """Record that a PF expiry reminder was sent. Returns True if newly recorded."""
+    found = _find_user_entry(user_id, platform)
+    if not found:
+        return False
+    store_key, entry = found
+    sent = list(entry.get("reminders_sent") or [])
+    if reminder_key in sent:
+        return False
+    sent.append(reminder_key)
+    store = _load_store()
+    store["users"][store_key]["reminders_sent"] = sent
+    _save_store(store)
+    return True
 
 
 def grant_access(
@@ -330,6 +367,7 @@ def grant_access(
         "email": email or existing.get("email"),
         "source": "paguelofacil",
         "updated_at": now.isoformat(),
+        "reminders_sent": [],
     }
     if platform == PLATFORM_TELEGRAM:
         entry["telegram_id"] = user_id
@@ -472,7 +510,7 @@ def notify_user_paid(
         return False
     text = (
         "✅ ¡Pago recibido! / Payment received!\n\n"
-        f"Tu acceso a EspaLuz está activo hasta {paid_until or '30 días'}.\n"
+        f"Tu acceso a EspaLuz está activo hasta {format_paid_until_display(paid_until)}.\n"
         "Your EspaLuz access is now active.\n\n"
         "¡Sigue practicando! Send me a message to continue. 🚀"
     )

@@ -25,6 +25,7 @@ def _push_espaluz_tg_to_crm(user_id: str, trial_days: int):
             'type': 'espaluz_user',
             'pipeline': 'client',
             'dealName': f'[ESPALUZ] TG {user_id} — {trial_days}d trial',
+            'userId': str(user_id),
             'name': f'TG user {user_id}',
             'context': f'EspaLuz Telegram | Trial: {trial_days} days',
             'signalStrength': 'medium',

@@ -28,6 +28,7 @@ ORG_TRIAL_DAYS = 60  # 60-day trial for organization members
 # Data files
 SUBSCRIBERS_FILE = "telegram_subscribers.json"
 TRIALS_FILE = "telegram_trials.json"
+REMINDERS_FILE = "telegram_payment_reminders_sent.json"
 PHONE_EMAIL_MAPPING_FILE = "telegram_phone_email_mapping.json"
 
 
@@ -39,13 +40,14 @@ class TelegramPayPalSystem:
         self.subscribers_file = os.path.join(self.base_dir, SUBSCRIBERS_FILE)
         self.trials_file = os.path.join(self.base_dir, TRIALS_FILE)
         self.mapping_file = os.path.join(self.base_dir, PHONE_EMAIL_MAPPING_FILE)
+        self.reminders_file = os.path.join(self.base_dir, REMINDERS_FILE)
         
         # Initialize files if they don't exist
         self._ensure_files()
     
     def _ensure_files(self):
         """Ensure data files exist"""
-        for filepath in [self.subscribers_file, self.trials_file, self.mapping_file]:
+        for filepath in [self.subscribers_file, self.trials_file, self.mapping_file, self.reminders_file]:
             if not os.path.exists(filepath):
                 with open(filepath, 'w') as f:
                     json.dump({}, f, indent=2)
@@ -419,6 +421,7 @@ class TelegramPayPalSystem:
         
         trials[user_id_str] = trial_data
         self._save_json(self.trials_file, trials)
+        self._clear_trial_reminders(user_id_str)
         
         logging.info(f"✅ Started {trial_days}-day trial for user {user_id}")
         return trial_data
@@ -485,30 +488,45 @@ class TelegramPayPalSystem:
     # ==================== SUBSCRIPTION CHECK ====================
     
     def is_user_allowed(self, user_id: str) -> Dict[str, Any]:
-        """Check if user is allowed to use the bot (subscription or trial)"""
+        """Check if user is allowed to use the bot (subscription, PF prepaid, or trial)."""
         user_id_str = str(user_id)
-        
-        # 1. Check if user has active subscription
-        subscription = self._check_user_subscription(user_id_str)
-        if subscription.get("is_active"):
+
+        # 1. PayPal subscription (email-linked — not PagueloFacil)
+        paypal_sub = self._check_paypal_subscription(user_id_str)
+        if paypal_sub.get("is_active"):
             return {
                 "allowed": True,
                 "reason": "subscription",
-                "message": "✅ Active subscription"
+                "message": "✅ Active PayPal subscription",
             }
-        
-        # 2. Check trial status
+
+        # 2. PagueloFacil prepaid (automatic — no /link needed)
+        try:
+            from espaluz_paguelofacil import get_access_info, has_active_access
+
+            if has_active_access(user_id_str):
+                pf_info = get_access_info(user_id_str)
+                days = pf_info.get("days_remaining", 0)
+                return {
+                    "allowed": True,
+                    "reason": "paguelofacil",
+                    "message": f"✅ PagueloFacil — {days} days remaining",
+                    "paguelofacil_info": pf_info,
+                }
+        except ImportError:
+            pass
+
+        # 3. Free trial
         trial_status = self.get_trial_status(user_id_str)
-        
+
         if not trial_status["has_trial"]:
-            # New user - start trial automatically
             self.start_trial(user_id_str)
             return {
                 "allowed": True,
                 "reason": "new_trial",
                 "message": f"🎉 Welcome! You have a {DEFAULT_TRIAL_DAYS}-day free trial!",
             }
-        
+
         if trial_status["is_active"]:
             days_left = trial_status["days_remaining"]
             if days_left > 1:
@@ -516,46 +534,52 @@ class TelegramPayPalSystem:
             else:
                 hours_left = int(trial_status["hours_remaining"])
                 message = f"⏰ Trial active - {hours_left} hours remaining"
-            
+
             return {
                 "allowed": True,
                 "reason": "trial",
-                "message": message
+                "message": message,
             }
-        
-        # Trial expired
+
+        # Trial expired and no active payment — learning journey paused
         return {
             "allowed": False,
-            "reason": "trial_expired",
-            "message": self.get_subscription_prompt()
+            "reason": "access_expired",
+            "message": self.get_subscription_prompt(),
         }
-    
+
+    def _check_paypal_subscription(self, user_id: str) -> Dict[str, Any]:
+        """PayPal subscription only (excludes PagueloFacil prepaid)."""
+        mappings = self._load_json(self.mapping_file)
+
+        if user_id in mappings:
+            email = mappings[user_id].get("email", "").lower()
+            subscribers = self._load_json(self.subscribers_file)
+
+            if email in subscribers and subscribers[email].get("status") == "active":
+                return {"is_active": True, "email": email}
+
+        subscribers = self._load_json(self.subscribers_file)
+        for email, data in subscribers.items():
+            if str(data.get("telegram_id")) == str(user_id) and data.get("status") == "active":
+                return {"is_active": True, "email": email}
+
+        return {"is_active": False}
+
     def _check_user_subscription(self, user_id: str) -> Dict[str, Any]:
-        """Check if user has active subscription via email linking or PagueloFacil prepay"""
+        """Check if user has active subscription via PayPal or PagueloFacil prepay."""
         try:
             from espaluz_paguelofacil import has_active_access
+
             if has_active_access(user_id):
                 return {"is_active": True, "source": "paguelofacil"}
         except ImportError:
             pass
 
-        # Check phone-email mapping
-        mappings = self._load_json(self.mapping_file)
-        
-        if user_id in mappings:
-            email = mappings[user_id].get("email", "").lower()
-            subscribers = self._load_json(self.subscribers_file)
-            
-            if email in subscribers and subscribers[email].get("status") == "active":
-                return {"is_active": True, "email": email}
-        
-        # Check direct telegram_id in subscribers
-        subscribers = self._load_json(self.subscribers_file)
-        for email, data in subscribers.items():
-            if str(data.get("telegram_id")) == str(user_id) and data.get("status") == "active":
-                return {"is_active": True, "email": email}
-        
-        return {"is_active": False}
+        paypal = self._check_paypal_subscription(user_id)
+        if paypal.get("is_active"):
+            paypal["source"] = "paypal"
+        return paypal
     
     # ==================== EMAIL LINKING ====================
     
@@ -720,55 +744,144 @@ Find it in PayPal → Settings → Payments → Automatic payments."""
     # ==================== MESSAGES ====================
     
     def get_subscription_prompt(self) -> str:
-        """Get subscription prompt message"""
-        return f"""🔐 Tu periodo de prueba ha expirado.
-🔐 Your free trial has expired.
+        """Access blocked — learning journey paused until payment."""
+        return f"""🔐 Tu viaje de aprendizaje está en pausa.
+🔐 Your learning journey is paused.
 
-Para continuar usando EspaLuz, suscríbete:
-To continue using EspaLuz, subscribe:
+Para continuar con EspaLuz / To continue with EspaLuz:
 
-🇵🇦 **PagueloFacil** (pago único, tarjeta local Panamá): envía /pagar
-💳 **PayPal** ($11/mes - $11/month + 14-day FREE trial!)
+🇵🇦 **PagueloFacil** (pago único $11 → 30 días, auto-activación)
+👉 Envía /pagar
+
+💳 **PayPal** (recurring — 1 week FREE, then $7.77/month)
 👉 {PAYPAL_SUBSCRIPTION_LINK}
 
-🔑 Después de suscribirte, envíame tu ID de suscripción (I-XXXX) para activar.
-🔑 After subscribing, send me your Subscription ID (I-XXXX) to activate.
+🔑 After PayPal: send your Subscription ID (I-XXXX) or email via /link.
 
-✨ ¡No abandones tu viaje de aprendizaje!
-✨ Don't give up on your learning journey!"""
-    
+✨ Cuando estés listo/a, te esperamos — ¡no abandones tu español! 🇪🇸"""
+
+    def _load_reminders_sent(self) -> Dict[str, Any]:
+        return self._load_json(self.reminders_file)
+
+    def _save_reminders_sent(self, data: Dict[str, Any]) -> None:
+        self._save_json(self.reminders_file, data)
+
+    def _clear_trial_reminders(self, user_id: str) -> None:
+        data = self._load_reminders_sent()
+        user_flags = data.get(str(user_id), {})
+        for key in list(user_flags.keys()):
+            if key.startswith("trial_"):
+                del user_flags[key]
+        if user_flags:
+            data[str(user_id)] = user_flags
+        elif str(user_id) in data:
+            del data[str(user_id)]
+        self._save_reminders_sent(data)
+
+    def _mark_trial_reminder_sent(self, user_id: str, reminder_key: str) -> bool:
+        user_id_str = str(user_id)
+        data = self._load_reminders_sent()
+        user_flags = data.setdefault(user_id_str, {})
+        if user_flags.get(reminder_key):
+            return False
+        user_flags[reminder_key] = True
+        self._save_reminders_sent(data)
+        return True
+
     def get_trial_reminder(self, user_id: str) -> Optional[str]:
-        """Get reminder message for users approaching trial end"""
+        """Reminder before free trial ends (sent once per threshold)."""
         trial_status = self.get_trial_status(user_id)
-        
         if not trial_status["is_active"]:
             return None
-        
+
         days_left = trial_status["days_remaining"]
         hours_left = trial_status["hours_remaining"]
-        
+
         if days_left <= 1 and hours_left <= 24:
-            return f"""⏰ **Recordatorio de prueba / Trial Reminder**
+            if not self._mark_trial_reminder_sent(user_id, "trial_24h"):
+                return None
+            return f"""⏰ Tu prueba gratis termina en {int(hours_left)} horas.
+⏰ Your free trial ends in {int(hours_left)} hours.
 
-Tu prueba gratis expira en {int(hours_left)} horas.
-Your free trial expires in {int(hours_left)} hours.
+Para no pausar tu aprendizaje / Don't pause your journey:
 
-No pierdas acceso a tu tutor de IA. Suscríbete ahora:
-Don't lose access to your AI tutor. Subscribe now:
-
+🇵🇦 /pagar — PagueloFacil $11 → 30 días
 💳 PayPal: {PAYPAL_SUBSCRIPTION_LINK}
 
-🔑 After subscribing, send me your Subscription ID (I-XXXX)."""
-        
-        elif days_left <= 2:
-            return f"""📅 **Actualización de prueba / Trial Update**
+🔑 After PayPal: send Subscription ID (I-XXXX) or /link your email.
 
-¡{days_left} días restantes en tu prueba gratis!
-{days_left} days left in your free trial!
+✨ ¡Sigue adelante! Keep going! 🚀"""
 
-¿Listo para continuar? / Ready to continue?
-💳 PayPal: {PAYPAL_SUBSCRIPTION_LINK}"""
-        
+        if days_left <= 2:
+            if not self._mark_trial_reminder_sent(user_id, "trial_2d"):
+                return None
+            return f"""📅 Te quedan {days_left} días de prueba gratis.
+📅 {days_left} days left in your free trial.
+
+Cuando quieras continuar / When you're ready:
+
+🇵🇦 /pagar — PagueloFacil $11 / 30 days
+💳 PayPal: {PAYPAL_SUBSCRIPTION_LINK}
+
+✨ We're here for you — keep going! 🇪🇸"""
+
+        return None
+
+    def get_paguelofacil_reminder(
+        self, user_id: str, pf_info: Optional[Dict[str, Any]] = None
+    ) -> Optional[str]:
+        """Reminder before PagueloFacil prepaid access expires."""
+        try:
+            from espaluz_paguelofacil import get_access_info, mark_pf_reminder_sent
+        except ImportError:
+            return None
+
+        info = pf_info or get_access_info(user_id)
+        if not info.get("active"):
+            return None
+
+        days_left = info.get("days_remaining", 0)
+        hours_left = info.get("hours_remaining", 0)
+        expiry = info.get("paid_until_display") or (info.get("paid_until") or "")[:10]
+
+        if days_left <= 1 and hours_left <= 24:
+            if not mark_pf_reminder_sent(user_id, "pf_24h"):
+                return None
+            return f"""⏰ Tu acceso PagueloFacil termina en {int(hours_left)} horas ({expiry}).
+⏰ Your PagueloFacil access ends in {int(hours_left)} hours.
+
+Renueva para seguir aprendiendo / Renew to keep learning:
+
+👉 /pagar — $11 → 30 días más
+💳 PayPal: {PAYPAL_SUBSCRIPTION_LINK}
+
+✨ ¡No dejes tu español en pausa! Don't pause your Spanish! 🚀"""
+
+        if days_left <= 3:
+            if not mark_pf_reminder_sent(user_id, "pf_3d"):
+                return None
+            return f"""📅 Tu acceso PagueloFacil termina en {days_left} días ({expiry}).
+📅 Your PagueloFacil access ends in {days_left} days.
+
+Renueva cuando quieras / Renew anytime:
+
+👉 /pagar — $11 → 30 días
+💳 PayPal: {PAYPAL_SUBSCRIPTION_LINK}
+
+✨ ¡Sigue tu viaje! Keep your journey going! 🇪🇸"""
+
+        return None
+
+    def get_payment_reminder_message(
+        self, user_id: str, access_result: Dict[str, Any]
+    ) -> Optional[str]:
+        reason = access_result.get("reason")
+        if reason in ("trial", "new_trial"):
+            return self.get_trial_reminder(user_id)
+        if reason == "paguelofacil":
+            return self.get_paguelofacil_reminder(
+                user_id, access_result.get("paguelofacil_info")
+            )
         return None
     
     # ==================== ADMIN FUNCTIONS ====================
