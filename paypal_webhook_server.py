@@ -127,24 +127,27 @@ def paguelofacil_webhook():
 
     raw = request.get_data(cache=True) or b""
     ctype = request.content_type or ""
-    payload_json = None
     try:
-        payload_json = json.loads(raw.decode(request.charset or "utf-8"))
+        from espaluz_paguelofacil import parse_webhook_body, process_webhook
+        payload_json = parse_webhook_body(raw)
+        if not payload_json:
+            logging.warning(
+                "PAGUELOFACIL WEBHOOK unparseable ctype=%s len=%s head=%s",
+                ctype,
+                len(raw),
+                repr(raw[:500]),
+            )
+            return jsonify({"status": "received", "error": "unparseable"}), 200
         cod = payload_json.get("codOper") or payload_json.get("relatedTx") or "n/a"
         logging.info(
-            "PAGUELOFACIL WEBHOOK ctype=%s codOper=%s status=%s op=%s",
+            "PAGUELOFACIL WEBHOOK ctype=%s codOper=%s status=%s auth=%s op=%s",
             ctype,
             cod,
             payload_json.get("status"),
+            payload_json.get("authStatus"),
             payload_json.get("operationType") or payload_json.get("merchantDescriptor"),
         )
         logging.info("PAGUELOFACIL WEBHOOK body (trunc): %s", json.dumps(payload_json)[:4000])
-    except Exception:
-        logging.info("PAGUELOFACIL WEBHOOK (non-json or empty) ctype=%s raw=%s", ctype, repr(raw[:2000]))
-        return jsonify({"status": "received"}), 200
-
-    try:
-        from espaluz_paguelofacil import process_webhook
         result = process_webhook(payload_json)
         logging.info("PAGUELOFACIL processed: %s", result)
         return jsonify({"status": "received", "result": result}), 200

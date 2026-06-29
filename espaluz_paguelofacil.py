@@ -68,6 +68,65 @@ def is_configured() -> bool:
     return bool(PAGUELOFACIL_CCLW)
 
 
+def parse_webhook_body(raw: bytes) -> Optional[Dict[str, Any]]:
+    """Parse PagueloFacil POST body — tolerates encoding quirks in large binInfo payloads."""
+    if not raw:
+        return None
+    for encoding in ("utf-8", "utf-8-sig", "latin-1"):
+        for errors in ("strict", "replace"):
+            try:
+                text = raw.decode(encoding, errors=errors)
+                obj = json.loads(text)
+                if isinstance(obj, dict):
+                    return obj
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                continue
+    text = raw.decode("utf-8", errors="replace")
+    related = re.search(r'"relatedTx"\s*:\s*"([^"]+)"', text)
+    cod = re.search(r'"codOper"\s*:\s*"([^"]+)"', text)
+    if not related and not cod:
+        return None
+    payload: Dict[str, Any] = {}
+    if cod:
+        payload["codOper"] = cod.group(1)
+    if related:
+        payload["relatedTx"] = related.group(1)
+    for key, pattern in (
+        ("authStatus", r'"authStatus"\s*:\s*"([^"]+)"'),
+        ("totalPay", r'"totalPay"\s*:\s*"([^"]+)"'),
+        ("description", r'"description"\s*:\s*"([^"]+)"'),
+        ("email", r'"email"\s*:\s*"([^"]+@[^"]+)"'),
+        ("status", r'"status"\s*:\s*(\d+)'),
+    ):
+        match = re.search(pattern, text)
+        if match:
+            val: Any = match.group(1)
+            if key == "status":
+                val = int(val)
+            payload[key] = val
+    logging.info("PagueloFacil: salvaged payload from raw regex keys=%s", list(payload.keys()))
+    return payload
+
+
+def _is_payment_approved(payload: Dict[str, Any]) -> bool:
+    status = payload.get("status")
+    if status in (1, "1", True):
+        return True
+    if str(payload.get("Estado", "")).lower() == "aprobada":
+        return True
+    auth = str(payload.get("authStatus") or "").strip()
+    if auth in ("00", "0", "000"):
+        return True
+    try:
+        total = float(payload.get("totalPay") or payload.get("requestPayAmount") or 0)
+        if total > 0 and auth == "00":
+            return True
+    except (TypeError, ValueError):
+        pass
+    msg = str(payload.get("messageSys") or "").lower()
+    return "aprob" in msg
+
+
 def _extract_telegram_id(payload: Dict[str, Any]) -> Optional[str]:
     for key in ("PARM_1", "parm_1", "parm1"):
         val = payload.get(key)
@@ -84,6 +143,16 @@ def _extract_telegram_id(payload: Dict[str, Any]) -> Optional[str]:
         store = _load_store()
         for order in store.get("orders", {}).values():
             if order.get("email") == email and order.get("telegram_id"):
+                return str(order["telegram_id"])
+
+    # Match pending /pagar order by relatedTx or checkout link code prefix
+    related = str(payload.get("relatedTx") or payload.get("codOper") or "")
+    if related.startswith("LK-"):
+        store = _load_store()
+        for code, order in store.get("orders", {}).items():
+            if order.get("telegram_id") and (
+                code == related or related.startswith(code[:12]) or code.startswith(related[:12])
+            ):
                 return str(order["telegram_id"])
     return None
 
@@ -232,14 +301,19 @@ def process_webhook(payload: Dict[str, Any]) -> Dict[str, Any]:
     if cod_oper in store.get("processed", {}):
         return {"processed": True, "reason": "duplicate", "cod_oper": cod_oper}
 
-    status = payload.get("status")
-    approved = status == 1 or status == "1" or str(payload.get("Estado", "")).lower() == "aprobada"
+    approved = _is_payment_approved(payload)
     op_type = str(payload.get("operationType") or payload.get("merchantDescriptor") or "")
-    if op_type and op_type not in ("AUTH_CAPTURE", "CAPTURE", "RECURRENT", ""):
-        logging.info("PagueloFacil: ignoring operationType=%s codOper=%s", op_type, cod_oper)
+    if op_type and op_type not in ("AUTH_CAPTURE", "CAPTURE", "RECURRENT", "PF*", ""):
+        logging.info("PagueloFacil: note operationType=%s codOper=%s", op_type, cod_oper)
 
     if not approved:
-        return {"processed": False, "reason": "not_approved", "cod_oper": cod_oper, "status": status}
+        return {
+            "processed": False,
+            "reason": "not_approved",
+            "cod_oper": cod_oper,
+            "status": payload.get("status"),
+            "authStatus": payload.get("authStatus"),
+        }
 
     telegram_id = _extract_telegram_id(payload)
     if not telegram_id:
@@ -276,6 +350,7 @@ def notify_user_paid(user_id: str, cod_oper: str, paid_until: Optional[str] = No
 
 paguelofacil_system = type("PagueloFacilSystem", (), {
     "is_configured": staticmethod(is_configured),
+    "parse_webhook_body": staticmethod(parse_webhook_body),
     "create_payment_link": staticmethod(create_payment_link),
     "process_webhook": staticmethod(process_webhook),
     "has_active_access": staticmethod(has_active_access),
