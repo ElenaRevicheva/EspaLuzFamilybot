@@ -79,11 +79,12 @@ EspaLuz Telegram is a bilingual AI Spanish tutor for expat families, travelers, 
 - Survives restarts
 - **Status:** WORKING
 
-### 5. PayPal Integration (70% Complete)
-- Subscription link generation
-- Direct subscription ID verification (`I-XXXXXXXXXXXX`)
+### 5. PayPal Integration (85% Complete)
+- Subscription link generation (`/subscribe`, `/link`)
+- Direct subscription ID verification (`I-XXXXXXXXXXXX`) or PayPal email
 - 14-day free trial system
-- **Status:** WORKING - but no instant webhook detection
+- Flask webhook server on Oracle (`paypal_webhook_server.py`, port 5000)
+- **Status:** WORKING — user must still send subscription ID or email after paying (manual `/link` step)
 
 ### 6. Demo Mode (80% Complete)
 - `/demo` - Workshop presentation mode
@@ -108,6 +109,13 @@ EspaLuz Telegram is a bilingual AI Spanish tutor for expat families, travelers, 
 - For parents: asks about spouse and children
 - Stores in session memory
 - **Status:** EXISTS but NOT deeply used
+
+### 10. PagueloFacil One-Time Payments (95% Complete) — **NEW June 2026**
+- `/pagar` (alias `/pay`) — secure checkout link for Panama/LATAM (card, no PayPal account)
+- $11 USD → 30 days access (PagueloFacil has no recurring billing)
+- Automatic activation via webhook — **no `/link` step**
+- Merchant: `aideazz` on PagueloFacil; public webhook registered with support
+- **Status:** LIVE on Oracle VM — see **💳 PAGUELOFACIL PAYMENTS** section below
 
 ---
 
@@ -156,13 +164,11 @@ EspaLuz Telegram is a bilingual AI Spanish tutor for expat families, travelers, 
 - ✅ `record_vocabulary_review()` with SM-2 algorithm implemented
 **Still Needs:** Integration into main.py + quiz UI
 
-### 6. Real-Time PayPal Webhooks ❌ NOT RELATED TO MEMORY
-**Current:** Manual subscription ID entry required  
-**Missing:**
-- Instant detection when user subscribes
-- Automatic activation without user action
-- Webhook reliability
-**Note:** This is a separate issue from the memory system
+### 6. Real-Time PayPal Webhooks 🟡 PARTIALLY ADDRESSED (June 2026)
+**PagueloFacil path (Telegram `/pagar`):** ✅ Automatic — webhook grants access + Telegram confirmation  
+**PayPal path (Telegram `/subscribe` → `/link`):** Manual subscription ID or email still required  
+**Infrastructure:** `espaluz-payments-webhook` systemd on Oracle; nginx → `https://webhook.aideazz.xyz/`  
+**Note:** Separate from memory system; PF uses `paguelofacil_payments.json`, not PostgreSQL subscriptions yet
 
 ---
 
@@ -185,7 +191,7 @@ EspaLuz Telegram is a bilingual AI Spanish tutor for expat families, travelers, 
 3. **No True Memory** - Doesn't remember learning progress across sessions
 4. **Reactive, Not Proactive** - Waits for questions instead of anticipating needs
 5. **No Spaced Repetition** - Can't compete with Duolingo on retention science
-6. **PayPal Friction** - Users must manually link subscriptions
+6. **PayPal Friction** - PayPal subscribers must still `/link` after paying; PagueloFacil `/pagar` removes this for LATAM
 
 ---
 
@@ -481,12 +487,21 @@ When asked about any threat, use this structure:
 - **Transcription:** OpenAI Whisper
 - **Database:** PostgreSQL (Oracle Cloud)
 - **Hosting:** Oracle Cloud (170.9.242.90)
-- **Payments:** PayPal Subscriptions
+- **Payments:** PagueloFacil one-time (`/pagar`) + PayPal subscriptions (`/subscribe`, `/link`)
+- **Payment webhooks:** Flask `paypal_webhook_server.py` — `/paguelofacil-webhook`, `/paypal-webhook`
 - **Repository:** github.com/ElenaRevicheva/EspaLuzFamilybot
 
 ---
 
 ## 📝 CHANGELOG
+
+### June 28, 2026
+- ✅ PagueloFacil one-time payments for Telegram (`/pagar`, `/pay`)
+- ✅ Webhook auto-grant 30-day access + Telegram confirmation (no manual `/link`)
+- ✅ `espaluz_paguelofacil.py` + `/paguelofacil-webhook` on Oracle VM
+- ✅ Menu/help updated: PagueloFacil vs PayPal paths
+- ✅ Fix: accept PagueloFacil `authStatus: "00"` and tolerant JSON parse on large webhook payloads
+- ✅ Manual recovery script: `deploy/grant_manual_pf_payment.py`
 
 ### January 13, 2026
 - ✅ Added Conversation Mode with Neural TTS
@@ -581,3 +596,94 @@ SELECT memory_type, content FROM user_memories WHERE memory_type = 'family';
 3. **espaluz_enhancements.py**:
    - Already had comprehensive 21-country data with slang definitions
    - No changes needed - just needed proper integration
+
+---
+
+## 💳 PAGUELOFACIL PAYMENTS (June 2026)
+
+**Why:** PagueloFacil does not support recurring subscriptions. EspaLuz Telegram offers a one-time $11 payment for 30 days of access — aimed at Panama and LATAM users who prefer local card checkout over PayPal.
+
+### Two payment paths (Telegram)
+
+| Path | Command | After payment | Billing |
+|------|---------|---------------|---------|
+| **PagueloFacil** | `/pagar` or `/pay` | Automatic — webhook grants access | One-time $11 / 30 days |
+| **PayPal** | `/subscribe` then `/link` | User sends `I-XXXX…` or PayPal email | Recurring subscription |
+
+`/menu` and `/help` explain both options. `is_subscribed()` in `main.py` and `_check_user_subscription()` in `espaluz_paypal_system.py` honor PagueloFacil prepaid access.
+
+### Architecture (Oracle VM `170.9.242.90`)
+
+```
+User /pagar  →  espaluz_paguelofacil.create_payment_link()
+              →  POST LinkDeamon.cfm (CCLW, amount, PARM_1=telegram_id)
+              →  User pays on PagueloFacil checkout
+
+PagueloFacil  →  POST https://webhook.aideazz.xyz/paguelofacil-webhook
+              →  paypal_webhook_server.py (Flask :5000)
+              →  espaluz_paguelofacil.process_webhook()
+              →  paguelofacil_payments.json + Telegram notify
+```
+
+- **Bot service:** `espaluz-familybot` (systemd) — `/home/ubuntu/EspaLuzFamilybot`
+- **Webhook service:** `espaluz-payments-webhook` (systemd) — same repo, `venv/bin/python paypal_webhook_server.py`
+- **Public URLs:** `https://webhook.aideazz.xyz/paguelofacil-webhook` (registered with PagueloFacil support, June 2026)
+
+### Key files (repo)
+
+| File | Role |
+|------|------|
+| `espaluz_paguelofacil.py` | LinkDeamon checkout, webhook parsing, grant/revoke, JSON store |
+| `paypal_webhook_server.py` | Flask routes `/paguelofacil-webhook`, `/paypal-webhook`, `/health` |
+| `main.py` | `/pagar`, `/pay`; subscription checks include PF access |
+| `espaluz_paypal_system.py` | Unified `_check_user_subscription()` |
+| `espaluz_menu.py` | Menu text for both payment paths |
+| `deploy/espaluz-payments-webhook.service` | systemd unit (venv Python + EnvironmentFile) |
+| `deploy/set_paguelofacil_env.sh` | Oracle `.env` helper for CCLW |
+| `deploy/grant_manual_pf_payment.py` | Manual grant if webhook missed |
+| `deploy/ORACLE_SHELL.txt` | Deploy and curl verification commands |
+
+### Environment (`.env` on VM — not in git)
+
+```
+PAGUELOFACIL_CCLW=<Código Web from app.paguelofacil.com → Mi Empresa → Llaves>
+PAGUELOFACIL_SANDBOX=false
+PAGUELOFACIL_AMOUNT=11.00
+PAGUELOFACIL_ACCESS_DAYS=30
+TELEGRAM_BOT_TOKEN=<same token as familybot>
+```
+
+Merchant slug: **aideazz**. CCLW from PagueloFacil portal keys page.
+
+### PagueloFacil API flow
+
+Per [Enlace de Pago](https://developers.paguelofacil.com/guias/enlace-de-pago):
+
+1. Bot POSTs to `LinkDeamon.cfm` with `CCLW`, `CMTN` (amount), `CDSC` (description incl. `TG:{telegram_id}`), `PARM_1` (telegram user id).
+2. Response contains checkout URL (`LK-…` order id).
+3. On successful payment PagueloFacil POSTs JSON to webhook; success = `authStatus: "00"` (also accepts legacy `status: 1`).
+
+### Production incident & fix (June 28, 2026)
+
+First live payment (user `5481526862`, order `LK-8F7RJ4BLI4XUSFY7`, $11):
+
+- PagueloFacil **did** POST webhook with `authStatus: "00"`.
+- Bugs: (1) strict JSON parse failed on large `binInfo` payload → logged as non-JSON and skipped; (2) code only checked `status: 1`, not `authStatus: "00"`.
+- **Fix** (commit `686a5e4`): tolerant decode + regex salvage; accept `authStatus: "00"`.
+- **Recovery:** `deploy/grant_manual_pf_payment.py` for missed webhooks.
+
+### Deploy checklist (Oracle)
+
+```bash
+cd /home/ubuntu/EspaLuzFamilybot && git pull
+bash deploy/oracle_rollout_payment_webhooks.sh   # or steps in deploy/ORACLE_SHELL.txt
+sudo systemctl restart espaluz-familybot espaluz-payments-webhook
+journalctl -u espaluz-payments-webhook -f
+curl -sS https://webhook.aideazz.xyz/paguelofacil-webhook
+```
+
+### Not yet done
+
+- PagueloFacil access stored in `paguelofacil_payments.json` only — not synced to PostgreSQL `subscriptions` table
+- WhatsApp `/pagar` — same module can be reused; not wired in EspaLuzWhatsApp yet
+- PagueloFacil has no auto-renewal; users must `/pagar` again after 30 days

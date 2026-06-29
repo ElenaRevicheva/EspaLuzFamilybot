@@ -1,6 +1,6 @@
-# EspaLuz Current Status - January 25, 2026
+# EspaLuz Current Status - June 26, 2026
 
-## Vision Achievement: ~92%
+## Vision Achievement: ~93%
 
 EspaLuz is a truly emotionally intelligent AI personal assistant and bilingual Spanish-English tutor serving:
 - Expats and Expat Families
@@ -14,9 +14,54 @@ EspaLuz is a truly emotionally intelligent AI personal assistant and bilingual S
 | Platform | Status | Commit | Last Fix |
 |----------|--------|--------|----------|
 | **WhatsApp** | Running | `3ae4f82` | message_text bug fixed |
-| **Telegram** | Running | `82336b3` | family_members PostgreSQL integration |
+| **Telegram** | Running | `686a5e4` | PagueloFacil `/pagar` + webhook fix |
+| **Payment webhooks** | Running | `686a5e4` | `espaluz-payments-webhook` on Oracle :5000 |
 
-**Oracle Server:** 170.9.242.90 (both services active)
+**Oracle Server:** 170.9.242.90 (bot + webhook services active)
+
+---
+
+## June 28, 2026 - PagueloFacil Payments (Telegram)
+
+### Why PagueloFacil
+PagueloFacil does not support recurring subscriptions. Telegram now offers a one-time **$11 / 30 days** checkout for Panama and LATAM users who prefer local card payment over PayPal.
+
+### Two payment paths
+
+| Path | Command | After payment | Billing |
+|------|---------|---------------|---------|
+| **PagueloFacil** | `/pagar` or `/pay` | Automatic — webhook grants access | One-time $11 / 30 days |
+| **PayPal** | `/subscribe` then `/link` | User sends `I-XXXX…` or PayPal email | Recurring subscription |
+
+### Architecture
+
+```
+/pagar  →  LinkDeamon.cfm (PARM_1=telegram_id)  →  PagueloFacil checkout
+PagueloFacil  →  POST https://webhook.aideazz.xyz/paguelofacil-webhook
+             →  paypal_webhook_server.py (:5000)
+             →  paguelofacil_payments.json + Telegram confirmation
+```
+
+- **Merchant:** `aideazz` (CCLW in Oracle `.env`, not in git)
+- **Webhook URL:** registered with PagueloFacil support, June 2026
+- **Access store:** `paguelofacil_payments.json` (not yet synced to PostgreSQL `subscriptions`)
+
+### Key files
+
+| File | Role |
+|------|------|
+| `espaluz_paguelofacil.py` | Checkout links, webhook processing, access grants |
+| `paypal_webhook_server.py` | `/paguelofacil-webhook`, `/paypal-webhook`, `/health` |
+| `main.py` | `/pagar`, `/pay`; subscription checks include PF access |
+| `espaluz_paypal_system.py` | Unified subscription check |
+| `deploy/espaluz-payments-webhook.service` | systemd unit (venv Python) |
+| `deploy/grant_manual_pf_payment.py` | Manual grant if webhook missed |
+| `deploy/ORACLE_SHELL.txt` | Deploy and verification commands |
+
+### Production fix (June 28)
+First live payment webhook arrived with `authStatus: "00"` but was skipped due to strict JSON parse on large payloads and missing `authStatus` check. Fixed in `686a5e4` (tolerant parse + accept `authStatus: "00"`).
+
+**Status:** LIVE — see also `docs/SWOT_ANALYSIS_ESPALUZ.md` → **💳 PAGUELOFACIL PAYMENTS**
 
 ---
 
@@ -47,7 +92,7 @@ EspaLuz is a truly emotionally intelligent AI personal assistant and bilingual S
 | chat_message_history | 88 | Working (LangChain) |
 | emotional_history | 33 | Working |
 | vocabulary | 39 | Working |
-| subscriptions | 12 | Working |
+| subscriptions | 12 | Working (PayPal; PF access in JSON file for now) |
 | user_memories | ~50 | Working |
 
 **LangChain Status:** `LANGCHAIN_AVAILABLE = True` (verified)
@@ -99,6 +144,12 @@ EspaLuz is a truly emotionally intelligent AI personal assistant and bilingual S
 - Cross-platform memory (same user on Telegram & WhatsApp)
 - Vocabulary tracking with SM-2 algorithm ready
 - Spaced repetition infrastructure ready
+
+### Payments (Telegram — June 2026)
+- PagueloFacil `/pagar` — automatic 30-day access via webhook
+- PayPal `/subscribe` + `/link` — recurring subscriptions
+- 14-day free trial (`/trial`)
+- Menu/help explain both payment paths
 
 ---
 
@@ -157,14 +208,16 @@ PERSONALIZATION
 
 ## Technical Stack
 
-- **Runtime**: Python 3.11
+- **Runtime**: Python 3.11+
 - **Database**: PostgreSQL (Oracle Cloud) - `espaluz_unified`
 - **Memory**: LangChain PostgresChatMessageHistory
 - **TTS**: edge-tts (Microsoft Neural Voices)
 - **AI**: Claude API (Anthropic)
-- **Hosting**: Oracle Cloud Infrastructure
+- **Hosting**: Oracle Cloud Infrastructure (`170.9.242.90`)
 - **WhatsApp**: Twilio API
 - **Telegram**: python-telegram-bot
+- **Payments**: PagueloFacil one-time (`/pagar`) + PayPal subscriptions (`/subscribe`, `/link`)
+- **Webhooks**: Flask `paypal_webhook_server.py` → `https://webhook.aideazz.xyz/`
 
 ---
 
@@ -184,6 +237,9 @@ PERSONALIZATION
 - `espaluz_country_contexts.py` - Country data
 - `espaluz_emotional_brain.py` - Emotional intelligence
 - `espaluz_enhancements.py` - 21 countries, 8 features
+- `espaluz_paguelofacil.py` - PagueloFacil checkout + webhook processing
+- `espaluz_paypal_system.py` - PayPal + unified subscription checks
+- `paypal_webhook_server.py` - Payment webhooks (PayPal + PagueloFacil)
 
 ---
 
@@ -199,14 +255,15 @@ PERSONALIZATION
 
 ---
 
-## Verified Working (Jan 25)
+## Verified Working (June 26)
 
 - PostgreSQL connection: `Database URL found`
 - Tables initialized successfully
 - LangChain: `LANGCHAIN_AVAILABLE = True`
-- `add_family()` method: exists at line 238
-- message_text bug: FIXED (uses `spanish_input` now)
-- Both services: `active` on Oracle
+- Both bot services: `active` on Oracle
+- Payment webhook: `espaluz-payments-webhook` active on `:5000`
+- PagueloFacil: `/pagar` checkout + webhook auto-grant (post `686a5e4` fix)
+- PayPal: `/subscribe` + manual `/link` still working
 
 ---
 
@@ -216,20 +273,22 @@ PERSONALIZATION
 |-------|--------|------------|
 | `message_text` undefined error | FIXED | Jan 25, 2026 |
 | Family members not in DB | FIXED | Jan 25, 2026 |
+| PagueloFacil webhook skipped (`authStatus 00`) | FIXED | Jun 28, 2026 |
+| Webhook service crash (systemd python path) | FIXED | Jun 2026 |
 | Enhancement slice error | Exists (non-fatal) | - |
 
 ---
 
 ## Next Steps (Future)
 
-1. Port Business English to Telegram
-2. Port Housing module to Telegram
-3. Port Learning Preferences to Telegram
-4. Build Investor Dashboard (Phase 7)
-5. Proactive tip scheduler
-6. Real apartment listings API
-7. Active job search integration API
+1. Sync PagueloFacil access to PostgreSQL `subscriptions` table
+2. Port `/pagar` to WhatsApp (reuse `espaluz_paguelofacil.py`)
+3. Port Business English to Telegram
+4. Port Housing module to Telegram
+5. Build Investor Dashboard (Phase 7)
+6. Proactive tip scheduler
+7. Real apartment listings API
 
 ---
 
-*Last updated: January 25, 2026*
+*Last updated: June 26, 2026*
