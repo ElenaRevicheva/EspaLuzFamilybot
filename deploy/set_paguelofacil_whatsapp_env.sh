@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Append PagueloFacil WhatsApp + internal notify vars to Oracle .env files (idempotent).
-set -euo pipefail
+set -eu
 
 TG="/home/ubuntu/EspaLuzFamilybot"
 WA="/home/ubuntu/EspaLuzWhatsApp"
