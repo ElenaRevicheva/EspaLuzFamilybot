@@ -3,13 +3,25 @@ Public URL for Paguelofacil support: https://webhook.aideazz.xyz/paguelofacil-we
 
 Add to /home/ubuntu/EspaLuzFamilybot/.env (after Paguelofacil sends CCLW):
   PAGUELOFACIL_CCLW=<merchant CCLW from Paguelofacil>
-  PAGUELOFACIL_SANDBOX=true          # false when going live
+  PAGUELOFACIL_SANDBOX=false         # live production (same as Telegram /pagar)
   PAGUELOFACIL_AMOUNT=11.00
   PAGUELOFACIL_ACCESS_DAYS=30
   TELEGRAM_BOT_TOKEN=<same as familybot>
+  INTERNAL_WEBHOOK_SECRET=<random secret — same in EspaLuzWhatsApp .env>
+  PAGUELOFACIL_WA_NOTIFY_URL=http://127.0.0.1:8081/internal/paguelofacil-grant
 
 Telegram users pay with: /pagar  (generates secure Paguelofacil checkout link)
-Webhook auto-grants 30 days and sends Telegram confirmation.
+WhatsApp users pay with: pagar   (same webhook, PARM_1=WA:phone)
+Webhook auto-grants 30 days + platform notify (Telegram API or WhatsApp internal callback).
+
+Add to /home/ubuntu/EspaLuzWhatsApp/.env:
+  ESPALUZ_FAMILYBOT_PATH=/home/ubuntu/EspaLuzFamilybot
+  PAGUELOFACIL_PAYMENTS_FILE=/home/ubuntu/EspaLuzFamilybot/paguelofacil_payments.json
+  PAGUELOFACIL_WA_ENABLED=true
+  INTERNAL_WEBHOOK_SECRET=<same as Familybot>
+  PAGUELOFACIL_WA_NOTIFY_URL=http://127.0.0.1:8081/internal/paguelofacil-grant
+
+After deploy: sudo systemctl restart espaluz-whatsapp espaluz-payments-webhook espaluz-familybot
 
 On VM (Ubuntu), from repo /home/ubuntu/EspaLuzFamilybot:
   sudo apt-get update && sudo apt-get install -y python3-flask python3-dotenv python3-requests
