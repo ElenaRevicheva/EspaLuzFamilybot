@@ -2539,8 +2539,87 @@ def translate_to_es_en(text):
     except Exception as e:
         print(f"Translation error: {e}")
         return None  # Return None, let caller handle gracefully
+def _telegram_groq_chat(system: str, user: str, max_tokens: int = 1000):
+    """Groq llama-3.3 fallback with proper system/user split (requests + User-Agent)."""
+    key = os.environ.get("GROQ_API_KEY", "").strip()
+    if not key:
+        return None
+    try:
+        r = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {key}",
+                "User-Agent": "EspaLuz/1.0 (+https://aideazz.xyz)",
+            },
+            json={
+                "model": "llama-3.3-70b-versatile",
+                "messages": [
+                    {"role": "system", "content": (system or "")[:14000]},
+                    {"role": "user", "content": user},
+                ],
+                "max_tokens": max_tokens,
+                "temperature": 0.7,
+            },
+            timeout=60,
+        )
+        if r.status_code != 200:
+            print(f"Groq HTTP {r.status_code}: {r.text[:300]}")
+            return None
+        return r.json()["choices"][0]["message"]["content"].strip()
+    except Exception as exc:
+        print(f"Groq chat failed: {exc}")
+        return None
+
+
+def _telegram_openai_chat(system: str, user: str, model: str = "gpt-4o-mini", max_tokens: int = 1000):
+    """OpenAI fallback when Claude/Groq unavailable."""
+    if not OPENAI_API_KEY:
+        return None
+    try:
+        r = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"},
+            json={
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": (system or "")[:14000]},
+                    {"role": "user", "content": user},
+                ],
+                "max_tokens": max_tokens,
+                "temperature": 0.6,
+            },
+            timeout=60,
+        )
+        if r.status_code != 200:
+            print(f"OpenAI fallback HTTP {r.status_code}: {r.text[:300]}")
+            return None
+        return r.json()["choices"][0]["message"]["content"].strip()
+    except Exception as exc:
+        print(f"OpenAI chat failed: {exc}")
+        return None
+
+
+def _telegram_llm_fallback_reply(mcp_request, content_input):
+    """Groq → gpt-4o-mini → gpt-4 using full MCP system prompt (memory + RAG preserved)."""
+    system_prompt = mcp_request.get("system", "")
+    groq_reply = _telegram_groq_chat(system_prompt, content_input, max_tokens=1000)
+    if groq_reply and len(groq_reply) > 30:
+        print("✅ Groq fallback succeeded in ask_claude_with_mcp")
+        return groq_reply
+    openai_reply = _telegram_openai_chat(system_prompt, content_input, model="gpt-4o-mini", max_tokens=1000)
+    if openai_reply and len(openai_reply) > 30:
+        print("✅ OpenAI gpt-4o-mini fallback succeeded in ask_claude_with_mcp")
+        return openai_reply
+    gpt4_reply = _telegram_openai_chat(system_prompt, content_input, model="gpt-4", max_tokens=1000)
+    if gpt4_reply and len(gpt4_reply) > 30:
+        print("✅ GPT-4 fallback succeeded in ask_claude_with_mcp")
+        return gpt4_reply
+    return None
+
+
 def ask_claude_with_mcp(session, translated_input):
-    """Use Claude API with fallback to GPT-4, both formatted for bilingual response and video script."""
+    """Use Claude API with Groq → OpenAI fallbacks, formatted for bilingual response and video script."""
 
     user_message = session["messages"][-1]["content"] if session["messages"] else ""
     should_use_extended = is_complex_language_topic(user_message)
@@ -2586,69 +2665,22 @@ def ask_claude_with_mcp(session, translated_input):
         if 'res' in locals():
             print(f"Claude response: {res.text}")
 
-        # === FALLBACK TO OPENAI GPT-4 ===
+        content_input = translated_input if translated_input else user_message or "Hello"
         try:
-            print("🔁 Falling back to GPT-4 via OpenAI...")
+            fallback_text = _telegram_llm_fallback_reply(mcp_request, content_input)
+            if fallback_text:
+                short_text = extract_video_script(fallback_text)
+                return fallback_text.strip(), short_text.strip(), ""
+        except Exception as fallback_error:
+            print(f"❌ LLM fallback chain failed: {fallback_error}")
 
-            content_input = translated_input if translated_input else user_message or "Hello"
-            gpt_payload = {
-                "model": "gpt-4",
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": """You are Espaluz, a bilingual emotionally intelligent Spanish-English language tutor for expat families.
-
-Your answers must have TWO PARTS:
-
-1️⃣ A full bilingual text message with emotional tone and context.
-
-2️⃣ Then add a short second section inside [VIDEO SCRIPT START] and [VIDEO SCRIPT END], like:
-
-[VIDEO SCRIPT START]
-Hola! Hoy vamos a aprender algo nuevo.
-Hello! Today we will learn something new.
-[VIDEO SCRIPT END]
-
-This second block will be spoken in video, so keep it short, warm, and clear.
-NO emojis in the video script - they will be pronounced!
-
-📝 FORMATTING RULES:
-- NEVER use **asterisks** for bold - they show raw!
-- Use EMOJIS GENEROUSLY: ✅ ❌ 💡 🗣️ 📖 🌎 🎯 ☕ 🍽️ 🏖️ 🏫 🏥 🏦 🎓
-- Start each section with a relevant emoji
-- Emojis will be stripped from video script automatically"""
-                    },
-                    {"role": "user", "content": content_input}
-                ],
-                "temperature": 0.7,
-                "max_tokens": 1000
-            }
-
-            gpt_headers = {
-                "Authorization": f"Bearer {OPENAI_API_KEY}",
-                "Content-Type": "application/json"
-            }
-
-            gpt_res = requests.post("https://api.openai.com/v1/chat/completions",
-                                    headers=gpt_headers,
-                                    json=gpt_payload)
-
-            print(f"GPT-4 fallback status: {gpt_res.status_code}")
-            print(f"GPT-4 fallback raw: {gpt_res.text}")
-
-            gpt_result = gpt_res.json()
-            gpt_text = gpt_result["choices"][0]["message"]["content"]
-            short_text = extract_video_script(gpt_text)
-
-            return gpt_text.strip(), short_text.strip(), ""
-
-        except Exception as gpt_error:
-            print(f"❌ GPT-4 fallback failed: {gpt_error}")
-            return (
-                "Lo siento, hubo un error. Sorry, there was an error.",
-                "Español: Lo siento. English: Sorry about that.",
-                ""
-            )
+        honest = (
+            "⚠️ Disculpa — el motor de IA está temporalmente limitado (créditos/límites de API). "
+            "Tu memoria y el historial con EspaLuz están guardados. Intenta de nuevo en unos minutos.\n\n"
+            "Sorry — the AI engine is temporarily limited (API credits/rate limits). "
+            "Your memory and conversation history are saved. Please try again shortly."
+        )
+        return honest, "Intenta de nuevo en unos minutos. Try again shortly.", ""
 
 def transcribe_voice(file_path):
     """Transcribe voice message to text"""
@@ -4265,17 +4297,42 @@ def handle_conversation_voice(message):
         except Exception as _claude_err:
             if getattr(_claude_err, 'status_code', None) not in {400, 529, 503}:
                 raise
-            import urllib.request as _ur
+            translation = None
             _groq_key = os.environ.get("GROQ_API_KEY", "").strip()
-            if not _groq_key:
-                raise
-            _pl = json.dumps({"model": "llama-3.3-70b-versatile", "messages": _tg_msgs, "max_tokens": 500}).encode()
-            _req = _ur.Request("https://api.groq.com/openai/v1/chat/completions", data=_pl, method="POST",
-                headers={"Content-Type": "application/json", "Authorization": f"Bearer {_groq_key}"})
-            with _ur.urlopen(_req, timeout=30) as _r:
-                _d = json.loads(_r.read())
-            translation = _d["choices"][0]["message"]["content"].strip()
-            print("[EspaLuz Telegram] Groq fallback (400 credit exhaustion) succeeded")
+            if _groq_key:
+                try:
+                    _gr = requests.post(
+                        "https://api.groq.com/openai/v1/chat/completions",
+                        headers={
+                            "Content-Type": "application/json",
+                            "Authorization": f"Bearer {_groq_key}",
+                            "User-Agent": "EspaLuz/1.0 (+https://aideazz.xyz)",
+                        },
+                        json={"model": "llama-3.3-70b-versatile", "messages": _tg_msgs, "max_tokens": 500},
+                        timeout=30,
+                    )
+                    if _gr.status_code == 200:
+                        translation = _gr.json()["choices"][0]["message"]["content"].strip()
+                        print("[EspaLuz Telegram] Groq fallback (400 credit exhaustion) succeeded")
+                    else:
+                        print(f"Groq convo fallback HTTP {_gr.status_code}: {_gr.text[:200]}")
+                except Exception as _ge:
+                    print(f"Groq convo fallback failed: {_ge}")
+            if not translation and OPENAI_API_KEY:
+                try:
+                    _or = requests.post(
+                        "https://api.openai.com/v1/chat/completions",
+                        headers={"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"},
+                        json={"model": "gpt-4o-mini", "messages": _tg_msgs, "max_tokens": 500, "temperature": 0.3},
+                        timeout=30,
+                    )
+                    if _or.status_code == 200:
+                        translation = _or.json()["choices"][0]["message"]["content"].strip()
+                        print("[EspaLuz Telegram] OpenAI convo fallback succeeded")
+                except Exception as _oe:
+                    print(f"OpenAI convo fallback failed: {_oe}")
+            if not translation:
+                raise _claude_err
         
         # 5. Generate voice response
         tts_lang = "es" if translate_to == "es" else "en"
