@@ -2,11 +2,28 @@
 
 ## PostgreSQL + LangChain Integration
 
-**Status:** 🟢 PHASE 1-6 COMPLETE, BUG FIXES APPLIED, DASHBOARD PENDING  
+**Status:** 🟢 PHASE 1-6 COMPLETE · RAG LIVE · REDEPLOY-SAFE (June 2026)  
 **Created:** January 19, 2026  
-**Updated:** January 25, 2026  
+**Updated:** June 30, 2026  
 **Estimated Time:** 2-3 weeks  
 **Cost:** $0 (all free tools)
+
+---
+
+## June 30, 2026 — RAG + evolving memory + redeploy safety
+
+| Capability | Status | Notes |
+|------------|--------|-------|
+| LangChain read into prompt | ✅ Live | Last 5 turns in `format_mcp_request()` |
+| RAG semantic recall | ✅ Live | `espaluz_rag.py` — 82+ embeddings on Oracle |
+| Write after every reply | ✅ Live | LangChain + RAG + `track_emotion()` |
+| Session UUID alignment | ✅ `289d08e` | LangChain + RAG + SQL share one UUID |
+| Survives redeploy | ✅ Verified | PG + `user_sessions.json` untouched on restart |
+| LLM fallback w/ memory | ✅ `6a61a9a` | Groq → OpenAI when Claude exhausted |
+
+**Oracle counts (June 30):** 344 chat rows · 82 embeddings · 133 emotional · 19 users
+
+Inspect: `scripts/oracle-resilience/inspect_telegram_user.py` (in AIPA_AITCF repo on server)
 
 ---
 

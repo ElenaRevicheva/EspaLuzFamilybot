@@ -2,14 +2,16 @@
 
 ## Pure PostgreSQL Implementation - Both Bots
 
-**Status:** ✅ IMPLEMENTED & WORKING (Jan 25, 2026)  
+**Status:** ✅ IMPLEMENTED & WORKING · RAG LIVE (June 30, 2026)  
 **Created:** January 19, 2026  
-**Updated:** January 25, 2026  
+**Updated:** June 30, 2026  
 **Cost:** $0 (Oracle Cloud Free Tier)
 
-**Live Database Stats:**
-- users: 15 | family_members: 0 | chat_message_history: 88
-- emotional_history: 33 | vocabulary: 39 | subscriptions: 12
+**Live Database Stats (Oracle, June 30, 2026):**
+- users: 19 | chat_message_history: 344 | espaluz_embeddings: 82 (RAG)
+- emotional_history: 133 | vocabulary: 75 | user_memories: 13 | subscriptions: 12
+
+Migration for RAG table: `EspaLuzWhatsApp/config/migrations/001_espaluz_embeddings.sql`
 
 ---
 

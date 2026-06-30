@@ -1,8 +1,23 @@
 # EspaLuz Telegram Bot - SWOT Analysis & Implementation Status
 
-**Last Updated:** January 25, 2026  
+**Last Updated:** June 30, 2026  
 **Version:** v5.2-bugs-fixed-family-integrated  
 **Deployed:** Oracle Cloud (170.9.242.90)
+
+---
+
+## 🆕 JUNE 30, 2026 UPDATE: Memory, RAG & Redeploy Safety Verified
+
+| Capability | Status | Evidence (Oracle live) |
+|------------|--------|------------------------|
+| LangChain read into prompt | ✅ LIVE | Last 5 turns in every tutor reply |
+| RAG semantic memory | ✅ LIVE | 82 embeddings; save + retrieve wired |
+| Emotional intelligence | ✅ LIVE | 133 PG rows + session JSON mood |
+| Evolves across redeploys | ✅ VERIFIED | PG + JSON survive `systemctl restart` |
+| LLM fallback w/ memory | ✅ `6a61a9a` | Groq → OpenAI; full MCP prompt preserved |
+| Session UUID alignment | ✅ `289d08e` | LangChain + RAG + SQL unified |
+
+Docs: `docs/CURRENT_STATUS_JUNE26.md` · `docs/LANGCHAIN_POSTGRES_IMPLEMENTATION_PLAN.md` · WhatsApp `docs/plans/MEMORY_AND_ONBOARDING_VERIFICATION.md`
 
 ---
 

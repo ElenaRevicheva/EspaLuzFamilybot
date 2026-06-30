@@ -50,6 +50,53 @@ See EspaLuzWhatsApp `docs/CURRENT_STATUS_JUNE29.md` for WhatsApp-specific detail
 
 ---
 
+## June 30, 2026 — Memory, RAG, LangChain & Evolving Intelligence
+
+### Telegram evolves with the user (survives redeploy)
+
+Every tutor reply on Telegram loads **persistent memory before the LLM call** and **writes back after**:
+
+| Layer | Where | Telegram wiring (`main.py`) |
+|-------|-------|----------------------------|
+| **LangChain** | `chat_message_history` | `format_mcp_request()` — last 5 turns |
+| **RAG** | `espaluz_embeddings` | `retrieve_context()` before Claude; `save_turn()` after reply |
+| **Emotional IQ** | Session JSON + PG `emotional_history` | `enhanced_emotion_detection()` + `memory.track_emotion()` |
+| **User facts** | `user_memories` | Onboarding + `memory.save_memory()` |
+| **Rich session** | `user_sessions.json` | Learning path, emotion window, message history — reloaded on startup |
+
+**Live proof (Elena `telegram_id=5481526862`, June 30):** 40 LangChain turns (incl. San Agustín / Alisa schools), 20 RAG embeddings, 21 emotional PG rows, 26 messages in session JSON — **unchanged after bot restart**.
+
+### LLM resilience (`6a61a9a`)
+
+Claude → Groq → OpenAI gpt-4o-mini → GPT-4, using **full MCP system prompt** (memory + RAG preserved). Convo-mode Groq uses `requests` (fixed urllib Cloudflare bug).
+
+### Session UUID alignment (`289d08e`)
+
+Same as WhatsApp: `espaluz_memory.get_session_uuid()` aligns LangChain, RAG, and SQL history.
+
+### Safe deploy
+
+```bash
+cd /home/ubuntu/EspaLuzFamilybot
+git fetch origin main
+git checkout origin/main -- main.py espaluz_memory.py espaluz_rag.py
+sudo systemctl restart espaluz-familybot
+bash /home/ubuntu/cto-aipa/scripts/oracle-resilience/verify-espaluz-memory-persistence.sh
+python3 /home/ubuntu/cto-aipa/scripts/oracle-resilience/inspect_telegram_user.py <telegram_id>
+```
+
+Runtime JSON (`user_sessions.json`, `paguelofacil_payments.json`, etc.) is **gitignored** — never overwrite from dev.
+
+### Git / Oracle sync (June 30, 2026)
+
+| Location | Commit | Status |
+|----------|--------|--------|
+| **GitHub `main`** | `289d08e` (+ `6a61a9a` LLM fallback) | Source of truth |
+| **Oracle VM** | Checked out from `origin/main` | ✅ Synced, both bots active |
+| **Local** | `289d08e` | ✅ Matches GitHub |
+
+---
+
 ## June 28, 2026 - PagueloFacil Payments (Telegram)
 
 ### Why PagueloFacil
@@ -112,19 +159,23 @@ First live payment webhook arrived with `authStatus: "00"` but was skipped due t
 
 ---
 
-## Database Status (espaluz_unified)
+## Database Status (espaluz_unified) — June 30, 2026
 
 | Table | Records | Status |
 |-------|---------|--------|
-| users | 15 | Working |
-| family_members | 0 | Ready (awaiting new onboarding) |
-| chat_message_history | 88 | Working (LangChain) |
-| emotional_history | 33 | Working |
-| vocabulary | 39 | Working |
-| subscriptions | 12 | Working (PayPal; PF access in JSON file for now) |
-| user_memories | ~50 | Working |
+| users | 19 | Working |
+| chat_message_history | 344 | LangChain + legacy rows |
+| espaluz_embeddings | 82 | RAG semantic memory (pgvector) |
+| emotional_history | 133 | Working |
+| vocabulary | 75 | Working |
+| user_memories | 13 | Working |
+| subscriptions | 12 | PayPal; PF access in JSON for now |
+| family_members | 0+ | Ready (onboarding writes here) |
 
-**LangChain Status:** `LANGCHAIN_AVAILABLE = True` (verified)
+**LangChain:** `LANGCHAIN_AVAILABLE = True` on Oracle  
+**RAG:** Requires `OPENAI_API_KEY` + `espaluz_embeddings` table (migration in WhatsApp `config/migrations/001_espaluz_embeddings.sql`)
+
+Per-user inspect: `python3 /home/ubuntu/cto-aipa/scripts/oracle-resilience/inspect_telegram_user.py <telegram_id>`
 
 ---
 
@@ -167,12 +218,13 @@ First live payment webhook arrived with `authStatus: "00"` but was skipped due t
 - Onboarding flow with DB sync
 - Cross-session persistence via LangChain
 
-### PostgreSQL + LangChain Integration
+### PostgreSQL + LangChain + RAG Integration
 - Unified `espaluz_unified` database
-- LangChain chat history persistence
-- Cross-platform memory (same user on Telegram & WhatsApp)
-- Vocabulary tracking with SM-2 algorithm ready
-- Spaced repetition infrastructure ready
+- LangChain chat history — **read into prompt** (last 5 turns) + write after each reply
+- RAG pgvector — semantic recall of past topics (schools, family, relocation)
+- Emotional history to PostgreSQL + session JSON for in-conversation mood
+- Vocabulary tracking with SM-2 algorithm
+- **Note:** WhatsApp and Telegram sessions are separate UUIDs per platform (not auto-merged)
 
 ### Payments (Telegram — June 2026)
 - PagueloFacil `/pagar` — automatic 30-day access via webhook
