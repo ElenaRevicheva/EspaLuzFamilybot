@@ -146,6 +146,15 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
+# Runtime user/session data — NEVER deploy from dev; lives on Oracle VM only
+user_sessions.json
+user_onboarding.json
+telegram_trials.json
+telegram_subscribers.json
+paguelofacil_payments.json
+espaluz_analytics.json
+demo_sessions.json
+
 # pytype static type analyzer
 .pytype/
 

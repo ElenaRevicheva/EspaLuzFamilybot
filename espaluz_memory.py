@@ -435,6 +435,18 @@ class EspaLuzMemory:
                     """, (user_id,))
     
     # ==================== LANGCHAIN CONVERSATION MEMORY ====================
+
+    @staticmethod
+    def session_uuid_for(platform: str, user_id: int) -> str:
+        """Deterministic UUID shared by LangChain, RAG, and SQL history."""
+        return str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{platform}_{user_id}"))
+
+    def get_session_uuid(self, user_id: int) -> str:
+        return self.session_uuid_for(self.platform, user_id)
+
+    def get_legacy_session_id(self, user_id: int) -> str:
+        """Pre-2026 string session_id — kept for reading old rows only."""
+        return f"{self.platform}_{user_id}"
     
     def get_conversation_memory(self, user_id: int, window_size: int = 10):
         """
@@ -449,8 +461,7 @@ class EspaLuzMemory:
         
         # Generate a deterministic UUID from platform + user_id
         # This ensures the same user always gets the same session UUID
-        session_str = f"{self.platform}_{user_id}"
-        session_uuid = str(uuid.uuid5(uuid.NAMESPACE_DNS, session_str))
+        session_uuid = self.get_session_uuid(user_id)
         
         try:
             # Create PostgreSQL-backed chat history
@@ -498,8 +509,9 @@ class EspaLuzMemory:
         """
         Add a message to conversation history.
         Works even without LangChain installed.
+        Uses UUID session_id (same as LangChain + RAG).
         """
-        session_id = f"{self.platform}_{user_id}"
+        session_id = self.get_session_uuid(user_id)
         
         with self._get_connection() as conn:
             with conn.cursor() as cur:
@@ -513,18 +525,19 @@ class EspaLuzMemory:
                 """, (session_id, Json(message_data)))
     
     def get_recent_messages(self, user_id: int, limit: int = 10) -> List[Dict]:
-        """Get recent messages from conversation history"""
-        session_id = f"{self.platform}_{user_id}"
+        """Get recent messages from conversation history (UUID + legacy string rows)."""
+        session_uuid = self.get_session_uuid(user_id)
+        legacy_id = self.get_legacy_session_id(user_id)
         
         with self._get_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 cur.execute("""
                     SELECT message, created_at 
                     FROM chat_message_history 
-                    WHERE session_id = %s 
+                    WHERE session_id IN (%s, %s)
                     ORDER BY created_at DESC 
                     LIMIT %s
-                """, (session_id, limit))
+                """, (session_uuid, legacy_id, limit))
                 
                 rows = cur.fetchall()
                 return [
