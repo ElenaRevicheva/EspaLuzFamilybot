@@ -400,6 +400,17 @@ CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL_NAME", "claude-sonnet-4-5-20250929")
 CLAUDE_API_VERSION = os.environ.get("CLAUDE_API_VERSION", "2023-06-01")
 MAX_HISTORY_MESSAGES = int(os.getenv("MAX_HISTORY_MESSAGES", 10))
 
+
+def _groq_model() -> str:
+    """Groq model id, resolved at CALL time.
+
+    Groq retires llama-3.3-70b-versatile in August 2026. Keeping the id behind
+    GROQ_MODEL makes that migration a one-line .env change plus a restart,
+    instead of hunting hard-coded strings. Read lazily (not at import) so the
+    value is picked up on restart without a code deploy.
+    """
+    return os.environ.get("GROQ_MODEL", "").strip() or "llama-3.3-70b-versatile"
+
 # === WEBHOOK KILLER THREAD ===
 def webhook_killer_thread():
     print("🔥🔥🔥 WEBHOOK KILLER THREAD STARTING 🔥🔥🔥")
@@ -621,7 +632,13 @@ def extract_conversation_vocabulary(user_message, bot_reply):
     return vocabulary
 
 def update_connected_bot_activity(user_id):
-    """Update last activity timestamp for connected bot"""
+    """Update last activity timestamp for connected bot.
+
+    DISABLED: the euyidvolwqmzijkfrplh Supabase project no longer exists — the
+    host is NXDOMAIN, so every call burned a DNS timeout and logged an error on
+    each user message. Activity lives in PostgreSQL now (telegram_users.last_active).
+    """
+    return
     try:
         payload = {
             "telegram_user_id": str(user_id),
@@ -2553,7 +2570,7 @@ def _telegram_groq_chat(system: str, user: str, max_tokens: int = 1000):
                 "User-Agent": "EspaLuz/1.0 (+https://aideazz.xyz)",
             },
             json={
-                "model": "llama-3.3-70b-versatile",
+                "model": _groq_model(),
                 "messages": [
                     {"role": "system", "content": (system or "")[:14000]},
                     {"role": "user", "content": user},
@@ -4222,18 +4239,51 @@ def handle_scenarios(message):
 # CONVERSATION MODE - Real-time translation like Google Translate
 # =============================================================================
 
+CONVO_ACTIVATED_MSG = """🎙️ *CONVERSATION MODE ACTIVATED*
+
+How it works:
+1. Send a voice message in ANY language
+2. I translate it and speak it back
+
+🇷🇺 Russian → 🇪🇸 Spanish *and* 🇬🇧 English (both text + voice)
+🇬🇧 English → 🇪🇸 Spanish
+🇪🇸 Spanish → 🇬🇧 English
+
+Perfect for: pharmacy, doctor, school meetings, shopping, immigration.
+
+/convo off — back to tutor mode
+/convo es — translate TO Spanish
+/convo en — translate TO English
+
+🎤 Start speaking now!"""
+
+CONVO_DEACTIVATED_MSG = """🔇 *Conversation mode OFF* — back to full tutor mode.
+
+You get explanations, grammar, culture and video replies again.
+Send /convo on any time you need fast translation."""
+
+
 @bot.message_handler(commands=["convo"])
 def handle_convo(message):
     """Toggle conversation mode for real-time voice translation"""
     user_id = str(message.from_user.id)
     args = message.text.split()[1:] if len(message.text.split()) > 1 else []
-    
-    if args and args[0].lower() == "off":
+
+    if args and args[0].lower() in ("off", "stop", "end", "0"):
         result = conversation_mode.deactivate(user_id)
-        bot.send_message(message.chat.id, result)
+        count = result.get("message_count", 0) if isinstance(result, dict) else 0
+        tail = f"\n\nTranslations this session: {count}" if count else ""
+        bot.send_message(message.chat.id, CONVO_DEACTIVATED_MSG + tail, parse_mode="Markdown")
+        print(f"CONVO ACTION user={user_id} deactivated count={count}", flush=True)
         return
-    
-    # Determine target language
+
+    # Turning convo mode ON is a paid action — same gate as voice/text/photo.
+    # enforce_learning_access covers BOTH rails (PayPal + PagueloFacil) and trial.
+    if not enforce_learning_access(message, user_id):
+        return
+
+    # Target language applies to Spanish/English input.
+    # Russian always returns BOTH Spanish and English.
     target_lang = "es"  # Default
     if args:
         arg = args[0].lower()
@@ -4241,9 +4291,120 @@ def handle_convo(message):
             target_lang = "es"
         elif arg in ["en", "english", "inglés", "ingles"]:
             target_lang = "en"
-    
-    result = conversation_mode.activate(user_id, target_lang)
-    bot.send_message(message.chat.id, result, parse_mode="Markdown")
+
+    conversation_mode.activate(user_id, target_lang)
+    print(f"CONVO ACTION user={user_id} activated target={target_lang}", flush=True)
+    bot.send_message(message.chat.id, CONVO_ACTIVATED_MSG, parse_mode="Markdown")
+
+
+def _convo_translate(text, source_lang, target_lang):
+    """
+    One translation on the fleet fallback spine: Claude -> Groq -> OpenAI.
+    Returns the translated string, or None when every provider failed.
+
+    Note the fallback triggers on ANY Claude exception, not a status allowlist:
+    the previous version only retried on {400, 529, 503}, so a 404 from a stale
+    CLAUDE_MODEL_NAME killed the whole translation with no fallback.
+    """
+    import anthropic
+
+    if source_lang == target_lang:
+        return text
+
+    prompt = get_quick_translate_prompt(text, source_lang, target_lang)
+    msgs = [{"role": "user", "content": prompt}]
+
+    try:
+        client = anthropic.Anthropic(api_key=os.environ.get("CLAUDE_API_KEY"))
+        response = client.messages.create(model=CLAUDE_MODEL, max_tokens=500, messages=msgs)
+        return response.content[0].text.strip()
+    except Exception as claude_err:
+        print(f"Convo Claude failed ({source_lang}->{target_lang}): {claude_err}", flush=True)
+
+    groq_key = os.environ.get("GROQ_API_KEY", "").strip()
+    if groq_key:
+        try:
+            gr = requests.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {groq_key}",
+                    "User-Agent": "EspaLuz/1.0 (+https://aideazz.xyz)",
+                },
+                json={"model": _groq_model(), "messages": msgs, "max_tokens": 500},
+                timeout=30,
+            )
+            if gr.status_code == 200:
+                print(f"Convo Groq fallback OK ({_groq_model()}) {source_lang}->{target_lang}", flush=True)
+                return gr.json()["choices"][0]["message"]["content"].strip()
+            print(f"Convo Groq fallback HTTP {gr.status_code}: {gr.text[:200]}", flush=True)
+        except Exception as ge:
+            print(f"Convo Groq fallback failed: {ge}", flush=True)
+
+    if OPENAI_API_KEY:
+        try:
+            orsp = requests.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"},
+                json={"model": "gpt-4o-mini", "messages": msgs, "max_tokens": 500, "temperature": 0.3},
+                timeout=30,
+            )
+            if orsp.status_code == 200:
+                print(f"Convo OpenAI fallback OK {source_lang}->{target_lang}", flush=True)
+                return orsp.json()["choices"][0]["message"]["content"].strip()
+            print(f"Convo OpenAI fallback HTTP {orsp.status_code}", flush=True)
+        except Exception as oe:
+            print(f"Convo OpenAI fallback failed: {oe}", flush=True)
+
+    return None
+
+
+def _convo_voice_note(text, lang, slot_id):
+    """
+    Render `text` as a Telegram-ready OGG voice note in `lang`.
+
+    `slot_id` MUST be unique per clip. Neural TTS names its output
+    neural_tts_{message_id}.mp3, so reusing one id would make the English clip
+    silently overwrite the Spanish one when both are rendered for one message.
+    Returns the .ogg path, or None.
+    """
+    mp3_path = f"convotts_{slot_id}.mp3"
+    ogg_path = f"convotts_out_{slot_id}.ogg"
+
+    rendered = False
+    if NEURAL_TTS_AVAILABLE:
+        try:
+            neural_path = generate_voice_sync(text, lang=lang, style="conversation", message_id=slot_id)
+            if neural_path:
+                if neural_path != mp3_path:
+                    import shutil
+                    shutil.copy(neural_path, mp3_path)
+                    os.remove(neural_path)
+                rendered = True
+            else:
+                print(f"Neural TTS returned None for {lang}, using gTTS", flush=True)
+        except Exception as e:
+            print(f"Neural TTS failed for {lang}: {e}, using gTTS", flush=True)
+
+    if not rendered:
+        try:
+            gTTS(text=text, lang=lang, slow=False).save(mp3_path)
+        except Exception as e:
+            print(f"gTTS failed for {lang}: {e}", flush=True)
+            return None
+
+    try:
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", mp3_path, "-c:a", "libopus", "-b:a", "64k", ogg_path],
+            capture_output=True, check=True,
+        )
+    except Exception as e:
+        print(f"ffmpeg convo encode failed for {lang}: {e}", flush=True)
+        ogg_path = None
+
+    if os.path.exists(mp3_path):
+        os.remove(mp3_path)
+    return ogg_path
 
 
 def handle_conversation_voice(message):
@@ -4252,7 +4413,7 @@ def handle_conversation_voice(message):
     from gtts import gTTS
     import subprocess
     import os
-    
+
     user_id = str(message.from_user.id)
     chat_id = message.chat.id
     
@@ -4263,7 +4424,6 @@ def handle_conversation_voice(message):
         
         temp_ogg = f"convo_{message.message_id}.ogg"
         temp_mp3 = f"convo_{message.message_id}.mp3"
-        temp_output = f"convo_out_{message.message_id}.ogg"
         
         with open(temp_ogg, "wb") as f:
             f.write(voice_file)
@@ -4279,101 +4439,73 @@ def handle_conversation_voice(message):
         
         # 3. Detect language
         detected_lang = detect_language(transcription)
-        target_lang = conversation_mode.get_target_language(user_id)
-        translate_to = get_opposite_language(detected_lang, target_lang)
-        
-        # 4. Quick translate with Claude
-        client = anthropic.Anthropic(api_key=os.environ.get("CLAUDE_API_KEY"))
-        prompt = get_quick_translate_prompt(transcription, detected_lang, translate_to)
-        
-        _tg_msgs = [{"role": "user", "content": prompt}]
-        try:
-            response = client.messages.create(
-                model="claude-sonnet-4-5-20250929",
-                max_tokens=500,
-                messages=_tg_msgs,
+
+        # 4. Translate and speak.
+        #    Russian is the bridge case: the expat speaks Russian and needs BOTH
+        #    the Spanish to say out loud AND the English to check they got it
+        #    right. Mirrors whatsapp_convo_mode.process_convo_message().
+        produced = []
+        if detected_lang == "ru":
+            es_text = _convo_translate(transcription, "ru", "es")
+            en_text = _convo_translate(transcription, "ru", "en")
+            if not es_text or not en_text:
+                bot.reply_to(message, "❌ Translation error. Try again?")
+                return
+
+            bot.send_message(
+                chat_id,
+                f"🎤 *{transcription}*\n\n🇪🇸 {es_text}\n\n🇬🇧 {en_text}",
+                parse_mode="Markdown",
             )
-            translation = response.content[0].text.strip()
-        except Exception as _claude_err:
-            if getattr(_claude_err, 'status_code', None) not in {400, 529, 503}:
-                raise
-            translation = None
-            _groq_key = os.environ.get("GROQ_API_KEY", "").strip()
-            if _groq_key:
-                try:
-                    _gr = requests.post(
-                        "https://api.groq.com/openai/v1/chat/completions",
-                        headers={
-                            "Content-Type": "application/json",
-                            "Authorization": f"Bearer {_groq_key}",
-                            "User-Agent": "EspaLuz/1.0 (+https://aideazz.xyz)",
-                        },
-                        json={"model": "llama-3.3-70b-versatile", "messages": _tg_msgs, "max_tokens": 500},
-                        timeout=30,
-                    )
-                    if _gr.status_code == 200:
-                        translation = _gr.json()["choices"][0]["message"]["content"].strip()
-                        print("[EspaLuz Telegram] Groq fallback (400 credit exhaustion) succeeded")
-                    else:
-                        print(f"Groq convo fallback HTTP {_gr.status_code}: {_gr.text[:200]}")
-                except Exception as _ge:
-                    print(f"Groq convo fallback failed: {_ge}")
-            if not translation and OPENAI_API_KEY:
-                try:
-                    _or = requests.post(
-                        "https://api.openai.com/v1/chat/completions",
-                        headers={"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"},
-                        json={"model": "gpt-4o-mini", "messages": _tg_msgs, "max_tokens": 500, "temperature": 0.3},
-                        timeout=30,
-                    )
-                    if _or.status_code == 200:
-                        translation = _or.json()["choices"][0]["message"]["content"].strip()
-                        print("[EspaLuz Telegram] OpenAI convo fallback succeeded")
-                except Exception as _oe:
-                    print(f"OpenAI convo fallback failed: {_oe}")
-            if not translation:
-                raise _claude_err
-        
-        # 5. Generate voice response
-        tts_lang = "es" if translate_to == "es" else "en"
-        # Use Neural TTS for beautiful voice
-        if NEURAL_TTS_AVAILABLE:
-            try:
-                neural_path = generate_voice_sync(translation, lang=tts_lang, style="conversation", message_id=message.message_id)
-                if neural_path:
-                    import shutil
-                    shutil.copy(neural_path, temp_mp3)
-                    if neural_path != temp_mp3:
-                        os.remove(neural_path)
-                else:
-                    raise Exception("Neural TTS returned None")
-            except Exception as e:
-                print(f"Neural TTS failed: {e}, using gTTS")
-                tts = gTTS(text=translation, lang=tts_lang, slow=False)
-                tts.save(temp_mp3)
+
+            # Distinct slot ids per clip — a shared id makes the second render
+            # overwrite the first (see _convo_voice_note).
+            for clip_text, clip_lang, slot in (
+                (es_text, "es", message.message_id * 2),
+                (en_text, "en", message.message_id * 2 + 1),
+            ):
+                path = _convo_voice_note(clip_text, clip_lang, slot)
+                if path and os.path.exists(path):
+                    with open(path, "rb") as voice:
+                        bot.send_voice(chat_id, voice)
+                    produced.append(path)
+
+            print(f"CONVO ACTION user={user_id} ru->es+en voices={len(produced)}", flush=True)
         else:
-            tts = gTTS(text=translation, lang=tts_lang, slow=False)
-            tts.save(temp_mp3)
-        
-        # Convert to OGG for Telegram voice note
-        subprocess.run([
-            "ffmpeg", "-y", "-i", temp_mp3,
-            "-c:a", "libopus", "-b:a", "64k",
-            temp_output
-        ], capture_output=True, check=True)
-        
-        # 6. Send voice note + text
-        lang_flag = "🇪🇸" if translate_to == "es" else "🇬🇧"
-        bot.send_message(chat_id, f"🎤 *{transcription}*\n{lang_flag} {translation}", parse_mode="Markdown")
-        
-        with open(temp_output, "rb") as voice:
-            bot.send_voice(chat_id, voice)
-        
+            target_lang = conversation_mode.get_target_language(user_id)
+            translate_to = get_opposite_language(detected_lang, target_lang)
+            # Never echo the speaker back to themselves.
+            if translate_to == detected_lang:
+                translate_to = "en" if detected_lang == "es" else "es"
+
+            translation = _convo_translate(transcription, detected_lang, translate_to)
+            if not translation:
+                bot.reply_to(message, "❌ Translation error. Try again?")
+                return
+
+            lang_flag = "🇪🇸" if translate_to == "es" else "🇬🇧"
+            bot.send_message(
+                chat_id,
+                f"🎤 *{transcription}*\n{lang_flag} {translation}",
+                parse_mode="Markdown",
+            )
+
+            path = _convo_voice_note(translation, translate_to, message.message_id * 2)
+            if path and os.path.exists(path):
+                with open(path, "rb") as voice:
+                    bot.send_voice(chat_id, voice)
+                produced.append(path)
+
+            print(
+                f"CONVO ACTION user={user_id} {detected_lang}->{translate_to} voices={len(produced)}",
+                flush=True,
+            )
+
         # Track usage
         conversation_mode.increment_count(user_id)
-        
+
         # Cleanup
-        for f in [temp_ogg, temp_mp3, temp_output]:
+        for f in [temp_ogg, temp_mp3] + produced:
             if os.path.exists(f):
                 os.remove(f)
                 
@@ -4758,9 +4890,13 @@ def generate_voice_note(text, lang='es'):
         print(f"Voice generation error: {e}")
         return None
 
-@bot.message_handler(commands=["convo"])
+# DEAD CODE — DELIBERATELY NOT REGISTERED. The live /convo handler is
+# handle_convo() earlier in this file. telebot dispatches to the FIRST matching
+# handler, so this second registration never fired and its state dict
+# (conversation_mode_users) is therefore always empty. The decorator is removed
+# so future fixes are not applied here by mistake.
 def handle_convo_toggle(message):
-    """Toggle conversation mode on/off"""
+    """Toggle conversation mode on/off (UNUSED — see handle_convo)"""
     user_id = str(message.from_user.id)
     
     # Parse command argument
@@ -4896,8 +5032,24 @@ def handle_voice(message):
     user_id = str(message.from_user.id)
     
     # === CONVERSATION MODE CHECK ===
-    # If conversation mode is active, use fast translation instead of full tutor mode
+    # If conversation mode is active, use fast translation instead of full tutor mode.
+    # The access gate and usage tracking run FIRST: convo mode is a paid feature like
+    # any other, and it must appear in daily_metrics. enforce_learning_access covers
+    # BOTH rails — PayPal subscription and PagueloFacil prepaid — plus the trial.
     if conversation_mode.is_active(user_id):
+        if not enforce_learning_access(message, user_id):
+            return
+        if DATABASE_AVAILABLE and db:
+            try:
+                db.track_user(
+                    user_id,
+                    username=message.from_user.username if message.from_user else None,
+                    first_name=message.from_user.first_name if message.from_user else None,
+                )
+                db.track_message(user_id, 'voice')
+                print(f"DB: Tracked convo voice from {user_id}", flush=True)
+            except Exception as e:
+                print(f"DB convo voice tracking error: {e}", flush=True)
         handle_conversation_voice(message)
         return
 
@@ -5398,10 +5550,11 @@ def register_commands_with_retry(max_retries=5, initial_delay=10):
 # Register commands with retry
 register_commands_with_retry()
 
-# Fix photo handler - make it more resilient to errors
-@bot.message_handler(content_types=["photo"])
-def handle_photo(message):
-    """Handle photo message with text recognition and translation"""
+# DEAD CODE — DELIBERATELY NOT REGISTERED. A photo handler is already registered
+# earlier in this file and telebot dispatches to the FIRST match, so this one
+# never ran. Decorator removed so it cannot be mistaken for the live path.
+def handle_photo_resilient_unused(message):
+    """Handle photo message with text recognition and translation (UNUSED)"""
     try:
         # Step 1: Send processing message
         processing_msg = bot.send_message(message.chat.id, "🔍 Procesando imagen... / Processing image...")
