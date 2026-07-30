@@ -1841,8 +1841,16 @@ Provide nuanced language assistance focused on natural conversation, idioms, and
         # === ENHANCEMENT CONTEXT (8 Features - All 21 Countries) ===
         if ENHANCEMENTS_AVAILABLE and UNIFIED_MEMORY_AVAILABLE:
             try:
-                # Create memory instance for this user
-                memory = EspaLuzMemory(platform='telegram', platform_user_id=str(user_id))
+                # Create memory instance for this user.
+                # NOTE: format_mcp_request() has no `user_id` parameter — the old
+                # code referenced one, so this block raised NameError on EVERY
+                # message and the except below swallowed it. Result: the 21-country
+                # / 8-feature enhancement context was never actually applied.
+                # Take the id from the session, as the rest of this function does.
+                memory = EspaLuzMemory(
+                    platform='telegram',
+                    platform_user_id=str(session.get("user_id", "")),
+                )
                 
                 user_country = session["context"]["user"]["preferences"].get("country", "panama")
                 user_type_val = session["context"]["user"]["preferences"].get("user_type", "expat")
@@ -2527,35 +2535,65 @@ def suggest_next_topics(session, adjustments):
 
 # === TRANSLATION & AI HANDLERS ===
 def translate_to_es_en(text):
-    """Translate the input text to both Spanish and English"""
-    headers = {"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"}
-    data = {
-        "model": "gpt-3.5-turbo",
-        "messages": [{"role": "user", "content": f"Translate this message into both Spanish and English:\n\n{text}"}]
-    }
-    try:
-        res = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=data, timeout=30)
-        res_json = res.json()
-        
-        # Check for API errors
-        if "error" in res_json:
-            error_msg = res_json.get("error", {}).get("message", "Unknown API error")
-            print(f"OpenAI API error: {error_msg}")
-            return None  # Return None instead of error message
-        
-        # Check for valid response structure
-        if "choices" in res_json and len(res_json["choices"]) > 0:
-            return res_json["choices"][0]["message"]["content"]
-        else:
-            print(f"Unexpected API response: {res_json}")
+    """Translate the input text to both Spanish and English.
+
+    Returns "Spanish: ...\\nEnglish: ..." or None.
+
+    Previously this asked gpt-3.5-turbo to "translate into both Spanish and
+    English" in one free-form call and returned whatever came back unchecked.
+    For Spanish-ish input it happily emitted the SAME sentence on both lines
+    (observed live: "Spanish: Necesito ir al baño / English: Necesito ir al
+    baño"). Now each language is requested separately on gpt-4o-mini, and a
+    result where both lines match is rejected rather than shown.
+    """
+    def _one(target_name):
+        try:
+            res = requests.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={"Authorization": f"Bearer {OPENAI_API_KEY}",
+                         "Content-Type": "application/json"},
+                json={
+                    "model": "gpt-4o-mini",
+                    "temperature": 0.2,
+                    "max_tokens": 500,
+                    "messages": [{
+                        "role": "user",
+                        "content": (
+                            f"Translate the text below into {target_name}.\n"
+                            f"Reply with ONLY the {target_name} translation - no labels, "
+                            f"no quotes, no explanation.\n\nText: {text}"
+                        ),
+                    }],
+                },
+                timeout=30,
+            )
+            body = res.json()
+            if "error" in body:
+                print(f"OpenAI API error ({target_name}): {body['error'].get('message','unknown')}")
+                return None
+            choices = body.get("choices") or []
+            if not choices:
+                print(f"Unexpected API response ({target_name}): {body}")
+                return None
+            return choices[0]["message"]["content"].strip()
+        except requests.exceptions.Timeout:
+            print(f"Translation timeout ({target_name})")
             return None
-            
-    except requests.exceptions.Timeout:
-        print("Translation timeout")
+        except Exception as e:
+            print(f"Translation error ({target_name}): {e}")
+            return None
+
+    spanish = _one("Spanish")
+    english = _one("English")
+    if not spanish or not english:
         return None
-    except Exception as e:
-        print(f"Translation error: {e}")
-        return None  # Return None, let caller handle gracefully
+
+    # Guard the actual failure mode: one language echoed into both slots.
+    if spanish.strip().lower() == english.strip().lower():
+        print("Translation rejected: Spanish and English came back identical")
+        return None
+
+    return f"Spanish: {spanish}\nEnglish: {english}"
 def _telegram_groq_chat(system: str, user: str, max_tokens: int = 1000):
     """Groq llama-3.3 fallback with proper system/user split (requests + User-Agent)."""
     key = os.environ.get("GROQ_API_KEY", "").strip()
@@ -3670,21 +3708,19 @@ def handle_connect(message):
         print("📤 Sending connect payload:", payload)
         # Supabase key check removed - using PostgreSQL
 
-        response = requests.post(
-            "https://euyidvolwqmzijkfrplh.supabase.co/functions/v1/connect-bot",
-            json=payload,
-            headers={
-                "Authorization": f"Bearer {os.environ.get('SUPABASE_ANON_KEY')}",
-                "Content-Type": "application/json"
-            },
-            timeout=5
+        # The web-dashboard backend (euyidvolwqmzijkfrplh Supabase) no longer
+        # exists — the host is NXDOMAIN. Calling it made /connect wait on a DNS
+        # timeout and then show the user a raw exception. Progress lives in
+        # PostgreSQL and is already tied to this Telegram account, so say so
+        # plainly instead of failing loudly.
+        print("ℹ️ /connect: web dashboard backend retired; progress is in PostgreSQL")
+        bot.reply_to(
+            message,
+            "✅ Tu progreso ya está guardado en tu cuenta de Telegram.\n"
+            "✅ Your progress is already saved to your Telegram account.\n\n"
+            "No hace falta conectar nada. / Nothing to connect.\n"
+            "Usa /progress para verlo. / Use /progress to see it.",
         )
-
-        if response.status_code == 200:
-            bot.reply_to(message, "✅ Bot successfully connected to your account!")
-        else:
-            print("❌ Connect-bot error:", response.status_code, response.text)
-            bot.reply_to(message, f"⚠️ Connection failed:\n{response.status_code} {response.text}")
 
     except Exception as e:
         print("❌ Exception in /connect:", str(e))
