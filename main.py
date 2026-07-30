@@ -2993,9 +2993,9 @@ def create_full_voice_message(chat_id, full_text):
             print("No voice chunks were created successfully")
             return False
 
-        # Send the voice message
+        # Send the voice message (explicit timeout — see send_full_voice_message)
         with open(voice_file, "rb") as voice:
-            bot.send_voice(chat_id, voice)
+            bot.send_voice(chat_id, voice, timeout=180)
 
         print("Full voice message sent successfully")
 
@@ -3169,19 +3169,61 @@ def bulletproof_video_generator(chat_id, full_reply_text):
         return False
 
 def send_full_voice_message(chat_id, full_reply_text):
+    """Send the full reply as a voice note. Returns True only if it really sent."""
+    mp3_path = "simple_voice.mp3"
+    ogg_path = "simple_voice.ogg"
     try:
         # ENHANCEMENT: Clean the full text too
         full_reply_clean = clean_text_for_speech(full_reply_text)
         print(f"🎧 Generating voice with cleaned text, length: {len(full_reply_clean)}")
-        
+
         tts = gTTS(text=full_reply_clean, lang="es")
-        tts.save("simple_voice.mp3")
-        with open("simple_voice.mp3", "rb") as f:
-            bot.send_voice(chat_id, f)
-        os.remove("simple_voice.mp3")
-        print("✅ Voice message sent successfully")
+        tts.save(mp3_path)
+
+        # Transcode to Opus. Richer tutor replies pushed the mp3 past 1.3 MB and
+        # the upload hit a write timeout; opus is both far smaller and the format
+        # Telegram actually wants for a voice note. Fall back to the mp3 if
+        # ffmpeg is unavailable for any reason.
+        upload_path = mp3_path
+        try:
+            subprocess.run(
+                ["ffmpeg", "-y", "-i", mp3_path, "-c:a", "libopus", "-b:a", "48k", ogg_path],
+                capture_output=True, check=True,
+            )
+            if os.path.exists(ogg_path) and os.path.getsize(ogg_path) > 0:
+                upload_path = ogg_path
+        except Exception as enc_err:
+            print(f"⚠️ Voice opus transcode failed, sending mp3: {enc_err}")
+
+        print(f"🎧 Voice payload: {os.path.getsize(upload_path) / (1024*1024):.2f} MB ({upload_path})")
+
+        # Explicit generous timeout — the default is too short for a multi-MB
+        # upload from this VM and surfaced as 'The write operation timed out'.
+        sent = False
+        for attempt in (1, 2):
+            try:
+                with open(upload_path, "rb") as f:
+                    bot.send_voice(chat_id, f, timeout=180)
+                sent = True
+                break
+            except Exception as send_err:
+                print(f"⚠️ send_voice attempt {attempt} failed: {send_err}")
+
+        for leftover in (mp3_path, ogg_path):
+            if os.path.exists(leftover):
+                os.remove(leftover)
+
+        if sent:
+            print("✅ Voice message sent successfully")
+            return True
+        print("❌ Voice message failed after 2 attempts")
+        return False
     except Exception as e:
         print(f"❌ Voice message error: {e}")
+        for leftover in (mp3_path, ogg_path):
+            if os.path.exists(leftover):
+                os.remove(leftover)
+        return False
 
 def extract_text_from_image(file_path):
     """Extract text from an image using OCR"""
@@ -3277,9 +3319,16 @@ def ultimate_multimedia_generator(chat_id, full_reply, short_reply):
         
         # Always generate voice message after video attempt, regardless of video success
         print("🎙️ Starting voice message generation...")
-        send_full_voice_message(chat_id, full_reply)
-        
-        print(f"✅ Multimedia generation complete - Video: {'Success' if video_success else 'Failed'}, Voice: Sent")
+        # Report what actually happened: this line used to hard-code "Voice: Sent"
+        # even when the upload had just failed, which made the log unusable for
+        # answering "did the user get their voice note?"
+        voice_success = send_full_voice_message(chat_id, full_reply)
+
+        print(
+            f"✅ Multimedia generation complete - "
+            f"Video: {'Success' if video_success else 'Failed'}, "
+            f"Voice: {'Sent' if voice_success else 'Failed'}"
+        )
             
     except Exception as e:
         print(f"❌ Critical error in multimedia generation: {e}")
@@ -4528,7 +4577,7 @@ def handle_conversation_voice(message):
                 path = _convo_voice_note(clip_text, clip_lang, slot)
                 if path and os.path.exists(path):
                     with open(path, "rb") as voice:
-                        bot.send_voice(chat_id, voice)
+                        bot.send_voice(chat_id, voice, timeout=180)
                     produced.append(path)
 
             print(f"CONVO ACTION user={user_id} ru->es+en voices={len(produced)}", flush=True)
@@ -4554,7 +4603,7 @@ def handle_conversation_voice(message):
             path = _convo_voice_note(translation, translate_to, message.message_id * 2)
             if path and os.path.exists(path):
                 with open(path, "rb") as voice:
-                    bot.send_voice(chat_id, voice)
+                    bot.send_voice(chat_id, voice, timeout=180)
                 produced.append(path)
 
             print(
@@ -5077,7 +5126,7 @@ def process_conversation_mode_voice(message, transcription):
         
         if voice_file and os.path.exists(voice_file):
             with open(voice_file, 'rb') as audio:
-                bot.send_voice(chat_id, audio)
+                bot.send_voice(chat_id, audio, timeout=180)
             os.remove(voice_file)
             print(f"✅ CONVO MODE: Voice sent successfully")
         else:
