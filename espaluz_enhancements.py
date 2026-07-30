@@ -36,9 +36,15 @@ def get_emotional_context_for_prompt(memory_instance) -> str:
     This makes the bot ACTUALLY remember past emotions.
     """
     try:
-        # Get emotional trend from last 7 days
-        trend = memory_instance.get_emotional_trend(days=7)
-        
+        # Get emotional trend from last 7 days.
+        # EspaLuzMemory.get_emotional_trend(user_id, days=7) REQUIRES user_id —
+        # calling it with days= only raised TypeError on every message, which the
+        # caller swallowed, so emotional memory never reached the prompt.
+        uid = getattr(memory_instance, "user_id", None)
+        if not uid:
+            return ""
+        trend = memory_instance.get_emotional_trend(uid, days=7)
+
         if not trend:
             return ""
         
@@ -444,14 +450,28 @@ def get_country_context_full(country: str) -> str:
     ctx = COUNTRY_CONTEXTS_FULL.get(country_key)
     if not ctx:
         return f"Country: {country} (no specific context available)"
-    
+
+    # `slang` is a dict of {term: meaning} for 20 of the 21 countries. Slicing a
+    # dict raises KeyError: slice(None, 5, None) on Python 3.12 (slices became
+    # hashable, so it is a failed key lookup rather than a TypeError). That
+    # exception killed the whole country block, so NO country context ever
+    # reached the prompt. Render term + meaning, which is the point of the data.
+    _slang = ctx.get("slang") or {}
+    if isinstance(_slang, dict):
+        slang_str = ", ".join(f"{term} ({meaning})" for term, meaning in list(_slang.items())[:5])
+    else:
+        slang_str = ", ".join(str(s) for s in list(_slang)[:5])
+
+    _topics = ctx.get("topics") or []
+    topics_str = ", ".join(str(t) for t in list(_topics)[:5])
+
     context = f"""
 🌎 COUNTRY CONTEXT: {country.upper()} {ctx['flag']}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Local greeting: "{ctx['greeting']}"
 Currency: {ctx['currency']}
-Local slang to teach: {', '.join(ctx['slang'][:5])}
-Popular topics: {', '.join(ctx['topics'][:5])}
+Local slang to teach: {slang_str}
+Popular topics: {topics_str}
 
 USE THIS COUNTRY'S:
 - Specific slang and expressions
@@ -637,7 +657,13 @@ def get_family_context(memory_instance) -> str:
 def get_memory_context(memory_instance) -> str:
     """Get key memories about the user for context."""
     try:
-        memories = memory_instance.get_user_memories(limit=10)
+        # get_user_memories(user_id, memory_type=None, limit=...) REQUIRES user_id.
+        # Calling it with limit= only raised TypeError on every message, so the
+        # user's remembered facts never reached the prompt.
+        uid = getattr(memory_instance, "user_id", None)
+        if not uid:
+            return ""
+        memories = memory_instance.get_user_memories(uid, limit=10)
         if not memories:
             return ""
         
