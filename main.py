@@ -2890,9 +2890,10 @@ def generate_video_with_audio(chat_id, text_content, max_duration=30):
             print(f"Output video file is too small or doesn't exist: {output_video}")
             return False
 
-        # 7. Send the video
+        # 7. Send the video (explicit timeout — default is too short for a
+        #    multi-MB upload from this VM and surfaces as a write timeout)
         with open(output_video, "rb") as video_file:
-            bot.send_video(chat_id, video_file)
+            bot.send_video(chat_id, video_file, timeout=180)
 
         print("Video sent successfully!")
 
@@ -3113,6 +3114,11 @@ def bulletproof_video_generator(chat_id, full_reply_text):
         base_video = "looped_video.mp4"
         output_video = "bp_video.mp4"
 
+        # Re-encode to 720p. The source avatar loop is 1080p and the old command
+        # kept that resolution at default CRF, producing ~2.8 MB for a ~10s clip.
+        # Longer tutor replies make longer audio, so the file grew until the
+        # Telegram upload hit a write timeout. 720p is more than enough for a
+        # phone and cuts the upload to a fraction of the size.
         ffmpeg_command = [
             "ffmpeg",
             "-y",
@@ -3120,8 +3126,13 @@ def bulletproof_video_generator(chat_id, full_reply_text):
             "-i", audio_path,
             "-map", "0:v:0",  # take only video stream from base video
             "-map", "1:a:0",  # take only audio stream from mp3
+            "-vf", "scale=-2:720",
             "-c:v", "libx264",
+            "-preset", "veryfast",
+            "-crf", "28",
             "-c:a", "aac",
+            "-b:a", "96k",
+            "-movflags", "+faststart",
             "-shortest",
             output_video
         ]
@@ -3129,10 +3140,24 @@ def bulletproof_video_generator(chat_id, full_reply_text):
         print("🎬 Merging audio with looped video using FFmpeg...")
         subprocess.run(ffmpeg_command, check=True)
 
+        size_mb = os.path.getsize(output_video) / (1024 * 1024)
+        print(f"🎬 Video encoded: {size_mb:.2f} MB")
+
         # === STEP 4: Send video to Telegram
-        with open(output_video, "rb") as video_file:
-            bot.send_video(chat_id, video_file)
-            print("📤 Video sent successfully!")
+        # Explicit generous timeout: telebot's default is far too short for a
+        # multi-MB upload from this VM, which is how the write timeout appeared.
+        sent = False
+        for attempt in (1, 2):
+            try:
+                with open(output_video, "rb") as video_file:
+                    bot.send_video(chat_id, video_file, timeout=180)
+                print("📤 Video sent successfully!")
+                sent = True
+                break
+            except Exception as send_err:
+                print(f"⚠️ send_video attempt {attempt} failed: {send_err}")
+        if not sent:
+            raise Exception("send_video failed after 2 attempts")
 
         # === STEP 5: Cleanup
         os.remove(audio_path)
