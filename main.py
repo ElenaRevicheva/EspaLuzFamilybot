@@ -4050,16 +4050,27 @@ def handle_org(message):
     
     parts = message.text.split()
     if len(parts) < 2:
+        # Codes are wrapped in backticks on purpose. Telegram Markdown treats
+        # _underscores_ as italic markers, so `/org AMCHAM_PANAMA` rendered as
+        # "AMCHAMPANAMA" in italics — the underscore was eaten and anyone who
+        # copied what they saw got rejected by validate_org_code(). Backticks
+        # render monospace, keep the underscore literal, and are tap-to-copy
+        # on mobile.
         bot.reply_to(message, """🏢 *Enter your organization code*
 
-Usage: /org YOUR_CODE
+Usage: `/org YOUR_CODE`  (tap a code below to copy)
 
-Examples:
-• /org AMCHAM_PANAMA
-• /org ISP_PARENTS
-• /org ISD_MEMBERS
+*Colegios / Schools*
+• `/org ISP_PARENTS` — International School of Panama · 60 días
+• `/org OXFORD_PARENTS` — Oxford International School · 60 días
+• `/org BALBOA_PARENTS` — Balboa Academy · 60 días
 
-Contact your organization if you don't have a code.""", parse_mode="Markdown")
+*Cámaras / Chambers*
+• `/org AMCHAM_PANAMA` — AmCham Panama · 60 días
+• `/org AHK_PANAMA` — Cámara Panameño-Alemana · 60 días
+
+Contact your organization if you don't have a code.
+Escribe el código tal cual, con guion bajo.""", parse_mode="Markdown")
         return
     
     code = parts[1].upper().strip()

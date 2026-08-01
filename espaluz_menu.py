@@ -92,8 +92,10 @@ Just send me any message! I understand:
 🏢 *ORGANIZATIONS (For Pilots)*
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 /org CODE — Enter your organization code
-  ↳ Example: /org AMCHAM_PANAMA
-  ↳ Get extended trial and special features
+  ↳ Schools: `/org ISP_PARENTS` · `/org OXFORD_PARENTS` · `/org BALBOA_PARENTS`
+  ↳ Chambers: `/org AMCHAM_PANAMA` · `/org AHK_PANAMA`
+  ↳ 45–90 day extended trial for the whole family
+  ↳ Send /org to see the full list
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⭐ *FEEDBACK & SUPPORT*
@@ -677,7 +679,7 @@ def handle_org(message):
     from espaluz_emotional_brain import validate_org_code, track_activity
     parts = message.text.split()
     if len(parts) < 2:
-        bot.reply_to(message, "Usage: /org YOUR_CODE\\n\\nExample: /org AMCHAM_PANAMA")
+        bot.reply_to(message, "Usage: /org YOUR_CODE\\n\\nExamples: /org ISP_PARENTS · /org AMCHAM_PANAMA\\n(no parse_mode here, so underscores render literally)")
         return
     
     code = parts[1].upper()
