@@ -782,6 +782,59 @@ ORGANIZATION_CODES = {
         "welcome_message": "Welcome, Balboa Academy family!",
         "country": "Panama"
     },
+    # --- B2B2C org pilots staged Aug 1 2026 -------------------------------
+    # Targets from docs/PANAMA_PILOT_OPPORTUNITIES.md (Guille abordaje framework).
+    # A code MUST exist here before its outreach letter goes out: /org rejects an
+    # unknown code, so a partner saying "yes" would hit a dead end. Telegram only —
+    # EspaLuzWhatsApp has no org-code support and is deliberately untouched.
+    "AHK_PANAMA": {
+        "name": "AHK Panama - Camara de Comercio e Industria Panamena-Alemana",
+        "trial_days": 60,
+        "welcome_message": "Welcome, AHK Panama member! 60-day trial activated for you and your family.",
+        "country": "Panama"
+    },
+    "CCIAP_PANAMA": {
+        "name": "Camara de Comercio, Industrias y Agricultura de Panama",
+        "trial_days": 60,
+        "welcome_message": "Bienvenido, socio CCIAP! Prueba de 60 dias activada.",
+        "country": "Panama"
+    },
+    "BRITCHAM_PANAMA": {
+        "name": "British Chamber of Commerce Panama",
+        "trial_days": 60,
+        "welcome_message": "Welcome, BritCham Panama member! 60-day trial activated.",
+        "country": "Panama"
+    },
+    "KINGS_FAMILIES": {
+        "name": "King's College Panama",
+        "trial_days": 60,
+        "welcome_message": "Welcome, King's College family! 60-day trial for your whole family.",
+        "country": "Panama"
+    },
+    "METROPOLITAN_PARENTS": {
+        "name": "Metropolitan School of Panama",
+        "trial_days": 60,
+        "welcome_message": "Welcome, Metropolitan School family! 60-day trial for your whole family.",
+        "country": "Panama"
+    },
+    "INTERNATIONS_PANAMA": {
+        "name": "InterNations Panama",
+        "trial_days": 45,
+        "welcome_message": "Welcome, InterNations Panama member! 45-day trial activated.",
+        "country": "Panama"
+    },
+    "PANAMIGOS": {
+        "name": "Panamigos",
+        "trial_days": 45,
+        "welcome_message": "Bienvenido, Panamigos! Prueba de 45 dias activada.",
+        "country": "Panama"
+    },
+    "IGOPANAMA": {
+        "name": "I Go Panama Community",
+        "trial_days": 45,
+        "welcome_message": "Welcome from I Go Panama! 45-day trial activated.",
+        "country": "Panama"
+    },
     # Demo/Test codes
     "DEMO_2026": {
         "name": "Demo/Workshop Access",
