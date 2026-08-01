@@ -92,10 +92,10 @@ Just send me any message! I understand:
 🏢 *ORGANIZATIONS (For Pilots)*
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 /org CODE — Enter your organization code
-  ↳ Schools: `/org ISP_PARENTS` · `/org OXFORD_PARENTS` · `/org BALBOA_PARENTS`
-  ↳ Chambers: `/org AMCHAM_PANAMA` · `/org AHK_PANAMA`
-  ↳ 45–90 day extended trial for the whole family
-  ↳ Send /org to see the full list
+  ↳ Formato: `/org SU_CODIGO` (MAYÚSCULAS, con guion bajo)
+  ↳ Su colegio, cámara o empresa le entrega el código
+  ↳ Prueba extendida para toda la familia
+  ↳ Escribe /org para las instrucciones
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⭐ *FEEDBACK & SUPPORT*
@@ -679,7 +679,7 @@ def handle_org(message):
     from espaluz_emotional_brain import validate_org_code, track_activity
     parts = message.text.split()
     if len(parts) < 2:
-        bot.reply_to(message, "Usage: /org YOUR_CODE\\n\\nExamples: /org ISP_PARENTS · /org AMCHAM_PANAMA\\n(no parse_mode here, so underscores render literally)")
+        bot.reply_to(message, "Usage: /org SU_CODIGO\\n\\nSu organización le entrega el código. Escríbalo en MAYÚSCULAS y con guion bajo.\\nYour organization gives you the code — type it exactly as received.")
         return
     
     code = parts[1].upper()

@@ -4050,27 +4050,24 @@ def handle_org(message):
     
     parts = message.text.split()
     if len(parts) < 2:
-        # Codes are wrapped in backticks on purpose. Telegram Markdown treats
-        # _underscores_ as italic markers, so `/org AMCHAM_PANAMA` rendered as
-        # "AMCHAMPANAMA" in italics — the underscore was eaten and anyone who
-        # copied what they saw got rejected by validate_org_code(). Backticks
-        # render monospace, keep the underscore literal, and are tap-to-copy
-        # on mobile.
-        bot.reply_to(message, """🏢 *Enter your organization code*
+        # Real codes are deliberately NOT listed here. Each one is a paid benefit
+        # granted to a specific partner organisation and is delivered privately in
+        # that partner's own email; printing the list would let anyone claim a
+        # 45-90 day trial. Only the FORMAT is shown.
+        # The placeholder is in backticks because Telegram Markdown reads
+        # _underscores_ as italic markers and would eat them.
+        bot.reply_to(message, """🏢 *Organization code / Código de organización*
 
-Usage: `/org YOUR_CODE`  (tap a code below to copy)
+Usage: `/org SU_CODIGO`
 
-*Colegios / Schools*
-• `/org ISP_PARENTS` — International School of Panama · 60 días
-• `/org OXFORD_PARENTS` — Oxford International School · 60 días
-• `/org BALBOA_PARENTS` — Balboa Academy · 60 días
+Su organización (colegio, cámara o empresa) le entrega el código.
+Escríbalo tal cual: en MAYÚSCULAS y con guion bajo.
 
-*Cámaras / Chambers*
-• `/org AMCHAM_PANAMA` — AmCham Panama · 60 días
-• `/org AHK_PANAMA` — Cámara Panameño-Alemana · 60 días
+Your organization gives you the code. Type it exactly as received:
+uppercase, with the underscore.
 
-Contact your organization if you don't have a code.
-Escribe el código tal cual, con guion bajo.""", parse_mode="Markdown")
+¿No tiene código? / No code yet?
+Pregunte a su colegio o cámara — o use /trial para la prueba estándar.""", parse_mode="Markdown")
         return
     
     code = parts[1].upper().strip()
