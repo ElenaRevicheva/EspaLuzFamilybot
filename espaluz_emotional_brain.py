@@ -835,6 +835,21 @@ ORGANIZATION_CODES = {
         "welcome_message": "Welcome from I Go Panama! 45-day trial activated.",
         "country": "Panama"
     },
+    # Batch 2 (Aug 2 2026) — only schools whose contact email was verified live
+    # on their own site. Einstein / St Mary's / King's publish nothing scrapeable,
+    # so no code until there is a real address to send it to.
+    "AIP_PARENTS": {
+        "name": "Academia Interamericana de Panama",
+        "trial_days": 60,
+        "welcome_message": "Bienvenida, familia AIP! Prueba de 60 dias para toda la familia.",
+        "country": "Panama"
+    },
+    "BRADER_PARENTS": {
+        "name": "Colegio Brader",
+        "trial_days": 60,
+        "welcome_message": "Bienvenida, familia Brader! Prueba de 60 dias para toda la familia.",
+        "country": "Panama"
+    },
     # Demo/Test codes
     "DEMO_2026": {
         "name": "Demo/Workshop Access",
