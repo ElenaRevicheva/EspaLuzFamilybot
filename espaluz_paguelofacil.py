@@ -69,10 +69,79 @@ def normalize_whatsapp_id(raw: str) -> str:
     return s if s.startswith("+") else f"+{digits}"
 
 
+def _empty_store() -> Dict[str, Any]:
+    return {"orders": {}, "users": {}, "processed": {}}
+
+
+def _durable():
+    """The Postgres mirror, or None if unavailable. Never raises — payments
+    must keep working whether or not the safety net is reachable."""
+    try:
+        import espaluz_pf_durable as _d  # noqa: WPS433
+
+        return _d
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _restore_from_durable(path: str, reason: str) -> Optional[Dict[str, Any]]:
+    """
+    The payment file is gone or unreadable. Before accepting "nobody ever
+    paid" — which is what an empty store means to every caller — ask Postgres.
+
+    Returns the recovered store (and rewrites the file) or None.
+    """
+    d = _durable()
+    if d is None:
+        return None
+    try:
+        doc = d.latest()
+    except Exception:  # noqa: BLE001
+        return None
+    if not isinstance(doc, dict) or not (doc.get("users") or doc.get("processed")):
+        return None
+    doc.setdefault("orders", {})
+    doc.setdefault("users", {})
+    doc.setdefault("processed", {})
+    logging.warning(
+        "PagueloFacil store %s (%s) — RESTORED from Postgres: %d users, %d processed payments",
+        path, reason, len(doc["users"]), len(doc["processed"]),
+    )
+    try:
+        _write_store_file(path, doc)
+    except OSError:
+        pass
+    return doc
+
+
+def _quarantine(path: str) -> None:
+    """Preserve an unreadable payment file instead of letting the next save
+    silently overwrite it. Money records are never discarded, only set aside."""
+    try:
+        import time
+
+        os.rename(path, f"{path}.corrupt.{time.strftime('%Y%m%d%H%M%S')}")
+    except OSError:
+        pass
+
+
+def _write_store_file(path: str, data: Dict[str, Any]) -> None:
+    """Atomic write. A crash midway through json.dump used to leave a
+    truncated payment file behind; writing to a temp file and renaming means
+    the real path always holds a complete document."""
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    tmp = f"{path}.tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+
+
 def _load_store() -> Dict[str, Any]:
     path = _payments_path()
     if not os.path.exists(path):
-        return {"orders": {}, "users": {}, "processed": {}}
+        return _restore_from_durable(path, "file missing") or _empty_store()
     try:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -80,15 +149,25 @@ def _load_store() -> Dict[str, Any]:
         data.setdefault("users", {})
         data.setdefault("processed", {})
         return data
-    except (json.JSONDecodeError, OSError):
-        return {"orders": {}, "users": {}, "processed": {}}
+    except (json.JSONDecodeError, OSError) as exc:
+        # Returning an empty store here was a silent money-record wipe: the
+        # next _save_store() would overwrite the damaged file with that
+        # emptiness, destroying the only copy of who paid. Keep the bad file,
+        # then recover the real one from Postgres.
+        _quarantine(path)
+        return _restore_from_durable(path, f"unreadable: {type(exc).__name__}") or _empty_store()
 
 
 def _save_store(data: Dict[str, Any]) -> None:
     path = _payments_path()
-    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
+    _write_store_file(path, data)
+    # Mirror to Postgres so the file is a cache, not the only copy.
+    d = _durable()
+    if d is not None:
+        try:
+            d.mirror(data, source="save")
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def is_configured() -> bool:

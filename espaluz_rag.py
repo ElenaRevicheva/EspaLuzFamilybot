@@ -27,23 +27,59 @@ DB_URL = os.getenv(
     'DATABASE_URL_UNIFIED',
     'postgresql://espaluz:EspaLuz2026!@localhost:5432/espaluz_unified'
 )
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
 EMBED_MODEL = 'text-embedding-3-small'
 EMBED_DIM = 1536
+
+# Kept for backwards compatibility with anything that read this at import.
+# Do NOT use it internally — see _openai_key() for why.
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
+
+
+def _openai_key() -> str:
+    """
+    Resolve the embedding key at CALL time, falling back to the bots' .env.
+
+    This was previously a module-level os.getenv() evaluated at IMPORT time.
+    If any import of this module happened before load_dotenv() ran, the key
+    was permanently empty for the entire life of the process: every save_turn
+    and retrieve_context returned nothing, one warning was logged, and the
+    bot carried on with no semantic memory at all. Silent amnesia that looks
+    exactly like a working bot — so it is resolved lazily, and from disk if
+    the environment has not been populated.
+    """
+    v = (os.getenv('OPENAI_API_KEY') or '').strip()
+    if v:
+        return v
+    here = os.path.dirname(os.path.abspath(__file__))
+    for path in (os.path.join(here, '.env'),
+                 '/home/ubuntu/EspaLuzWhatsApp/.env',
+                 '/home/ubuntu/EspaLuzFamilybot/.env'):
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith('OPENAI_API_KEY='):
+                        val = line.split('=', 1)[1].strip().strip('"').strip("'")
+                        if val:
+                            return val
+        except OSError:
+            continue
+    return ''
 
 
 # ─── Embedding ─────────────────────────────────────────────────────────────
 
 def _embed(text: str) -> list[float] | None:
     """Call OpenAI embedding API. Returns list of 1536 floats or None on error."""
-    if not OPENAI_API_KEY:
-        logger.warning('RAG: OPENAI_API_KEY not set')
+    key = _openai_key()
+    if not key:
+        logger.warning('RAG: OPENAI_API_KEY not set (checked env and .env files)')
         return None
     try:
         import requests
         resp = requests.post(
             'https://api.openai.com/v1/embeddings',
-            headers={'Authorization': f'Bearer {OPENAI_API_KEY}',
+            headers={'Authorization': f'Bearer {key}',
                      'Content-Type': 'application/json'},
             json={'model': EMBED_MODEL, 'input': text[:8000]},
             timeout=10
