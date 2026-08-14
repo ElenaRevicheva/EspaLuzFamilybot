@@ -1,0 +1,17 @@
+# Install on Oracle:
+#   sudo cp deploy/espaluz-json-guard.service /etc/systemd/system/espaluz-json-guard.service
+#   sudo cp deploy/espaluz-json-guard.timer   /etc/systemd/system/espaluz-json-guard.timer
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now espaluz-json-guard.timer
+#
+# Snapshots 27 EspaLuz JSON state files into Postgres. Imports no bot code.
+
+[Unit]
+Description=EspaLuz JSON store guard - append-only snapshots of bot state into Postgres
+After=network.target postgresql.service
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/EspaLuzFamilybot
+ExecStart=/home/ubuntu/EspaLuzFamilybot/venv/bin/python json_store_guard.py snapshot

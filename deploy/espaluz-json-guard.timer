@@ -1,0 +1,12 @@
+# Pair with espaluz-json-guard.service. Enable: sudo systemctl enable --now espaluz-json-guard.timer
+
+[Unit]
+Description=Snapshot EspaLuz JSON state every 15 minutes
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
