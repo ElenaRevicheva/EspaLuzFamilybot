@@ -409,7 +409,11 @@ def _groq_model() -> str:
     instead of hunting hard-coded strings. Read lazily (not at import) so the
     value is picked up on restart without a code deploy.
     """
-    return os.environ.get("GROQ_MODEL", "").strip() or "llama-3.3-70b-versatile"
+    # Default updated 2026-08-16: llama-3.3-70b-versatile was SHUT DOWN that day
+    # (so was llama-3.1-8b-instant). Leaving a retired id as the fallback default
+    # meant this only worked because GROQ_MODEL happens to be set in .env — one
+    # missing env var away from calling a model that no longer exists.
+    return os.environ.get("GROQ_MODEL", "").strip() or "openai/gpt-oss-120b"
 
 # === WEBHOOK KILLER THREAD ===
 def webhook_killer_thread():
@@ -2656,21 +2660,43 @@ def _telegram_openai_chat(system: str, user: str, model: str = "gpt-4o-mini", ma
 
 
 def _telegram_llm_fallback_reply(mcp_request, content_input):
-    """Groq → gpt-4o-mini → gpt-4 using full MCP system prompt (memory + RAG preserved)."""
+    """Post-Claude fallback: openai → gemini → grok → groq (see llm_chain.py).
+
+    The MCP system prompt is passed through unchanged, so memory, RAG and the
+    emotional journey survive the fallback exactly as they did before.
+
+    What changed 2026-08-16, and why:
+
+    - The ladder was Groq → gpt-4o-mini → gpt-4. Its FIRST rung never ran: this
+      repo's .env had GROQ_MODEL but no GROQ_API_KEY, so _telegram_groq_chat()
+      returned None on the missing key every single time. Zero Groq mentions in
+      30 days of journal confirmed it. The key is now set, and Groq sits LAST
+      because its post-deprecation models are the weakest of the five here.
+    - Gemini and Grok were absent entirely, so two bad providers could silence
+      the tutor.
+    - Claude is deliberately EXCLUDED — it is the primary that just failed, and
+      retrying it costs ~19s (measured) before failing again.
+
+    Every provider in this order scored 5/5 on eval_llm_chain.py (bilingual,
+    warm, substantial, no refusal) against a real family moment, so falling back
+    never means replying badly — only replying from a different engine.
+
+    The len > 30 guard is kept: a two-word reply is not tutoring.
+    """
     system_prompt = mcp_request.get("system", "")
-    groq_reply = _telegram_groq_chat(system_prompt, content_input, max_tokens=1000)
-    if groq_reply and len(groq_reply) > 30:
-        print("✅ Groq fallback succeeded in ask_claude_with_mcp")
-        return groq_reply
-    openai_reply = _telegram_openai_chat(system_prompt, content_input, model="gpt-4o-mini", max_tokens=1000)
-    if openai_reply and len(openai_reply) > 30:
-        print("✅ OpenAI gpt-4o-mini fallback succeeded in ask_claude_with_mcp")
-        return openai_reply
-    gpt4_reply = _telegram_openai_chat(system_prompt, content_input, model="gpt-4", max_tokens=1000)
-    if gpt4_reply and len(gpt4_reply) > 30:
-        print("✅ GPT-4 fallback succeeded in ask_claude_with_mcp")
-        return gpt4_reply
-    return None
+    try:
+        from llm_chain import PROFILE_FALLBACK, complete
+
+        reply, errors = complete(system_prompt, content_input,
+                                 max_tokens=1000, order=PROFILE_FALLBACK)
+        if reply and len(reply) > 30:
+            print(f"✅ fallback chain replied ({len(errors)} provider(s) skipped)")
+            return reply
+        print(f"❌ fallback chain exhausted: {'; '.join(errors)[:300]}")
+        return None
+    except Exception as exc:
+        print(f"❌ fallback chain error: {exc}")
+        return None
 
 
 def ask_claude_with_mcp(session, translated_input):
