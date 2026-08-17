@@ -2599,7 +2599,19 @@ def translate_to_es_en(text):
 
     return f"Spanish: {spanish}\nEnglish: {english}"
 def _telegram_groq_chat(system: str, user: str, max_tokens: int = 1000):
-    """Groq llama-3.3 fallback with proper system/user split (requests + User-Agent)."""
+    """DEAD CODE as of 2026-08-16 — no caller. Kept only pending Elena's review.
+
+    This was the first rung of the old fallback ladder and it never ran once:
+    the .env had GROQ_MODEL but no GROQ_API_KEY, so the guard below returned
+    None on every call for the life of the bot. Its replacement is llm_chain.py.
+
+    Do NOT wire this back in. If you are here because you want a Groq call, use
+    `complete(..., order=PROFILE_FALLBACK)` — it has the retries, the empty-reply
+    handling, and four providers behind it. Left in place rather than deleted
+    because removing code is Elena's call, not an agent's.
+
+    Groq llama-3.3 fallback with proper system/user split (requests + User-Agent).
+    """
     key = os.environ.get("GROQ_API_KEY", "").strip()
     if not key:
         return None
@@ -2632,7 +2644,14 @@ def _telegram_groq_chat(system: str, user: str, max_tokens: int = 1000):
 
 
 def _telegram_openai_chat(system: str, user: str, model: str = "gpt-4o-mini", max_tokens: int = 1000):
-    """OpenAI fallback when Claude/Groq unavailable."""
+    """DEAD CODE as of 2026-08-16 — no caller. Kept only pending Elena's review.
+
+    Superseded by llm_chain.py, which reaches OpenAI on gpt-4o (not mini — mini
+    flattens warmth on this prompt shape) and has three more providers after it.
+    Left in place rather than deleted because removing code is Elena's call.
+
+    OpenAI fallback when Claude/Groq unavailable.
+    """
     if not OPENAI_API_KEY:
         return None
     try:
@@ -4443,12 +4462,25 @@ def handle_convo(message):
 
 def _convo_translate(text, source_lang, target_lang):
     """
-    One translation on the fleet fallback spine: Claude -> Groq -> OpenAI.
+    One translation on the fleet fallback spine: Claude -> the 4-provider chain.
     Returns the translated string, or None when every provider failed.
 
     Note the fallback triggers on ANY Claude exception, not a status allowlist:
     the previous version only retried on {400, 529, 503}, so a 404 from a stale
     CLAUDE_MODEL_NAME killed the whole translation with no fallback.
+
+    Changed 2026-08-16 to match the WhatsApp twin (whatsapp_convo_mode.py):
+    the hand-rolled Groq -> OpenAI ladder below Claude became one chain call.
+    Two reasons it was worth replacing rather than leaving alone:
+
+    - Its Groq leg was the FIRST fallback and had never once run — this repo's
+      .env carried GROQ_MODEL but no GROQ_API_KEY, so the `if groq_key` guard
+      was always false. Translations silently went Claude -> gpt-4o-mini.
+    - gpt-4o-mini was hard-coded, so a retirement there would have repeated
+      exactly the llama-3.3-70b outage this whole change came from.
+
+    A failed translation is not cosmetic: the family gets one half of a
+    bilingual conversation missing.
     """
     import anthropic
 
@@ -4465,40 +4497,18 @@ def _convo_translate(text, source_lang, target_lang):
     except Exception as claude_err:
         print(f"Convo Claude failed ({source_lang}->{target_lang}): {claude_err}", flush=True)
 
-    groq_key = os.environ.get("GROQ_API_KEY", "").strip()
-    if groq_key:
-        try:
-            gr = requests.post(
-                "https://api.groq.com/openai/v1/chat/completions",
-                headers={
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {groq_key}",
-                    "User-Agent": "EspaLuz/1.0 (+https://aideazz.xyz)",
-                },
-                json={"model": _groq_model(), "messages": msgs, "max_tokens": 500},
-                timeout=30,
-            )
-            if gr.status_code == 200:
-                print(f"Convo Groq fallback OK ({_groq_model()}) {source_lang}->{target_lang}", flush=True)
-                return gr.json()["choices"][0]["message"]["content"].strip()
-            print(f"Convo Groq fallback HTTP {gr.status_code}: {gr.text[:200]}", flush=True)
-        except Exception as ge:
-            print(f"Convo Groq fallback failed: {ge}", flush=True)
+    try:
+        from llm_chain import PROFILE_FALLBACK, complete
 
-    if OPENAI_API_KEY:
-        try:
-            orsp = requests.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers={"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"},
-                json={"model": "gpt-4o-mini", "messages": msgs, "max_tokens": 500, "temperature": 0.3},
-                timeout=30,
-            )
-            if orsp.status_code == 200:
-                print(f"Convo OpenAI fallback OK {source_lang}->{target_lang}", flush=True)
-                return orsp.json()["choices"][0]["message"]["content"].strip()
-            print(f"Convo OpenAI fallback HTTP {orsp.status_code}", flush=True)
-        except Exception as oe:
-            print(f"Convo OpenAI fallback failed: {oe}", flush=True)
+        translation, errors = complete(None, prompt, max_tokens=500,
+                                       order=PROFILE_FALLBACK)
+        if translation:
+            print(f"✅ Convo fallback translation OK {source_lang}->{target_lang}", flush=True)
+            return translation.strip()
+        print(f"❌ Convo fallback exhausted {source_lang}->{target_lang}: "
+              f"{'; '.join(errors)[:200]}", flush=True)
+    except Exception as chain_err:
+        print(f"❌ Convo fallback chain error: {chain_err}", flush=True)
 
     return None
 
@@ -4985,16 +4995,29 @@ def detect_language(text):
         return 'en'
 
 def quick_translate_for_convo(text, source_lang, target_lang):
-    """Fast translation for conversation mode - minimal latency"""
-    try:
-        # Use Claude for accurate translation
-        prompt = f"""Translate the following text from {source_lang} to {target_lang}.
+    """Fast translation for conversation mode - minimal latency.
+
+    Claude first (10s timeout, this is the low-latency path), then the same
+    4-provider chain the rest of the bot falls back to.
+
+    Fixed 2026-08-16: this was the LAST single-provider LLM call in the bot.
+    One bad Anthropic minute — a 529, a stale model id, an expired key — and it
+    returned None with no second attempt, which reaches a family as a voice note
+    whose translation simply never arrives. Every other reply path already had a
+    chain behind it; this one was missed.
+
+    The model id was also hard-coded here while `CLAUDE_MODEL` (env-driven,
+    CLAUDE_MODEL_NAME) was already in use everywhere else, so a model change
+    would have fixed the whole bot except this function.
+    """
+    prompt = f"""Translate the following text from {source_lang} to {target_lang}.
 ONLY output the translation, nothing else. No explanations, no quotes, just the translated text.
 
 Text: {text}
 
 Translation:"""
-        
+
+    try:
         response = requests.post(
             "https://api.anthropic.com/v1/messages",
             headers={
@@ -5003,23 +5026,33 @@ Translation:"""
                 "anthropic-version": "2023-06-01"
             },
             json={
-                "model": "claude-sonnet-4-5-20250929",
+                "model": CLAUDE_MODEL,
                 "max_tokens": 500,
                 "messages": [{"role": "user", "content": prompt}]
             },
             timeout=10
         )
-        
+
         if response.status_code == 200:
             result = response.json()
-            translation = result["content"][0]["text"].strip()
-            return translation
-        else:
-            print(f"Translation API error: {response.status_code}")
-            return None
+            return result["content"][0]["text"].strip()
+        print(f"Translation API error: {response.status_code}")
     except Exception as e:
         print(f"Quick translate error: {e}")
-        return None
+
+    try:
+        from llm_chain import PROFILE_FALLBACK, complete
+
+        translation, errors = complete(None, prompt, max_tokens=500,
+                                       order=PROFILE_FALLBACK)
+        if translation:
+            print(f"✅ Quick-translate fallback OK {source_lang}->{target_lang}", flush=True)
+            return translation.strip()
+        print(f"❌ Quick-translate fallback exhausted: {'; '.join(errors)[:200]}", flush=True)
+    except Exception as chain_err:
+        print(f"❌ Quick-translate fallback chain error: {chain_err}", flush=True)
+
+    return None
 
 def generate_voice_note(text, lang='es'):
     """Generate a voice note file for Telegram"""

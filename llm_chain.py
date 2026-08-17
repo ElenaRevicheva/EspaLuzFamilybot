@@ -148,8 +148,14 @@ def call_provider(provider: str, system: Optional[str], user: str, max_tokens: i
 
 
 def complete(system: Optional[str], user: str, max_tokens: int = 1000,
-             order: Iterable[str] = PROFILE_FALLBACK) -> Tuple[str, List[str]]:
+             order: Iterable[str] = PROFILE_QUALITY) -> Tuple[str, List[str]]:
     """Walk the chain until a provider returns a real reply.
+
+    The default order is the FULL chain, matching the WhatsApp twin. Callers on
+    a post-Claude path must pass `order=PROFILE_FALLBACK` explicitly — every one
+    of them does. Defaulting to the fallback profile instead would mean a future
+    caller reaching for a primary path silently skipped Claude, the strongest
+    provider, and nothing would look broken.
 
     Returns (text, errors). An EMPTY or whitespace reply counts as a FAILURE and
     advances the chain: handing "" back would make EspaLuz go silent on a family,
