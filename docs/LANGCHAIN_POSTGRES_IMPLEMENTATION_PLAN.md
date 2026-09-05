@@ -478,7 +478,7 @@ from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 
 # Configuration
 DATABASE_URL = os.getenv('ESPALUZ_DATABASE_URL', 
-    'postgresql://espaluz_app:password@localhost:5432/espaluz_unified')
+    'postgresql://espaluz_app:${DB_PASSWORD}@localhost:5432/espaluz_unified')
 CLAUDE_API_KEY = os.getenv('CLAUDE_API_KEY')
 CLAUDE_MODEL = os.getenv('CLAUDE_MODEL', 'claude-sonnet-4-20250514')
 

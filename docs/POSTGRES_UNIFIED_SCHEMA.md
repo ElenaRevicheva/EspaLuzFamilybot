@@ -455,7 +455,7 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
 from contextlib import contextmanager
 
-DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://espaluz_app:password@localhost:5432/espaluz_unified')
+DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://espaluz_app:${DB_PASSWORD}@localhost:5432/espaluz_unified')
 
 
 class EspaLuzDB:

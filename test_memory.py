@@ -4,7 +4,8 @@ import os
 import sys
 
 # Set environment variable for database
-os.environ['ESPALUZ_UNIFIED_DB_URL'] = 'postgresql://espaluz:EspaLuz2026!@localhost:5432/espaluz_unified'
+# Uses DATABASE_URL_UNIFIED from .env, same as the running bot.
+os.environ.setdefault('ESPALUZ_UNIFIED_DB_URL', os.environ.get('DATABASE_URL_UNIFIED', ''))
 
 # Add current directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

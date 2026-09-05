@@ -23,10 +23,7 @@ import psycopg2.extras
 
 logger = logging.getLogger(__name__)
 
-DB_URL = os.getenv(
-    'DATABASE_URL_UNIFIED',
-    'postgresql://espaluz:EspaLuz2026!@localhost:5432/espaluz_unified'
-)
+DB_URL = os.getenv('DATABASE_URL_UNIFIED')  # set in .env; this module is imported lazily, long after load_dotenv()
 EMBED_MODEL = 'text-embedding-3-small'
 EMBED_DIM = 1536
 

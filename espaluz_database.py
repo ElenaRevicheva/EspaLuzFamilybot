@@ -54,7 +54,7 @@ except ImportError:
     logging.warning("psycopg2 not available - using JSON fallback only")
 
 # Database connection string
-DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://espaluz:espaluz_secure_2026@localhost:5432/espaluz_telegram')
+DATABASE_URL = os.getenv('DATABASE_URL')  # set in .env; loaded by load_dotenv() in main.py before this import
 
 
 class EspaluzDatabase:

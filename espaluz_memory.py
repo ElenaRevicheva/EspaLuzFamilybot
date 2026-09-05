@@ -163,7 +163,7 @@ class EspaLuzMemory:
         self.platform_user_id = platform_user_id
         self.database_url = database_url or os.getenv(
             'ESPALUZ_UNIFIED_DB_URL',
-            os.getenv('DATABASE_URL_UNIFIED', 'postgresql://espaluz:EspaLuz2026!@localhost:5432/espaluz_unified')
+            os.getenv('DATABASE_URL_UNIFIED')
         )
         self._connection = None
         self._user = None

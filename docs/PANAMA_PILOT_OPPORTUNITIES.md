@@ -46,7 +46,7 @@
 
 ### AmCham Panama (American Chamber of Commerce)
 - **Website:** https://www.panamcham.com
-- **Contact:** info@panamcham.com
+- **Contact:** contact001@example.com
 - **LinkedIn:** American Chamber of Commerce and Industry of Panama
 - **Members:** 400+ companies
 - **Why Perfect:** American expats + local businesses needing English
@@ -58,7 +58,7 @@
 
 ### Camara de Comercio, Industrias y Agricultura de Panama (CCIAP)
 - **Website:** https://www.panacamara.com
-- **Contact:** info@panacamara.com
+- **Contact:** contact002@example.com
 - **Phone:** +507 207-3400
 - **Members:** 1,500+ companies
 - **Why Perfect:** Local businesses wanting to improve English for international trade
@@ -131,21 +131,21 @@
 
 | School | Type | Students | Contact | Website |
 |--------|------|----------|---------|---------|
-| **International School of Panama (ISP)** | American curriculum | 1,200+ | admissions@isp.edu.pa | isp.edu.pa |
-| **Balboa Academy** | American curriculum | 1,100+ | info@balboaacademy.org | balboaacademy.org |
-| **King's College Panama** | British curriculum | 800+ | info@kingscollegepanama.com | kingscollegepanama.com |
-| **Metropolitan School of Panama** | IB curriculum | 600+ | admissions@themetropolitanschool.com | themetropolitanschool.com |
-| **Oxford International School** | British curriculum | 500+ | info@ois.edu.pa | ois.edu.pa |
+| **International School of Panama (ISP)** | American curriculum | 1,200+ | contact003@example.com | isp.edu.pa |
+| **Balboa Academy** | American curriculum | 1,100+ | contact004@example.com | balboaacademy.org |
+| **King's College Panama** | British curriculum | 800+ | contact005@example.com | kingscollegepanama.com |
+| **Metropolitan School of Panama** | IB curriculum | 600+ | contact006@example.com | themetropolitanschool.com |
+| **Oxford International School** | British curriculum | 500+ | contact007@example.com | ois.edu.pa |
 
 ### Tier 2: Bilingual Schools
 
 | School | Type | Students | Contact |
 |--------|------|----------|---------|
-| **Instituto Alberto Einstein** | Bilingual | 2,000+ | info@einstein.edu.pa |
-| **St. Mary's School** | Catholic bilingual | 1,500+ | info@stmarys.edu.pa |
-| **Colegio Brader** | Bilingual | 1,200+ | info@colegiobrader.edu.pa |
-| **Boston School** | American bilingual | 800+ | info@bostonschool.edu.pa |
-| **Academia Interamericana de Panama** | Bilingual | 700+ | info@aip.edu.pa |
+| **Instituto Alberto Einstein** | Bilingual | 2,000+ | contact008@example.com |
+| **St. Mary's School** | Catholic bilingual | 1,500+ | contact009@example.com |
+| **Colegio Brader** | Bilingual | 1,200+ | contact010@example.com |
+| **Boston School** | American bilingual | 800+ | contact011@example.com |
+| **Academia Interamericana de Panama** | Bilingual | 700+ | contact012@example.com |
 
 ### Tier 3: Preschools & Early Education
 
@@ -291,7 +291,7 @@
 - **Chamber:** Cámara de Comercio e Industria Panameña-Alemana (AHK Panama)
 - **Address:** Twist Tower, Piso 27, Oficina E, Calle 54 Este, Obarrio
 - **Phone:** +507 269 9358
-- **Email:** info@panama.ahk.de
+- **Email:** contact013@example.com
 - **CEO:** Marco Jänicke
 - **Note:** Germany is Panama's 2nd largest trading partner after USA
 - **Why Perfect:** Professional Germans needing Spanish for business and daily life
@@ -455,7 +455,7 @@
 
 | Media | Type | Reach | Contact |
 |-------|------|-------|---------|
-| **The Panama Guide** | Website/newsletter | 50,000+ | editor@thepanamaeguide.com |
+| **The Panama Guide** | Website/newsletter | 50,000+ | contact014@example.com |
 | **Panama Living** | Magazine | 20,000+ | - |
 | **Escape Artist Panama** | Blog/community | 30,000+ | - |
 | **International Living Panama** | Magazine/website | 100,000+ | - |
