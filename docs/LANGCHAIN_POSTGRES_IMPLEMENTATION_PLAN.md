@@ -120,7 +120,7 @@ ssh -i ~/.ssh/oracle-key ubuntu@170.9.242.90
 # Create database and user
 sudo -u postgres psql << 'EOF'
 CREATE DATABASE espaluz_unified;
-CREATE USER espaluz_app WITH PASSWORD 'secure_random_password_here';
+CREATE USER espaluz_app WITH PASSWORD '${DB_PASSWORD}';
 GRANT ALL PRIVILEGES ON DATABASE espaluz_unified TO espaluz_app;
 \c espaluz_unified
 GRANT ALL ON SCHEMA public TO espaluz_app;

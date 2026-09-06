@@ -378,7 +378,7 @@ CREATE INDEX idx_event_log_user ON event_log(user_id, created_at);
 ### Step 1: Create New Database
 ```sql
 CREATE DATABASE espaluz_unified;
-CREATE USER espaluz_app WITH PASSWORD 'secure_password_here';
+CREATE USER espaluz_app WITH PASSWORD '${DB_PASSWORD}';
 GRANT ALL PRIVILEGES ON DATABASE espaluz_unified TO espaluz_app;
 ```
 
