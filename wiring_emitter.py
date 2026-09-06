@@ -5,7 +5,7 @@ Usage:
     from wiring_emitter import emit_event
 
     emit_event("user_signup", {"user_id": "123", "trial_end": "2026-04-10"})
-    emit_event("payment_received", {"user_id": "123", "email": "x@y.com", "subscription_id": "I-ABC"})
+    emit_event("payment_received", {"user_id": "123", "email": "user@example.com", "subscription_id": "I-ABC"})
     emit_event("lesson_sent", {"user_id": "123", "lesson_type": "voice", "topic": "banking"})
     emit_event("trial_expired", {"user_id": "123", "days_active": 7})
     emit_event("subscription_cancelled", {"user_id": "123"})

@@ -17,7 +17,8 @@ with open('telegram_subscribers.json', 'w') as f:
 print('Cleared telegram_subscribers.json - forcing REAL PayPal API check...')
 
 # Test
-email = 'marinakulaginabowen@gmail.com'
+import os, sys
+email = sys.argv[1] if len(sys.argv) > 1 else os.getenv('TEST_SUBSCRIBER_EMAIL', '')
 print(f'Testing REAL PayPal API for: {email}')
 result = paypal_system.check_paypal_subscription(email)
 print(f'Result: {result}')
