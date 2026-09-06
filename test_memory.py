@@ -25,7 +25,7 @@ try:
     print(f"✅ WhatsApp memory initialized (platform: {wa_memory.platform})")
     
     # Test getting existing user
-    user = wa_memory.get_or_create_user(whatsapp_id='+50761666716')
+    user = wa_memory.get_or_create_user(whatsapp_id='wa-user-007')
     print(f"✅ Got user: id={user.id}, whatsapp_id={user.whatsapp_id}, messages={user.total_messages}")
     
     # Test storing memory
@@ -71,7 +71,7 @@ print(f"  LANGCHAIN_AVAILABLE: {LANGCHAIN_AVAILABLE}")
 if LANGCHAIN_AVAILABLE:
     try:
         memory = get_memory_for_whatsapp()
-        user = memory.get_or_create_user(whatsapp_id='+50761666716')
+        user = memory.get_or_create_user(whatsapp_id='wa-user-007')
         conv_memory = memory.get_conversation_memory(user.id)
         print(f"✅ LangChain conversation memory: {type(conv_memory).__name__}")
         

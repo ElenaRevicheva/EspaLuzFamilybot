@@ -15,7 +15,7 @@ from espaluz_paguelofacil import grant_access, notify_user_paid, get_access_info
 if __name__ == "__main__":
     user_id = sys.argv[1] if len(sys.argv) > 1 else "5481526862"
     cod_oper = sys.argv[2] if len(sys.argv) > 2 else "LK-PMYTCC2O2UFF"
-    email = sys.argv[3] if len(sys.argv) > 3 else "aipa@aideazz.xyz"
+    email = sys.argv[3] if len(sys.argv) > 3 else os.environ.get("PF_GRANT_EMAIL", "")
     platform = (sys.argv[4] if len(sys.argv) > 4 else "telegram").lower()
     if platform in ("wa", "whatsapp"):
         platform = PLATFORM_WHATSAPP

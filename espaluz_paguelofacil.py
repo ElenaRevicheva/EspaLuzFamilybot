@@ -59,7 +59,7 @@ def _payments_path() -> str:
 
 
 def normalize_whatsapp_id(raw: str) -> str:
-    """Match EspaLuz WhatsApp bridge format: +50761968038 (E.164 with +)."""
+    """Match the EspaLuz WhatsApp bridge format: E.164 digits with a leading plus."""
     s = str(raw or "").strip().replace("whatsapp:", "")
     if not s:
         return s

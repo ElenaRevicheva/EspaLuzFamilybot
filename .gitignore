@@ -174,3 +174,15 @@ backup_before_postgres/
 data_backup/
 fix_sub.py
 restore_sub.py
+
+# runtime state — real Telegram user ids, written by the bot at run time
+demo_sessions.json
+espaluz_analytics.json
+telegram_trials.json
+user_onboarding.json
+user_sessions.json
+user_trials.json
+
+# stray editor/pre-refactor copies of main.py
+main.py.backup*
+main.py.bak

@@ -138,7 +138,7 @@ class EspaLuzMemory:
         memory = EspaLuzMemory(platform='whatsapp')
         
         # Get or create user
-        user = memory.get_or_create_user(whatsapp_id='+1234567890')
+        user = memory.get_or_create_user(whatsapp_id='wa-demo-user-1')
         
         # Get conversation memory for LangChain
         chat_memory = memory.get_conversation_memory(user.id)

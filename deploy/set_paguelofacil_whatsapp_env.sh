@@ -25,10 +25,10 @@ ensure_line() {
 
 SECRET=""
 if [[ -f "$TG_ENV" ]] && grep -q "^INTERNAL_WEBHOOK_SECRET=" "$TG_ENV" 2>/dev/null; then
-  SECRET="$(grep "^INTERNAL_WEBHOOK_SECRET=" "$TG_ENV" | cut -d= -f2-)"
+  SECRET=$(grep "^INTERNAL_WEBHOOK_SECRET=" "$TG_ENV" | cut -d= -f2-)
 fi
 if [[ -z "$SECRET" ]]; then
-  SECRET="$(openssl rand -hex 24)"
+  SECRET=$(openssl rand -hex 24)
   echo "Generated new INTERNAL_WEBHOOK_SECRET"
 fi
 
