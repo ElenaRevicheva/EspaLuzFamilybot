@@ -195,3 +195,7 @@ convo_*.ogg
 input_*.mp3
 input_*.ogg
 temp_*.ogg
+
+# Base video assets — see docs/MEDIA_ASSETS.md. Large binaries that cannot be
+# scanned, and every code path that uses them checks os.path.exists() first.
+*.mp4
