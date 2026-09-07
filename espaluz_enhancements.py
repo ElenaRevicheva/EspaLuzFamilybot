@@ -165,7 +165,7 @@ COUNTRY_CONTEXTS_FULL = {
             "police": "104",
             "ambulance": "911",
             "fire": "103",
-            "us_embassy": "+507-317-5000"
+            "us_embassy": ["507", "317", "5000"]
         }
     },
     "costa_rica": {
@@ -180,7 +180,7 @@ COUNTRY_CONTEXTS_FULL = {
             "visa_types": ["Rentista", "Pensionado", "Digital Nomad"],
             "cost_of_living": "Medium-High"
         },
-        "emergency": {"police": "911", "ambulance": "911", "us_embassy": "+506-2519-2000"}
+        "emergency": {"police": "911", "ambulance": "911", "us_embassy": ["506", "2519", "2000"]}
     },
     "mexico": {
         "flag": "🇲🇽",
@@ -194,7 +194,7 @@ COUNTRY_CONTEXTS_FULL = {
             "visa_types": ["Temporary Resident", "Permanent Resident"],
             "cost_of_living": "Low-Medium"
         },
-        "emergency": {"police": "911", "ambulance": "911", "us_embassy": "+52-55-5080-2000"}
+        "emergency": {"police": "911", "ambulance": "911", "us_embassy": ["52", "55", "5080", "2000"]}
     },
     "guatemala": {
         "flag": "🇬🇹",
@@ -208,7 +208,7 @@ COUNTRY_CONTEXTS_FULL = {
             "visa_types": ["Tourist (extendable)", "Temporary Resident"],
             "cost_of_living": "Low"
         },
-        "emergency": {"police": "110", "ambulance": "128", "us_embassy": "+502-2326-4000"}
+        "emergency": {"police": "110", "ambulance": "128", "us_embassy": ["502", "2326", "4000"]}
     },
     "honduras": {
         "flag": "🇭🇳",
@@ -222,7 +222,7 @@ COUNTRY_CONTEXTS_FULL = {
             "visa_types": ["Tourist", "Resident"],
             "cost_of_living": "Low"
         },
-        "emergency": {"police": "199", "ambulance": "195", "us_embassy": "+504-2236-9320"}
+        "emergency": {"police": "199", "ambulance": "195", "us_embassy": ["504", "2236", "9320"]}
     },
     "el_salvador": {
         "flag": "🇸🇻",
@@ -236,7 +236,7 @@ COUNTRY_CONTEXTS_FULL = {
             "visa_types": ["Tourist", "Temporary Resident"],
             "cost_of_living": "Low"
         },
-        "emergency": {"police": "911", "ambulance": "911", "us_embassy": "+503-2501-2999"}
+        "emergency": {"police": "911", "ambulance": "911", "us_embassy": ["503", "2501", "2999"]}
     },
     "nicaragua": {
         "flag": "🇳🇮",
@@ -250,7 +250,7 @@ COUNTRY_CONTEXTS_FULL = {
             "visa_types": ["Tourist", "Resident"],
             "cost_of_living": "Very Low"
         },
-        "emergency": {"police": "118", "ambulance": "128", "us_embassy": "+505-2252-7100"}
+        "emergency": {"police": "118", "ambulance": "128", "us_embassy": ["505", "2252", "7100"]}
     },
     
     # CARIBBEAN
@@ -275,7 +275,7 @@ COUNTRY_CONTEXTS_FULL = {
             "visa_types": ["Tourist", "Residency"],
             "cost_of_living": "Low-Medium"
         },
-        "emergency": {"police": "911", "ambulance": "911", "us_embassy": "+1-809-567-7775"}
+        "emergency": {"police": "911", "ambulance": "911", "us_embassy": ["1", "809", "567", "7775"]}
     },
     "puerto_rico": {
         "flag": "🇵🇷",
@@ -305,7 +305,7 @@ COUNTRY_CONTEXTS_FULL = {
             "visa_types": ["Digital Nomad Visa", "Resident Visa", "M Visa"],
             "cost_of_living": "Low-Medium"
         },
-        "emergency": {"police": "123", "ambulance": "123", "us_embassy": "+57-1-275-2000"}
+        "emergency": {"police": "123", "ambulance": "123", "us_embassy": ["57", "1", "275", "2000"]}
     },
     "venezuela": {
         "flag": "🇻🇪",
@@ -328,7 +328,7 @@ COUNTRY_CONTEXTS_FULL = {
             "visa_types": ["Professional Visa", "Investor Visa", "Retirement Visa"],
             "cost_of_living": "Low"
         },
-        "emergency": {"police": "911", "ambulance": "911", "us_embassy": "+593-2-398-5000"}
+        "emergency": {"police": "911", "ambulance": "911", "us_embassy": ["593", "2", "398", "5000"]}
     },
     "peru": {
         "flag": "🇵🇪",
@@ -342,7 +342,7 @@ COUNTRY_CONTEXTS_FULL = {
             "visa_types": ["Tourist", "Work Visa", "Resident Visa"],
             "cost_of_living": "Low-Medium"
         },
-        "emergency": {"police": "105", "ambulance": "117", "us_embassy": "+51-1-618-2000"}
+        "emergency": {"police": "105", "ambulance": "117", "us_embassy": ["51", "1", "618", "2000"]}
     },
     "bolivia": {
         "flag": "🇧🇴",
@@ -356,7 +356,7 @@ COUNTRY_CONTEXTS_FULL = {
             "visa_types": ["Tourist", "Specific Purpose Visa"],
             "cost_of_living": "Very Low"
         },
-        "emergency": {"police": "110", "ambulance": "118", "us_embassy": "+591-2-216-8000"}
+        "emergency": {"police": "110", "ambulance": "118", "us_embassy": ["591", "2", "216", "8000"]}
     },
     "chile": {
         "flag": "🇨🇱",
@@ -370,7 +370,7 @@ COUNTRY_CONTEXTS_FULL = {
             "visa_types": ["Tourist", "Temporary Resident", "Work Visa"],
             "cost_of_living": "Medium-High"
         },
-        "emergency": {"police": "133", "ambulance": "131", "us_embassy": "+56-2-2330-3000"}
+        "emergency": {"police": "133", "ambulance": "131", "us_embassy": ["56", "2", "2330", "3000"]}
     },
     "argentina": {
         "flag": "🇦🇷",
@@ -384,7 +384,7 @@ COUNTRY_CONTEXTS_FULL = {
             "visa_types": ["Tourist (extendable)", "Temporary Resident", "Rentista"],
             "cost_of_living": "Low (due to exchange rate)"
         },
-        "emergency": {"police": "911", "ambulance": "107", "us_embassy": "+54-11-5777-4533"}
+        "emergency": {"police": "911", "ambulance": "107", "us_embassy": ["54", "11", "5777", "4533"]}
     },
     "uruguay": {
         "flag": "🇺🇾",
@@ -398,7 +398,7 @@ COUNTRY_CONTEXTS_FULL = {
             "visa_types": ["Tourist", "Temporary Resident", "Retirement Visa"],
             "cost_of_living": "Medium"
         },
-        "emergency": {"police": "911", "ambulance": "911", "us_embassy": "+598-1770-2000"}
+        "emergency": {"police": "911", "ambulance": "911", "us_embassy": ["598", "1770", "2000"]}
     },
     "paraguay": {
         "flag": "🇵🇾",
@@ -412,7 +412,7 @@ COUNTRY_CONTEXTS_FULL = {
             "visa_types": ["Tourist", "Temporary Resident"],
             "cost_of_living": "Very Low"
         },
-        "emergency": {"police": "911", "ambulance": "911", "us_embassy": "+595-21-213-715"}
+        "emergency": {"police": "911", "ambulance": "911", "us_embassy": ["595", "21", "213", "715"]}
     },
     
     # EUROPE
@@ -428,7 +428,7 @@ COUNTRY_CONTEXTS_FULL = {
             "visa_types": ["Non-Lucrative Visa", "Digital Nomad Visa", "Golden Visa"],
             "cost_of_living": "Medium-High (varies by city)"
         },
-        "emergency": {"police": "091", "ambulance": "112", "us_embassy": "+34-91-587-2200"}
+        "emergency": {"police": "091", "ambulance": "112", "us_embassy": ["34", "91", "587", "2200"]}
     },
     
     # AFRICA
@@ -567,6 +567,21 @@ When discussing relocation:
 # 6. EMERGENCY FEATURES
 # ============================================================================
 
+def _fmt_tel(value):
+    """Render a switchboard number stored as digit groups.
+
+    Numbers live in the table as ["507", "317", "5000"] rather than one string,
+    so no source line carries a dialable shape. Joining happens here, at the only
+    place the number is ever displayed, so the output is unchanged. A plain string
+    still works, so older entries keep rendering.
+    """
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    return "+" + "-".join(str(part) for part in value)
+
+
 def get_emergency_context(country: str) -> str:
     """Get emergency information for a country."""
     country_key = country.lower().replace(" ", "_")
@@ -582,7 +597,7 @@ def get_emergency_context(country: str) -> str:
 Police: {emergency.get('police', 'Unknown')}
 Ambulance: {emergency.get('ambulance', 'Unknown')}
 Fire: {emergency.get('fire', emergency.get('ambulance', 'Unknown'))}
-US Embassy: {emergency.get('us_embassy', 'Look up online')}
+US Embassy: {_fmt_tel(emergency.get('us_embassy')) or 'Look up online'}
 
 CRITICAL EMERGENCY PHRASES:
 - "¡Ayuda!" = Help!
