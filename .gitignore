@@ -186,3 +186,12 @@ user_trials.json
 # stray editor/pre-refactor copies of main.py
 main.py.backup*
 main.py.bak
+
+# Runtime audio: user voice inputs, generated conversation replies and temp files.
+# These are customer recordings — they are not product assets and must never be
+# committed. The bot writes them at run time.
+convo_*.mp3
+convo_*.ogg
+input_*.mp3
+input_*.ogg
+temp_*.ogg
