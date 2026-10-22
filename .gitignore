@@ -199,3 +199,6 @@ temp_*.ogg
 # Base video assets — see docs/MEDIA_ASSETS.md. Large binaries that cannot be
 # scanned, and every code path that uses them checks os.path.exists() first.
 *.mp4
+
+# Pere + Titi hero clips (22 Oct 2026): 720p copies live on Oracle in heroes/; originals in the private heroes backup
+heroes/

@@ -1,4 +1,5 @@
 import os
+import random
 import time
 import uuid
 import json
@@ -906,9 +907,10 @@ def enforce_learning_access(message, user_id: str) -> bool:
 FAMILY_MEMBERS = {
     "alisa": {
         "role": "child",
-        "age": 4,
+        "age": 6,  # Elena, 22 Oct 2026: the program is for ages 5-7, not 4
+        "age_range": "5-7",
         "learning_level": "beginner",
-        "interests": ["animals", "colors", "games", "songs"],
+        "interests": ["animals", "colors", "games", "songs", "movement games", "Panama"],
         "tone": "playful",
         "language_balance": {"spanish": 0.6, "english": 0.4},
         "russian_variants": ["алиса", "алисочка", "алисa"]
@@ -1790,10 +1792,30 @@ THIS IS MANDATORY. NO ASTERISKS ALLOWED.
 
     # Add family member customization
     if family_role == "alisa":
+        # Elena, 22 Oct 2026: ages 5-7, real bilingual sentences (not single words), taught by Pere + Titi.
         system_content += """
-You're speaking with Alisa, a 4-year-old child learning basic Spanish and English. Use simple language, be playful and warm, use emojis, and focus on basic vocabulary with simple sentences. 
-Keep words and concepts appropriate for a preschooler. Use repetition and positive reinforcement.
-When teaching Spanish, try to relate it to things a child would be interested in like animals, colors, and simple games.
+You're speaking with Alisa, a girl aged 5 to 7 who is learning Spanish and English. Two friends from Panama teach her together:
+- Pere: a calm, gentle baby sloth with a juicy green knitted scarf. He speaks slowly and kindly, teaches the new sentences and leads the calm breathing.
+- Titi: a tiny, playful Geoffroy's tamarin with an orange bandana. He loves movement games and sometimes makes a funny little mistake on purpose so Alisa can correct him.
+
+How to talk to Alisa:
+- Always use real, complete sentences, never single words. Say each idea in Spanish first, then the same idea in English on the next line.
+  Example: "Hoy vamos a jugar con los colores del arcoiris. / Today we are going to play with the colors of the rainbow."
+- Keep sentences short and clear for a 5-7 year old (about 5-10 words), warm and playful, at most 1-2 emojis per message.
+- Let Pere and Titi speak by name ("Pere: ..." / "Titi: ...").
+- End every message with ONE simple question and invite Alisa to answer with a whole sentence, in Spanish or English.
+- If she makes a mistake, praise the try and say the correct whole sentence once; never say "wrong".
+
+Lesson rhythm across the conversation (about 5-10 minutes):
+1. Hello from both heroes and one question about her day.
+2. Wake-up game with Titi: jumps, "Simon dice / Simon says", or the cross-crawl (right hand to left knee, left hand to right knee).
+3. Pere teaches 3 useful new sentences on today's theme, one at a time, and asks her to repeat each.
+4. A game with Titi that uses those sentences.
+5. Calm moment with Pere: hands on the belly, three slow breaths together, and one feelings sentence ("Me siento feliz. / I feel happy.").
+6. Praise, a star, and goodbye from both.
+
+Themes she likes: animals, colors, family, food, school, the playground, feelings, and Panama (sloths, toucans, the beach, the Canal).
+Never ask for personal information such as addresses, school names or phone numbers.
 """
     elif family_role == "marina":
         system_content += """
@@ -2495,10 +2517,11 @@ def suggest_next_topics(session, adjustments):
     topics = []
 
     if family_role == "alisa":
+        # Ages 5-7: whole sentences on themes, not word lists (Elena, 22 Oct 2026)
         if level == "beginner":
-            topics = ["Colors and shapes", "Animals", "Numbers 1-10", "Family members"]
+            topics = ["Saying how I feel", "Animals of Panama", "Colors around me", "My family and me"]
         else:
-            topics = ["Common verbs", "School items", "Simple questions", "Days of the week"]
+            topics = ["At school and the playground", "Food I like", "Asking simple questions", "Days of the week"]
 
     elif family_role == "marina":
         if level == "beginner":
@@ -3135,6 +3158,33 @@ def full_tts_for_voice(text, output_file):
 import re
 from gtts import gTTS
 
+HERO_DIR = "heroes"  # Pere + Titi clips, 720p (not in git: copy from the private heroes folder)
+
+
+def alisa_hero_clip(chat_id, text):
+    """The Pere/Titi clip for Alisa's reply video, picked by what the reply talks about; None for everyone else."""
+    try:
+        session = user_sessions.get(chat_id) or user_sessions.get(str(chat_id)) or {}
+        if session.get("context", {}).get("user", {}).get("preferences", {}).get("family_role") != "alisa":
+            return None
+        t = (text or "").lower()
+        if any(w in t for w in ("respira", "breath", "barriga", "belly", "calma", "calm")):
+            names = ["pere-breathing"]
+        elif any(w in t for w in ("rodilla", "knee", "salta", "jump", "simon")):
+            names = ["titi-crosscrawl", "titi-cheer"]
+        elif any(w in t for w in ("adiós", "adios", "bye", "hasta mañana", "see you")):
+            names = ["duo-goodbye"]
+        elif any(w in t for w in ("noche", "night", "dormir", "sleep", "sueño")):
+            names = ["pere-sleepy"]
+        else:
+            names = ["duo-hello", "pere-hello", "titi-cheer", "titi-silly"]
+        clips = [os.path.join(HERO_DIR, f"{n}.mp4") for n in names if os.path.exists(os.path.join(HERO_DIR, f"{n}.mp4"))]
+        return random.choice(clips) if clips else None
+    except Exception as e:
+        print(f"⚠️ hero clip lookup failed (using the usual avatar): {e}")
+        return None
+
+
 def bulletproof_video_generator(chat_id, full_reply_text):
     print("🚀 ENTERED bulletproof_video_generator")
     try:
@@ -3157,6 +3207,12 @@ def bulletproof_video_generator(chat_id, full_reply_text):
 
         # === STEP 3: Merge with muted 30s avatar video
         base_video = "looped_video.mp4"
+        hero_loop = []
+        # Alisa (Elena, 22 Oct 2026): her two heroes Pere + Titi are the avatar instead of the EspaLuz loop.
+        hero = alisa_hero_clip(chat_id, short_reply)
+        if hero:
+            base_video, hero_loop = hero, ["-stream_loop", "-1"]  # 5 s clips loop for as long as the voice speaks
+            print(f"🦥🐒 Alisa hero clip: {hero}")
         output_video = "bp_video.mp4"
 
         # Re-encode to 720p. The source avatar loop is 1080p and the old command
@@ -3167,6 +3223,7 @@ def bulletproof_video_generator(chat_id, full_reply_text):
         ffmpeg_command = [
             "ffmpeg",
             "-y",
+            *hero_loop,
             "-i", base_video,
             "-i", audio_path,
             "-map", "0:v:0",  # take only video stream from base video
