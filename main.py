@@ -3185,6 +3185,27 @@ def alisa_hero_clip(chat_id, text):
         return None
 
 
+KIDS_ON = ("soy alisa", "я алиса", "i am alisa", "i'm alisa")
+KIDS_OFF = ("soy mamá", "soy mama", "soy elena", "я мама", "я елена", "i am mom", "i'm mom")
+
+
+def apply_kids_switch(user_id, text=None, force=None):
+    """'Soy Alisa' / /kids turns Pere + Titi on; 'soy mamá' / /mama turns them off (22 Oct 2026).
+    The saved role used to win over 'soy Alisa', so the switch never happened. The parent's role is kept and restored."""
+    prefs = user_sessions.get(user_id, {}).get("context", {}).get("user", {}).get("preferences")
+    if prefs is None:
+        return None
+    t = (text or "").lower()
+    if (force == "on" or any(k in t for k in KIDS_ON)) and prefs.get("family_role") != "alisa":
+        prefs["kids_saved_role"] = prefs.get("family_role")
+        prefs["family_role"] = "alisa"
+        return "on"
+    if (force == "off" or any(k in t for k in KIDS_OFF)) and prefs.get("family_role") == "alisa":
+        prefs["family_role"] = prefs.pop("kids_saved_role", None) or "parent"
+        return "off"
+    return None
+
+
 def bulletproof_video_generator(chat_id, full_reply_text):
     print("🚀 ENTERED bulletproof_video_generator")
     try:
@@ -3444,6 +3465,10 @@ def process_message(user_input, chat_id, user_id, message_obj):
     """Process incoming message with ultimate multimedia generation"""
     print(f"⭐️ Processing message from user {user_id}: {user_input[:30]}...")
 
+    # Kids layer: an explicit 'soy Alisa' / 'soy mamá' switches the saved role (22 Oct 2026)
+    if user_id in user_sessions:
+        apply_kids_switch(user_id, user_input)
+
     # Init session
     is_new_user = user_id not in user_sessions
     if is_new_user:
@@ -3553,6 +3578,10 @@ def process_message_with_tracking(user_input, chat_id, user_id, message_obj):
             db.track_message(user_id, 'text')
         except Exception as e:
             print(f"⚠️ DB tracking error (non-fatal): {e}")
+
+    # Kids layer: an explicit 'soy Alisa' / 'soy mamá' switches the saved role (22 Oct 2026)
+    if user_id in user_sessions:
+        apply_kids_switch(user_id, user_input)
 
     # Init session
     is_new_user = user_id not in user_sessions
@@ -3815,6 +3844,38 @@ def handle_profile(message):
         f"Ejemplo: `/family Sofia mother 38`"
     )
     bot.send_message(message.chat.id, profile_msg, parse_mode="Markdown")
+
+@bot.message_handler(commands=["kids"])
+def handle_kids(message):
+    """Pere + Titi for children 5-7 (22 Oct 2026): this chat switches to the kids layer and the heroes say hello."""
+    user_id = str(message.from_user.id)
+    if user_id not in user_sessions:
+        user_sessions[user_id] = create_initial_session(user_id, message.from_user, message.chat)
+    apply_kids_switch(user_id, force="on")
+    save_persistent_sessions()
+    caption = ("🦥 Pere: ¡Hola! Soy Pere. Hablo despacito y te enseño frases nuevas.\n"
+               "Hello! I'm Pere. I speak slowly and I teach you new sentences.\n\n"
+               "🐒 Titi: ¡Y yo soy Titi! Me encantan los juegos.\n"
+               "And I'm Titi! I love games.\n\n"
+               "Escríbenos o mándanos una nota de voz. / Write to us or send us a voice note.\n"
+               "(Mamá / papá: /mama para volver · to go back)")
+    try:
+        with open(os.path.join(HERO_DIR, "duo-hello.mp4"), "rb") as video:
+            bot.send_video(message.chat.id, video, caption=caption, timeout=180)
+    except Exception as e:
+        print(f"⚠️ /kids hello video failed: {e}")
+        bot.send_message(message.chat.id, caption)
+
+
+@bot.message_handler(commands=["mama"])
+def handle_mama(message):
+    """Back from Pere + Titi to the parent's own role (the role saved by /kids is restored)."""
+    user_id = str(message.from_user.id)
+    if user_id in user_sessions:
+        apply_kids_switch(user_id, force="off")
+        save_persistent_sessions()
+    bot.send_message(message.chat.id, "Modo adulto de nuevo. / Adult mode again.\n(/kids para Pere y Titi · for Pere and Titi)")
+
 
 @bot.message_handler(commands=["family"])
 def handle_family(message):
@@ -5756,6 +5817,8 @@ custom_commands = [
     BotCommand("profile", "View your profile"),
     BotCommand("reset", "Reset conversation"),
     BotCommand("family", "Switch family member"),
+    BotCommand("kids", "Kids 5-7: Pere and Titi teach Spanish + English"),
+    BotCommand("mama", "Back to adult mode after /kids"),
 ]
 
 def register_commands_with_retry(max_retries=5, initial_delay=10):
