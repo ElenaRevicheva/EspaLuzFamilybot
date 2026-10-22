@@ -1803,6 +1803,7 @@ How to talk to Alisa:
   Example: "Hoy vamos a jugar con los colores del arcoiris. / Today we are going to play with the colors of the rainbow."
 - Keep sentences short and clear for a 5-7 year old (about 5-10 words), warm and playful, at most 1-2 emojis per message.
 - Let Pere and Titi speak by name ("Pere: ..." / "Titi: ...").
+- The [VIDEO SCRIPT START] ... [VIDEO SCRIPT END] block is 2-4 short lines, each starting with "Pere:" or "Titi:", a Spanish sentence then the same sentence in English. Each hero speaks it in his own voice.
 - End every message with ONE simple question and invite Alisa to answer with a whole sentence, in Spanish or English.
 - If she makes a mistake, praise the try and say the correct whole sentence once; never say "wrong".
 
@@ -3185,6 +3186,97 @@ def alisa_hero_clip(chat_id, text):
         return None
 
 
+# Pere + Titi cartoon voices (22 Oct 2026): MiniMax Speech on Replicate, one voice per hero; the env lets Elena's pick
+# replace these defaults without a code change. Talking clips: heroes/pere-talking-*.mp4, heroes/titi-talking-*.mp4.
+HERO_VOICES = {
+    "pere": {"voice_id": os.getenv("PERE_VOICE", "Spanish_Rudolph"), "pitch": int(os.getenv("PERE_PITCH", "-2")),
+             "speed": float(os.getenv("PERE_SPEED", "0.82")), "emotion": os.getenv("PERE_EMOTION", "calm")},
+    "titi": {"voice_id": os.getenv("TITI_VOICE", "Spanish_AnimeCharacter"), "pitch": int(os.getenv("TITI_PITCH", "3")),
+             "speed": float(os.getenv("TITI_SPEED", "1.15")), "emotion": os.getenv("TITI_EMOTION", "happy")},
+}
+
+
+def hero_segments(script):
+    """The video script split by speaker: [('pere', text), ('titi', text)]; unlabeled lines stay with the last speaker.
+    Same-speaker lines are merged and at most 3 turns are kept (Replicate allows only a few voice requests a minute)."""
+    segs = []
+    for line in (script or "").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        m = re.match(r"^(?:[^\w]*)(pere|titi)\s*:\s*(.*)$", line, re.I)
+        who, text = (m.group(1).lower(), m.group(2)) if m else ((segs[-1][0] if segs else "pere"), line)
+        text = clean_text_for_speech(text)
+        if not text:
+            continue
+        if segs and segs[-1][0] == who:
+            segs[-1] = (who, segs[-1][1] + " " + text)
+        else:
+            segs.append((who, text))
+    while len(segs) > 3:
+        segs[-2] = (segs[-2][0], segs[-2][1] + " " + segs[-1][1])
+        segs.pop()
+    return segs
+
+
+def hero_tts(speaker, text, path):
+    """One hero line in that hero's cartoon voice (MiniMax Speech 2.6 HD on Replicate) -> mp3 at path; False on failure."""
+    token = os.getenv("REPLICATE_API_TOKEN", "").strip()
+    if not token:
+        return False
+    v = HERO_VOICES[speaker]
+    text = re.sub(r"\s*/\s*", ". ", text)  # "Hola. / Hello." must pause between languages, never say "slash"
+    body = {"input": {"text": text[:900], "voice_id": v["voice_id"], "pitch": v["pitch"], "speed": v["speed"],
+                      "emotion": v["emotion"], "language_boost": "Automatic", "audio_format": "mp3", "sample_rate": 32000}}
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json", "Prefer": "wait=60"}
+    for attempt in range(3):
+        try:
+            r = requests.post("https://api.replicate.com/v1/models/minimax/speech-2.6-hd/predictions", json=body, headers=headers, timeout=90)
+            if r.status_code == 429:  # low-balance accounts get ~6 requests/minute
+                time.sleep(11)
+                continue
+            p = r.json()
+            t0 = time.time()
+            while p.get("status") in ("starting", "processing") and time.time() - t0 < 60:
+                time.sleep(2)
+                p = requests.get(p["urls"]["get"], headers=headers, timeout=30).json()
+            out = p.get("output")
+            out = out[0] if isinstance(out, list) else out
+            if not out:
+                print(f"⚠️ hero voice {speaker} failed: {str(p.get('error'))[:120]}")
+                return False
+            with open(path, "wb") as f:
+                f.write(requests.get(out, timeout=60).content)
+            return True
+        except Exception as e:
+            print(f"⚠️ hero voice {speaker} error: {e}")
+            return False
+    return False
+
+
+def build_hero_video(segments, output_video):
+    """Each turn: that hero's voice over that hero's talking clip, then the turns joined into one video. False on any failure."""
+    parts = []
+    for i, (who, text) in enumerate(segments):
+        audio = f"hero_seg_{i}.mp3"
+        if not hero_tts(who, text, audio):
+            return False
+        talking = [os.path.join(HERO_DIR, f) for f in sorted(os.listdir(HERO_DIR)) if f.startswith(f"{who}-talking")] if os.path.isdir(HERO_DIR) else []
+        clip = random.choice(talking) if talking else os.path.join(HERO_DIR, "pere-hello.mp4" if who == "pere" else "titi-cheer.mp4")
+        part = f"hero_part_{i}.mp4"
+        cmd = ["ffmpeg", "-y", "-nostdin", "-loglevel", "error", "-stream_loop", "-1", "-i", clip, "-i", audio,
+               "-map", "0:v:0", "-map", "1:a:0", "-vf", "scale=720:720,fps=30", "-c:v", "libx264", "-preset", "veryfast",
+               "-crf", "28", "-c:a", "aac", "-ar", "32000", "-ac", "1", "-b:a", "96k", "-shortest", part]
+        if subprocess.run(cmd).returncode != 0:
+            return False
+        parts.append(part)
+    with open("hero_parts.txt", "w") as f:
+        f.writelines(f"file '{p}'\n" for p in parts)
+    cmd = ["ffmpeg", "-y", "-nostdin", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", "hero_parts.txt",
+           "-c", "copy", "-movflags", "+faststart", output_video]
+    return subprocess.run(cmd).returncode == 0
+
+
 KIDS_ON = ("soy alisa", "я алиса", "i am alisa", "i'm alisa")
 KIDS_OFF = ("soy mamá", "soy mama", "soy elena", "я мама", "я елена", "i am mom", "i'm mom")
 
@@ -3215,7 +3307,22 @@ def bulletproof_video_generator(chat_id, full_reply_text):
             return False
 
         short_reply = match.group(1).strip()
-        
+
+        # Alisa (22 Oct 2026): each hero speaks his own lines in his own cartoon voice over his talking clip.
+        # Any failure falls through to the usual gTTS video below, so she always gets a video.
+        if alisa_hero_clip(chat_id, short_reply):
+            segments = hero_segments(short_reply)
+            if segments and build_hero_video(segments, "bp_hero_video.mp4"):
+                try:
+                    with open("bp_hero_video.mp4", "rb") as video_file:
+                        bot.send_video(chat_id, video_file, timeout=180)
+                    print(f"🦥🐒 Hero voices video sent: {[w for w, _ in segments]}")
+                    return "hero"
+                except Exception as hero_err:
+                    print(f"⚠️ hero video send failed, using the usual video: {hero_err}")
+            else:
+                print("⚠️ hero voices unavailable, using the usual video")
+
         # ENHANCEMENT: Clean text for speech
         short_reply_clean = clean_text_for_speech(short_reply)
         print(f"📝 Cleaned text for video: '{short_reply_clean}'")
@@ -3445,7 +3552,8 @@ def ultimate_multimedia_generator(chat_id, full_reply, short_reply):
         # Report what actually happened: this line used to hard-code "Voice: Sent"
         # even when the upload had just failed, which made the log unusable for
         # answering "did the user get their voice note?"
-        voice_success = send_full_voice_message(chat_id, full_reply)
+        # The heroes' video already speaks in their own voices; a gTTS voice note on top is the EspaLuz voice Alisa should not hear.
+        voice_success = True if video_success == "hero" else send_full_voice_message(chat_id, full_reply)
 
         print(
             f"✅ Multimedia generation complete - "
