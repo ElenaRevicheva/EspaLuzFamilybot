@@ -4612,22 +4612,36 @@ def handle_menu(message):
 # =============================================================================
 
 def transcribe_audio(audio_path: str) -> str:
-    """Transcribe audio file using OpenAI Whisper (SDK v1.0+)"""
-    try:
-        from openai import OpenAI
-        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    """Transcribe a voice note: Groq Whisper first, OpenAI Whisper as the backup (23 Oct 2026).
 
-        with open(audio_path, "rb") as f:
-            transcript = client.audio.transcriptions.create(
-                model="whisper-1",
-                file=f,
-                response_format="text"
-            )
-        return transcript
-
-    except Exception as e:
-        print(f"❌ Transcription error: {e}")
-        return None
+    It was OpenAI only. When OpenAI ran out of credits on 23 Oct (429 insufficient_quota) every voice note got
+    "No pude transcribir este mensaje de voz", while the Groq key in .env worked. Same order as OpenClaw's audio
+    chain (groq whisper-large-v3-turbo → openai). Returns None only when every provider failed.
+    """
+    providers = [
+        ("groq", "https://api.groq.com/openai/v1/audio/transcriptions", os.getenv("GROQ_API_KEY"), "whisper-large-v3-turbo"),
+        ("openai", "https://api.openai.com/v1/audio/transcriptions", os.getenv("OPENAI_API_KEY"), "whisper-1"),
+    ]
+    for name, url, key, model in providers:
+        if not key:
+            continue
+        try:
+            with open(audio_path, "rb") as f:
+                res = requests.post(
+                    url,
+                    headers={"Authorization": f"Bearer {key}"},
+                    files={"file": (os.path.basename(audio_path), f)},
+                    data={"model": model, "response_format": "text"},
+                    timeout=60,
+                )
+            if res.status_code == 200 and res.text.strip():
+                if name != "groq":
+                    print(f"🎙️ Transcription via {name} (groq failed)")
+                return res.text.strip()
+            print(f"❌ Transcription error ({name}): {res.status_code} {res.text[:160]}")
+        except Exception as e:
+            print(f"❌ Transcription error ({name}): {e}")
+    return None
 
 @bot.message_handler(commands=["link"])
 def handle_link(message):
