@@ -37,11 +37,13 @@ from typing import Iterable, List, Optional, Tuple
 MIN_TOKENS = 600
 
 # Strongest first. Confirm with eval_llm_chain.py before reordering.
-PROFILE_QUALITY: Tuple[str, ...] = ("claude", "openai", "gemini", "grok", "groq")
+# 26 Oct 2026 ORDER RULE (Elena): all five providers wired; free ones first (Gemini, Groq), then Grok, then OpenAI — no
+# regular money to top it up, it refuses in ~0.1 s without credit — and Claude by money. Nothing switched off.
+PROFILE_QUALITY: Tuple[str, ...] = ("claude", "gemini", "groq", "grok", "openai")
 
 # What the post-Claude fallback uses: Claude is excluded because it is the
 # primary that just failed, and retrying it costs ~19s before failing again.
-PROFILE_FALLBACK: Tuple[str, ...] = ("openai", "gemini", "grok", "groq")
+PROFILE_FALLBACK: Tuple[str, ...] = ("gemini", "groq", "grok", "openai")
 
 PROVIDER_KEYS = {
     "claude": "ANTHROPIC_API_KEY",
