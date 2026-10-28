@@ -3245,9 +3245,14 @@ def hero_segments(script, full_reply=""):
 
 # Every shot Alisa approved plays: a turn starts on a clip that fits its words, then alternates talking and action clips.
 HERO_SHOTS = {
-    "pere": {"talk": ["pere-talking-1", "pere-talking-2"], "act": ["pere-hello", "pere-breathing", "pere-sleepy"]},
-    "titi": {"talk": ["titi-talking-1", "titi-talking-2"], "act": ["titi-cheer", "titi-cheer-2", "titi-silly", "titi-crosscrawl", "titi-dance"]},
+    "pere": {"talk": ["pere-talking-1", "pere-talking-2"],
+             "act": ["pere-hello", "pere-breathing", "pere-sleepy", "pere-counting", "pere-thinking", "pere-clap", "pere-listening"]},
+    "titi": {"talk": ["titi-talking-1", "titi-talking-2"],
+             "act": ["titi-cheer", "titi-cheer-2", "titi-silly", "titi-crosscrawl", "titi-dance",
+                     "titi-counting-jumps", "titi-freeze", "titi-oops", "titi-listening"]},
 }
+# 28 Oct 2026: ten more shots (Runway Gen-4.5) so a lesson looks different every turn — counting, listening, praise,
+# the freeze game, Titi's on-purpose mistake, a high five and peekaboo for the duo. Missing files are skipped, as before.
 
 
 def hero_shot_list(who, text, first, last):
@@ -3266,6 +3271,20 @@ def hero_shot_list(who, text, first, last):
         lead = ["titi-dance"]
     elif who == "titi" and any(w in t for w in ("rodilla", "knee", "salta", "jump", "simon")):
         lead = ["titi-crosscrawl"]
+    elif any(w in t for w in ("muy bien", "bravo", "excelente", "great job", "well done", "perfecto")):
+        lead = ["duo-highfive"] if first else [f"{who}-clap" if who == "pere" else "titi-cheer-2"]
+    elif any(w in t for w in ("cuenta", "contar", "count", "uno, dos", "one, two")):
+        lead = ["pere-counting" if who == "pere" else "titi-counting-jumps"]
+    elif who == "titi" and any(w in t for w in ("congela", "estatua", "freeze", "statue")):
+        lead = ["titi-freeze"]
+    elif who == "titi" and any(w in t for w in ("ups", "oops", "me equivoqu", "mistake", "error")):
+        lead = ["titi-oops"]
+    elif any(w in t for w in ("dónde está", "donde esta", "where is", "escondid", "peekaboo", "cucú")):
+        lead = ["duo-peekaboo"]
+    elif any(w in t for w in ("repite", "repeat", "dime", "tell me", "escucha", "listen")):
+        lead = ["pere-listening" if who == "pere" else "titi-listening"]
+    elif who == "pere" and any(w in t for w in ("piensa", "adivina", "think", "guess")):
+        lead = ["pere-thinking"]
     talk, act = HERO_SHOTS[who]["talk"][:], HERO_SHOTS[who]["act"][:]
     random.shuffle(talk)
     random.shuffle(act)
