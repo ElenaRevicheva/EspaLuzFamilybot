@@ -1803,10 +1803,11 @@ How to talk to Alisa:
   Example: "Hoy vamos a jugar con los colores del arcoiris. / Today we are going to play with the colors of the rainbow."
 - Keep sentences short and clear for a 5-7 year old (about 5-10 words), warm and playful, at most 1-2 emojis per message.
 - Let Pere and Titi speak by name ("Pere: ..." / "Titi: ...").
-- The [VIDEO SCRIPT START] ... [VIDEO SCRIPT END] block is 2-4 short lines and EVERY line starts with "Pere:" or "Titi:" (both heroes speak), a Spanish sentence then the same sentence in English. Each hero speaks his lines in his own voice. Example:
-  Pere: Hola, Alisa. Hoy hablamos de animales. / Hello, Alisa. Today we talk about animals.
-  Titi: ¡Mi animal favorito es el tucán! / My favorite animal is the toucan!
-  Pere: ¿Cuál es tu animal favorito? / What is your favorite animal?
+- The [VIDEO SCRIPT START] ... [VIDEO SCRIPT END] block is 2-4 short lines and EVERY line starts with "Pere [shot]:" or "Titi [shot]:" (both heroes speak), a Spanish sentence then the same sentence in English. Each hero speaks his lines in his own voice, and [shot] names the picture shown while he says the line, so choose the shot that matches what the line says or does.
+  Pere's shots: talk, hello, counting, thinking, clap, listening, breathing, sleepy, goodbye. Titi's shots: talk, cheer, silly, dance, jump, counting, freeze, oops, listening, goodbye. Both together: highfive, peekaboo. Use "talk" when nothing fits. Example:
+  Pere [hello]: Hola, Alisa. Hoy hablamos de animales. / Hello, Alisa. Today we talk about animals.
+  Titi [cheer]: ¡Mi animal favorito es el tucán! / My favorite animal is the toucan!
+  Pere [listening]: ¿Cuál es tu animal favorito? / What is your favorite animal?
 - End every message with ONE simple question and invite Alisa to answer with a whole sentence, in Spanish or English.
 - If she makes a mistake, praise the try and say the correct whole sentence once; never say "wrong".
 
@@ -3201,30 +3202,32 @@ HERO_VOICES = {
 
 
 def hero_segments(script, full_reply=""):
-    """Who says what in the video: [('pere', text), ('titi', text)], at most 4 turns.
-    The script's own "Pere:/Titi:" lines win. The model often writes the script unlabeled, which made Pere say
+    """Who says what in the video and with which picture: [('pere', text, shot), ...], at most 4 turns.
+    The script's own "Pere [shot]:/Titi [shot]:" lines win (the [shot] is optional — 28 Oct 2026, Elena: the picture must
+    match what the line says, so the tutor names it). The model often writes the script unlabeled, which made Pere say
     everything, so then the labeled lines of the full reply are used (first 3 turns + the closing question).
     An unlabeled script with no labeled reply goes to whoever introduces himself ("Soy Titi"), else Pere."""
     def labeled(text):
         segs, prev_labeled = [], False
         for line in (text or "").splitlines():
-            m = re.match(r"^[^\w]*(pere|titi)\s*:\s*(.*)$", line.strip(), re.I)
+            m = re.match(r"^[^\w]*(pere|titi)\s*(?:\[\s*([a-z][a-z -]*?)\s*\])?\s*:\s*(.*)$", line.strip(), re.I)
             if not m:
                 # "Hola, soy Pere.\nHello, I'm Pere." - the English right under a hero's line is still his
                 if prev_labeled and line.strip() and clean_text_for_speech(line):
-                    segs[-1] = (segs[-1][0], segs[-1][1] + " " + clean_text_for_speech(line))
+                    segs[-1][1] += " " + clean_text_for_speech(line)
                     continue
                 prev_labeled = False
                 continue
-            said = clean_text_for_speech(m.group(2))
+            said = clean_text_for_speech(m.group(3))
             prev_labeled = bool(said)
             if not said:
                 continue
-            who = m.group(1).lower()
-            if segs and segs[-1][0] == who:
-                segs[-1] = (who, segs[-1][1] + " " + said)
+            who, shot = m.group(1).lower(), (m.group(2) or "").lower().strip() or None
+            if segs and segs[-1][0] == who and (shot is None or shot == segs[-1][2]):
+                segs[-1][1] += " " + said  # same hero, same picture: one line
+                segs[-1][2] = segs[-1][2] or shot
             else:
-                segs.append((who, said))
+                segs.append([who, said, shot])
         return segs
 
     segs = labeled(script)
@@ -3233,7 +3236,7 @@ def hero_segments(script, full_reply=""):
         segs = labeled(reply)
     if not segs:
         said = clean_text_for_speech(script or "")
-        return [("titi" if re.search(r"soy titi|i am titi|i'm titi", said, re.I) else "pere", said)] if said else []
+        return [("titi" if re.search(r"soy titi|i am titi|i'm titi", said, re.I) else "pere", said, None)] if said else []
     if len(segs) > 4:
         segs = segs[:3] + segs[-1:]
     def short(said):  # a long turn ends at a whole sentence, never mid-word
@@ -3241,66 +3244,90 @@ def hero_segments(script, full_reply=""):
             return said
         cut = max(said.rfind(p, 0, 260) for p in ".!?")
         return said[:cut + 1] if cut > 60 else said[:260]
-    return [(who, short(said)) for who, said in segs]
+    return [(who, short(said), shot) for who, said, shot in segs]
 
 
-# Every shot Alisa approved plays: a turn starts on a clip that fits its words, then alternates talking and action clips.
+def strip_shot_tags(text):
+    """'Pere [counting]: ...' -> 'Pere: ...' in anything a person reads; the tag is for the video only."""
+    return re.sub(r"(?i)\b(pere|titi)\s*\[[^\]\n]*\]\s*:", r"\1:", text or "")
+
+
+# One picture per line (28 Oct 2026, Elena: "video shots should correspond to what Pere and Titi say" and a chain of
+# 5-second clips "looks repetitive and simulated"). The tutor names the shot in the script line; a line with no usable
+# tag falls back to the lesson words, and then to a talking clip. Missing files are skipped, as before.
 HERO_SHOTS = {
-    "pere": {"talk": ["pere-talking-1", "pere-talking-2"],
-             "act": ["pere-hello", "pere-breathing", "pere-sleepy", "pere-counting", "pere-thinking", "pere-clap", "pere-listening",
-                     "duo-highfive", "duo-peekaboo"]},
-    "titi": {"talk": ["titi-talking-1", "titi-talking-2"],
-             "act": ["titi-cheer", "titi-cheer-2", "titi-silly", "titi-crosscrawl", "titi-dance",
-                     "titi-counting-jumps", "titi-freeze", "titi-oops", "titi-listening", "duo-highfive", "duo-peekaboo"]},
+    "pere": {"talk": ["pere-talking-1", "pere-talking-2"]},
+    "titi": {"talk": ["titi-talking-1", "titi-talking-2"]},
 }
-# 28 Oct 2026 (Elena: "make each shot different"): the action shots ROTATE. A shot that just played goes to the back of
-# the line, so one turn after another shows different shots instead of the same few reshuffled. One line is enough —
-# kids mode is one child.
-HERO_RECENT = deque(maxlen=12)
-# 28 Oct 2026: ten more shots (Runway Gen-4.5) so a lesson looks different every turn — counting, listening, praise,
-# the freeze game, Titi's on-purpose mistake, a high five and peekaboo for the duo. Missing files are skipped, as before.
+HERO_SHOT_CLIPS = {
+    "pere": {"hello": "pere-hello", "counting": "pere-counting", "thinking": "pere-thinking", "clap": "pere-clap",
+             "listening": "pere-listening", "breathing": "pere-breathing", "sleepy": "pere-sleepy", "goodbye": "duo-goodbye",
+             "highfive": "duo-highfive", "peekaboo": "duo-peekaboo"},
+    "titi": {"cheer": "titi-cheer", "silly": "titi-silly", "dance": "titi-dance", "jump": "titi-crosscrawl",
+             "counting": "titi-counting-jumps", "freeze": "titi-freeze", "oops": "titi-oops", "listening": "titi-listening",
+             "goodbye": "duo-goodbye", "highfive": "duo-highfive", "peekaboo": "duo-peekaboo", "hello": "duo-hello"},
+}
+HERO_SHOT_ALIASES = {"count": "counting", "counts": "counting", "numbers": "counting", "listen": "listening", "think": "thinking",
+                     "thinks": "thinking", "breathe": "breathing", "breath": "breathing", "calm": "breathing", "sleep": "sleepy",
+                     "jumps": "jump", "jumping": "jump", "crosscrawl": "jump", "cross-crawl": "jump", "simon": "jump",
+                     "high five": "highfive", "high-five": "highfive", "wave": "hello", "hi": "hello", "bye": "goodbye",
+                     "laugh": "silly", "giggle": "silly", "funny": "silly", "mistake": "oops", "statue": "freeze",
+                     "applause": "clap", "praise": "clap", "happy": "cheer", "excited": "cheer", "cheering": "cheer",
+                     "dancing": "dance", "music": "dance", "hide": "peekaboo", "surprise": "peekaboo"}
+HERO_RECENT = deque(maxlen=12)  # clips just played go to the back of the line, so the next line/turn looks different
 
 
-def hero_shot_list(who, text, first, last):
-    """The clips for one turn, in order, long enough for any line (~40 s); missing files are skipped."""
+def hero_shot_list(who, text, first, last, shot=None):
+    """ONE clip for one hero line: the tagged shot, else the lesson words, else the talking clip played least recently.
+    Returns a one-item list (missing file -> empty list), so the old callers keep working."""
     t = (text or "").lower()
-    lead = []
-    if first and any(w in t for w in ("hola", "hello", "hi ")):
-        lead = ["duo-hello"]
-    elif last and any(w in t for w in ("adiós", "adios", "bye", "hasta mañana", "see you")):
-        lead = ["duo-goodbye"]
-    elif who == "pere" and any(w in t for w in ("respira", "breath", "barriga", "belly", "calma", "calm")):
-        lead = ["pere-breathing"]
-    elif who == "pere" and any(w in t for w in ("noche", "night", "dormir", "sleep", "sueño")):
-        lead = ["pere-sleepy"]
-    elif who == "titi" and any(w in t for w in ("baila", "dance", "música", "music")):
-        lead = ["titi-dance"]
-    elif who == "titi" and any(w in t for w in ("rodilla", "knee", "salta", "jump", "simon")):
-        lead = ["titi-crosscrawl"]
-    elif any(w in t for w in ("muy bien", "bravo", "excelente", "great job", "well done", "perfecto")):
-        lead = ["duo-highfive"] if first else [f"{who}-clap" if who == "pere" else "titi-cheer-2"]
-    elif any(w in t for w in ("cuenta", "contar", "count", "uno, dos", "one, two")):
-        lead = ["pere-counting" if who == "pere" else "titi-counting-jumps"]
-    elif who == "titi" and any(w in t for w in ("congela", "estatua", "freeze", "statue")):
-        lead = ["titi-freeze"]
-    elif who == "titi" and any(w in t for w in ("ups", "oops", "me equivoqu", "mistake", "error")):
-        lead = ["titi-oops"]
-    elif any(w in t for w in ("dónde está", "donde esta", "where is", "escondid", "peekaboo", "cucú")):
-        lead = ["duo-peekaboo"]
-    elif any(w in t for w in ("repite", "repeat", "dime", "tell me", "escucha", "listen")):
-        lead = ["pere-listening" if who == "pere" else "titi-listening"]
-    elif who == "pere" and any(w in t for w in ("piensa", "adivina", "think", "guess")):
-        lead = ["pere-thinking"]
-    talk, act = HERO_SHOTS[who]["talk"][:], HERO_SHOTS[who]["act"][:]
-    random.shuffle(talk)
-    random.shuffle(act)
-    # least recently played first; the lead counts as just played so it is not shown twice in one turn
-    age = {n: i for i, n in enumerate(reversed(list(HERO_RECENT) + lead))}  # 0 = most recent
-    act.sort(key=lambda n: -age.get(n, 10**6))
-    mix = [c for pair in zip(talk + talk, act + act) for c in pair]
-    HERO_RECENT.extend(lead + act[:2])  # the first two action shots are the ones a 10–20 s line actually reaches
-    files = [os.path.join(HERO_DIR, f"{n}.mp4") for n in lead + mix]
-    return [f for f in files if os.path.exists(f)]
+    tag = (shot or "").lower().strip()
+    tag = HERO_SHOT_ALIASES.get(tag, tag)
+    name = HERO_SHOT_CLIPS[who].get(tag) if tag and tag != "talk" else None
+    if name is None and tag != "talk":
+        if first and any(w in t for w in ("hola", "hello", "hi ")):
+            name = "duo-hello"
+        elif last and any(w in t for w in ("adiós", "adios", "bye", "hasta mañana", "see you")):
+            name = "duo-goodbye"
+        elif who == "pere" and any(w in t for w in ("respira", "breath", "barriga", "belly", "calma", "calm")):
+            name = "pere-breathing"
+        elif who == "pere" and any(w in t for w in ("noche", "night", "dormir", "sleep", "sueño")):
+            name = "pere-sleepy"
+        elif who == "titi" and any(w in t for w in ("baila", "dance", "música", "music")):
+            name = "titi-dance"
+        elif who == "titi" and any(w in t for w in ("rodilla", "knee", "salta", "jump", "simon")):
+            name = "titi-crosscrawl"
+        elif any(w in t for w in ("muy bien", "bravo", "excelente", "great job", "well done", "perfecto")):
+            name = "duo-highfive" if first else ("pere-clap" if who == "pere" else "titi-cheer")
+        elif any(w in t for w in ("cuenta", "contar", "count", "uno, dos", "one, two")):
+            name = "pere-counting" if who == "pere" else "titi-counting-jumps"
+        elif who == "titi" and any(w in t for w in ("congela", "estatua", "freeze", "statue")):
+            name = "titi-freeze"
+        elif who == "titi" and any(w in t for w in ("ups", "oops", "me equivoqu", "mistake")):
+            name = "titi-oops"
+        elif any(w in t for w in ("dónde está", "donde esta", "where is", "escondid", "peekaboo", "cucú")):
+            name = "duo-peekaboo"
+    if name == "titi-cheer" and "titi-cheer" in HERO_RECENT and "titi-cheer-2" not in HERO_RECENT:
+        name = "titi-cheer-2"  # the two cheers alternate
+    if name is None or not os.path.exists(os.path.join(HERO_DIR, f"{name}.mp4")):
+        talk = HERO_SHOTS[who]["talk"][:]
+        random.shuffle(talk)
+        age = {n: i for i, n in enumerate(reversed(HERO_RECENT))}  # 0 = most recent
+        talk.sort(key=lambda n: -age.get(n, 10**6))
+        name = talk[0]
+    HERO_RECENT.append(name)
+    path = os.path.join(HERO_DIR, f"{name}.mp4")
+    return [path] if os.path.exists(path) else []
+
+
+def media_seconds(path):
+    """Length of an audio/video file in seconds (ffprobe), 0.0 if unknown."""
+    try:
+        out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path],
+                             capture_output=True, text=True, timeout=30).stdout.strip()
+        return float(out)
+    except Exception:
+        return 0.0
 
 
 def hero_tts(speaker, text, path):
@@ -3339,24 +3366,34 @@ def hero_tts(speaker, text, path):
 
 
 def build_hero_video(segments, output_video):
-    """Each turn: that hero's voice over that hero's talking clip, then the turns joined into one video. False on any failure."""
+    """Each line: that hero's voice over ONE clip that matches the line (28 Oct 2026), then the lines joined into one video.
+    A line longer than its 5 s clip gets the clip slowed a little (up to 1.5x) and played forward-then-backward, so the
+    picture never jumps back to its first frame mid-sentence. False on any failure."""
     parts = []
-    for i, (who, text) in enumerate(segments):
+    for i, seg in enumerate(segments):
+        who, text, shot = (tuple(seg) + (None,))[:3]
         audio = f"hero_seg_{i}.mp3"
         if not hero_tts(who, text, audio):
             return False
-        shots = hero_shot_list(who, text, i == 0, i == len(segments) - 1)
+        shots = hero_shot_list(who, text, i == 0, i == len(segments) - 1, shot)
         if not shots:
             return False
-        shot_list = f"hero_shots_{i}.txt"
-        with open(shot_list, "w") as f:
-            f.writelines(f"file '{os.path.abspath(c)}'\n" for c in shots)
+        clip, src, loop = shots[0], shots[0], []
+        a_len, c_len = media_seconds(audio), media_seconds(shots[0]) or 5.0
+        if a_len > c_len + 0.3:
+            factor = min(a_len / c_len, 1.5)
+            pp = f"hero_pp_{i}.mp4"
+            fc = f"[0:v]setpts={factor:.3f}*PTS,scale=720:720,fps=30,split[a][b];[b]reverse[r];[a][r]concat=n=2:v=1:a=0[v]"
+            if subprocess.run(["ffmpeg", "-y", "-nostdin", "-loglevel", "error", "-i", clip, "-filter_complex", fc, "-map", "[v]",
+                               "-c:v", "libx264", "-preset", "veryfast", "-crf", "28", pp]).returncode == 0:
+                src, loop = pp, ["-stream_loop", "-1"]
         part = f"hero_part_{i}.mp4"
-        cmd = ["ffmpeg", "-y", "-nostdin", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", shot_list, "-i", audio,
+        cmd = ["ffmpeg", "-y", "-nostdin", "-loglevel", "error", *loop, "-i", src, "-i", audio,
                "-map", "0:v:0", "-map", "1:a:0", "-vf", "scale=720:720,fps=30", "-c:v", "libx264", "-preset", "veryfast",
                "-crf", "28", "-c:a", "aac", "-ar", "32000", "-ac", "1", "-b:a", "96k", "-shortest", part]
         if subprocess.run(cmd).returncode != 0:
             return False
+        print(f"🎬 hero line {i} {who} [{shot or 'auto'}] -> {os.path.basename(clip)} ({a_len:.1f}s voice / {c_len:.1f}s clip)")
         parts.append(part)
     with open("hero_parts.txt", "w") as f:
         f.writelines(f"file '{p}'\n" for p in parts)
@@ -3404,7 +3441,7 @@ def bulletproof_video_generator(chat_id, full_reply_text):
                 try:
                     with open("bp_hero_video.mp4", "rb") as video_file:
                         bot.send_video(chat_id, video_file, timeout=180)
-                    print(f"🦥🐒 Hero voices video sent: {[w for w, _ in segments]}")
+                    print(f"🦥🐒 Hero voices video sent: {[(w, sh) for w, _, sh in segments]}")
                     return "hero"
                 except Exception as hero_err:
                     print(f"⚠️ hero video send failed, using the usual video: {hero_err}")
@@ -5911,6 +5948,7 @@ Please provide a brief educational explanation about this text that could be hel
                 return
 
             full_reply_cleaned = re.sub(r"\[VIDEO SCRIPT START\](.*?)\[VIDEO SCRIPT END\]", "", full_reply, flags=re.DOTALL).strip()
+            full_reply_cleaned = strip_shot_tags(full_reply_cleaned)
             print(f"[INFO] Cleaned explanation length: {len(full_reply_cleaned)}", flush=True)
 
             if not full_reply_cleaned:
@@ -6135,6 +6173,7 @@ Keep your response concise and helpful."""
 
                 # 🧹 Remove [VIDEO SCRIPT] block safely
                 full_reply_cleaned = re.sub(r"\[VIDEO SCRIPT START\](.*?)\[VIDEO SCRIPT END\]", "", full_reply, flags=re.DOTALL).strip()
+                full_reply_cleaned = strip_shot_tags(full_reply_cleaned)
 
                 # ✅ Safe chunking into 4096-character messages
                 MAX_LENGTH = 4096
