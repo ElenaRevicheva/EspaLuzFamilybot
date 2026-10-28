@@ -3160,6 +3160,7 @@ def full_tts_for_voice(text, output_file):
         return False
 
 import re
+from collections import deque
 from gtts import gTTS
 
 HERO_DIR = "heroes"  # Pere + Titi clips, 720p (not in git: copy from the private heroes folder)
@@ -3246,11 +3247,16 @@ def hero_segments(script, full_reply=""):
 # Every shot Alisa approved plays: a turn starts on a clip that fits its words, then alternates talking and action clips.
 HERO_SHOTS = {
     "pere": {"talk": ["pere-talking-1", "pere-talking-2"],
-             "act": ["pere-hello", "pere-breathing", "pere-sleepy", "pere-counting", "pere-thinking", "pere-clap", "pere-listening"]},
+             "act": ["pere-hello", "pere-breathing", "pere-sleepy", "pere-counting", "pere-thinking", "pere-clap", "pere-listening",
+                     "duo-highfive", "duo-peekaboo"]},
     "titi": {"talk": ["titi-talking-1", "titi-talking-2"],
              "act": ["titi-cheer", "titi-cheer-2", "titi-silly", "titi-crosscrawl", "titi-dance",
-                     "titi-counting-jumps", "titi-freeze", "titi-oops", "titi-listening"]},
+                     "titi-counting-jumps", "titi-freeze", "titi-oops", "titi-listening", "duo-highfive", "duo-peekaboo"]},
 }
+# 28 Oct 2026 (Elena: "make each shot different"): the action shots ROTATE. A shot that just played goes to the back of
+# the line, so one turn after another shows different shots instead of the same few reshuffled. One line is enough —
+# kids mode is one child.
+HERO_RECENT = deque(maxlen=12)
 # 28 Oct 2026: ten more shots (Runway Gen-4.5) so a lesson looks different every turn — counting, listening, praise,
 # the freeze game, Titi's on-purpose mistake, a high five and peekaboo for the duo. Missing files are skipped, as before.
 
@@ -3288,7 +3294,11 @@ def hero_shot_list(who, text, first, last):
     talk, act = HERO_SHOTS[who]["talk"][:], HERO_SHOTS[who]["act"][:]
     random.shuffle(talk)
     random.shuffle(act)
+    # least recently played first; the lead counts as just played so it is not shown twice in one turn
+    age = {n: i for i, n in enumerate(reversed(list(HERO_RECENT) + lead))}  # 0 = most recent
+    act.sort(key=lambda n: -age.get(n, 10**6))
     mix = [c for pair in zip(talk + talk, act + act) for c in pair]
+    HERO_RECENT.extend(lead + act[:2])  # the first two action shots are the ones a 10–20 s line actually reaches
     files = [os.path.join(HERO_DIR, f"{n}.mp4") for n in lead + mix]
     return [f for f in files if os.path.exists(f)]
 
