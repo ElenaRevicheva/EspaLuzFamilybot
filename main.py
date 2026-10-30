@@ -22,6 +22,7 @@ from PIL import Image
 import pytesseract
 import io
 import base64
+import unicodedata
 import math
 import threading
 
@@ -1831,7 +1832,10 @@ How to talk to Alisa:
 - Once per lesson: write one short sentence and ask her to READ it out loud herself (she is learning to read); ask one "¿Por qué...? / Why...?" question and welcome an answer with "porque / because"; and at the goodbye give her a mission: one sentence to say today to a real person (mamá, a friend, the teacher, the shop in Panama).
 - First react to what Alisa just said: answer her question or say her sentence back correctly, then continue the lesson.
 - Your Spanish must be perfectly correct, because a child copies it. "muy" never goes with a verb, use "mucho" ("Amo mucho a mi mamá", never "Amo a mi mamá muy"); for loving people use "querer" or "amar", not "gustar". "¿Qué xopá?" is casual Panamanian slang for "what's up", not a loving greeting.
-- Each message is ONE step of the lesson rhythm below and at most 4 sentence pairs plus one question. After the first hello, never greet again and never restart the lesson; continue from where the conversation is.
+- Each message is ONE step of the lesson rhythm below (THIS TURN names it). After the first hello, never greet again and never restart the lesson; continue from where the conversation is.
+- A real dialogue, not a lecture: 2-3 short lines and ONE question, then stop and wait for her. Repeat her own words back to her (corrected if needed). Follow HER topic: if she talks about her cat, today's sentences are about her cat.
+- Both ways: if she speaks English, give her the Spanish; if she speaks Spanish, give her the English. Buddy-style apps teach one language; she learns both.
+- If she sent a photo (a toy, a drawing, her lunch), Pere and Titi talk about what is in it with real curiosity and build today's sentence from it.
 - The person talking now is ALWAYS Alisa, the child, even though the account is her parent's: call her Alisa, never by the parent's name, and never invent family members (no sister or brother unless Alisa says so in this lesson).
 - If the memory above shows sentences Alisa said or learned before, open by inviting her to say one of them again and praise her, then teach new ones (the same words come back and grow).
 
@@ -1846,6 +1850,7 @@ Lesson rhythm across the conversation (about 5-10 minutes):
 Themes she likes: animals, family, food, school and the classroom, my day, the clock and time, numbers to 100, the weather, feelings, friends, and Panama (sloths, toucans, the beach, the Canal).
 Never ask for personal information such as addresses, school names or phone numbers.
 """
+        system_content += kids_turn_context(session, new_message)
     elif family_role == "marina":
         system_content += """
 You're speaking with Marina, a 65-year-old learning Spanish and English. Be respectful, patient, and provide clear explanations with common examples. 
@@ -3459,6 +3464,156 @@ KIDS_ON = ("soy alisa", "я алиса", "i am alisa", "i'm alisa")
 KIDS_OFF = ("soy mamá", "soy mama", "soy elena", "я мама", "я елена", "i am mom", "i'm mom")
 
 
+# ===== Kids lesson state (30 Oct 2026, Elena: "a real dialogue, informational and emotionally rich, beat Buddy") =====
+# The tutor used to GUESS where the lesson was from history (it re-greeted and wrote 15-line lessons). Now the bot keeps
+# the turn, the week's story, the last mission and the stars in the session, and tells the tutor each turn.
+KIDS_STEPS = [
+    "HELLO: both heroes say hello in 1-2 short lines, mention this week's story in one line, then ONE question about her day.",
+    "WAKE-UP GAME with Titi: one quick movement game (jumps, 'Simon dice / Simon says', or right hand to left knee).",
+    "NEW SENTENCE 1: Pere teaches ONE useful sentence built on what Alisa talked about, and asks her to say it.",
+    "NEW SENTENCE 2: one more sentence on her topic; ask her to say it, or to answer a '¿Por qué...? / Why...?' with 'porque / because'.",
+    "GAME with Titi: a riddle, Titi's funny mistake for her to correct, or ask her to READ one short sentence aloud.",
+    "THIS WEEK'S STORY: the heroes ask Alisa to help solve the story's problem; name how the hero feels; tell the Panama fact.",
+    "CALM with Pere: hands on the belly, three slow breaths together, and one feelings sentence.",
+    "GOODBYE: praise, a star, today's mission (one sentence to say to a real person), and goodbye from both.",
+]
+KIDS_STEP_FREE = "FREE TALK: the lesson is done; keep talking about HER topic, short, one question, warm."
+# One story per week (ISO week). Every fact is checked: Geoffroy's tamarin lives in Panama; sloths come down about once a
+# week; the keel-billed toucan's bill is big but light; the golden frog is a national symbol of Panama; Canal locks lift
+# ships like steps of water (opened 1914); sea turtles nest on Panama's beaches; the harpy eagle is Panama's national bird.
+KIDS_STORIES = [
+    "Titi lost his favourite mango in Parque Natural Metropolitano and feels sad; Alisa helps him look (up, down, behind, under). Fact: the Geoffroy's tamarin, like Titi, lives in Panama's forests.",
+    "Pere is scared of the thunder in the rainy season; Alisa helps him feel brave with slow breaths. Fact: sloths come down from their tree only about once a week.",
+    "A toucan feels shy about her big colourful beak; Alisa tells her why it is beautiful. Fact: the toucan's beak is big but very light.",
+    "Titi cannot find his friend the golden frog; Alisa helps by counting and looking near the stream. Fact: the golden frog is a symbol of Panama.",
+    "Pere and Titi watch a big ship cross the Panama Canal and feel excited; Alisa helps count the steps of water. Fact: the Canal's locks lift ships like steps of water, and it opened in 1914.",
+    "Baby sea turtles walk to the sea at night and feel a little scared; Alisa cheers for them. Fact: sea turtles lay their eggs on Panama's beaches.",
+    "A big harpy eagle visits the park and Titi feels nervous; Alisa helps them become friends. Fact: the harpy eagle is Panama's national bird.",
+]
+KIDS_NEW_LESSON_AFTER = 3 * 3600  # 3 hours of quiet = a new lesson starts at HELLO
+
+
+def _kid_prefs(session):
+    return session.setdefault("context", {}).setdefault("user", {}).setdefault("preferences", {})
+
+
+def kids_week_story():
+    return KIDS_STORIES[datetime.now().isocalendar()[1] % len(KIDS_STORIES)]
+
+
+def _kid_words(s):
+    s = unicodedata.normalize("NFD", (s or "").lower())
+    s = "".join(c for c in s if unicodedata.category(c) != "Mn")
+    return re.findall(r"[a-zñ]+", s)
+
+
+def kids_sentence_check(prev_reply, said):
+    """Gentle pronunciation check: the sentence the heroes just asked for vs what speech-to-text heard.
+    Returns one instruction line for the tutor, or "" when there is nothing to compare."""
+    said_w = _kid_words(said)
+    if len(said_w) < 3 or not prev_reply:
+        return ""
+    cands = re.findall(r"[\"“«]([^\"”»]{8,120})[\"”»]", prev_reply)
+    for line in prev_reply.split("\n"):
+        if " / " in line:
+            cands += [p.split(":", 1)[-1].strip() for p in line.split(" / ")]
+    best, best_score = None, 0.0
+    for c in cands:
+        cw = _kid_words(c)
+        if len(cw) < 3:
+            continue
+        score = len(set(cw) & set(said_w)) / len(set(cw))
+        if score > best_score:
+            best, best_score = c, score
+    if not best or best_score < 0.5:
+        return ""
+    missing = [w for w in _kid_words(best) if w not in said_w]
+    extra = [w for w in said_w if w not in _kid_words(best)]
+    if not missing:
+        return f'SENTENCE CHECK: she said the target sentence "{best}" correctly - celebrate it in one line.'
+    return (f'SENTENCE CHECK: target "{best}"; speech-to-text heard "{said}"; missing words: {", ".join(missing[:4])}'
+            + (f'; she said instead: {", ".join(extra[:4])}' if extra else "")
+            + '. Start with one gentle line like "¡Casi! Se dice ...", say the whole sentence once, then go on.')
+
+
+def kids_turn_context(session, new_message):
+    """The per-turn facts for the tutor: lesson step, this week's story, last mission, sentence check."""
+    p = _kid_prefs(session)
+    now = time.time()
+    if now - float(p.get("kids_last", 0) or 0) > KIDS_NEW_LESSON_AFTER:
+        p["kids_turn"] = 0
+    turn = int(p.get("kids_turn", 0) or 0)
+    step = KIDS_STEPS[turn] if turn < len(KIDS_STEPS) else KIDS_STEP_FREE
+    out = [f"\nTHIS TURN: turn {turn + 1} of {len(KIDS_STEPS)} of today's lesson. Do ONLY this step: {step}",
+           f"THIS WEEK'S STORY (use it at the HELLO hook and the STORY step, nowhere else): {kids_week_story()}"]
+    mission = p.get("kids_mission")
+    if turn == 0 and mission and p.get("kids_mission_day") != datetime.now().strftime("%Y-%m-%d"):
+        out.append(f'LAST LESSON\'S MISSION was: "{mission}". In this hello, ask Alisa if she did it and what happened, and celebrate her answer.')
+    prev = next((m.get("content", "") for m in reversed(session.get("messages", [])[:-1]) if m.get("role") == "assistant"), "")
+    check = kids_sentence_check(prev, new_message) if turn > 0 else ""
+    if check:
+        out.append(check)
+    return "\n".join(out) + "\n"
+
+
+def kids_after_reply(session, chat_id, full_reply, media_thread=None):
+    """After a kids reply: advance the turn, remember the mission, count the star, unlock Titi's dance every 5 stars."""
+    p = _kid_prefs(session)
+    turn = int(p.get("kids_turn", 0) or 0)
+    p["kids_turn"] = turn + 1
+    p["kids_last"] = time.time()
+    if turn == 0 and p.get("kids_mission_day") != datetime.now().strftime("%Y-%m-%d"):
+        p.pop("kids_mission", None)  # asked about in this hello; a new one comes at the goodbye
+    for line in (full_reply or "").split("\n"):
+        if re.search(r"misi[oó]n|mission", line, re.I):
+            q = re.findall(r"[\"“«]([^\"”»]{5,120})[\"”»]", line)
+            p["kids_mission"] = (q[0] if q else re.sub(r"^.*?:\s*", "", strip_shot_tags(line)))[:160]
+            p["kids_mission_day"] = datetime.now().strftime("%Y-%m-%d")
+            break
+    if turn == 0:
+        return  # the hello answers no question of hers, so no star yet
+    p["kids_stars"] = int(p.get("kids_stars", 0) or 0) + 1
+    if p["kids_stars"] % 5:
+        return
+    stars = p["kids_stars"]
+
+    def _dance():
+        if media_thread is not None:
+            media_thread.join(timeout=240)  # after the heroes' video, never on top of it
+        clip = os.path.join(HERO_DIR, "titi-dance.mp4")
+        try:
+            with open(clip, "rb") as f:
+                bot.send_video(chat_id, f, caption=f"🌟 ¡{stars} estrellas! Titi baila para ti, Alisa. / {stars} stars! Titi dances for you, Alisa! 🐒💃")
+            print(f"⭐ kids stars {stars} -> titi-dance unlocked")
+        except Exception as e:
+            print(f"⚠️ star dance not sent: {e}")
+    threading.Thread(target=_dance, daemon=True).start()
+
+
+def kids_photo_story(photo_bytes):
+    """What is in the child's photo, in two short sentences (toy, drawing, food...). Grok sees images on the key the
+    bot already has (verified 30 Oct); OpenAI gpt-4o has had no credits since 23 Oct. Returns "" when nobody can see."""
+    b64 = base64.b64encode(photo_bytes).decode()
+    ask = [{"type": "text", "text": "A 6-year-old girl sent this photo to her Spanish tutors. In 2 short sentences, what is in it? Name the main things and colours. No text reading."},
+           {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + b64}}]
+    for url, key, model in (("https://api.x.ai/v1/chat/completions", os.environ.get("XAI_API_KEY"),
+                             os.environ.get("XAI_MODEL", "").strip() or "grok-4.20-0309-non-reasoning"),
+                            ("https://api.openai.com/v1/chat/completions", OPENAI_API_KEY, "gpt-4o")):
+        if not key:
+            continue
+        try:
+            r = requests.post(url, headers={"Authorization": f"Bearer {key}"}, timeout=60,
+                              json={"model": model, "max_tokens": 200, "messages": [{"role": "user", "content": ask}]})
+            text = (r.json().get("choices") or [{}])[0].get("message", {}).get("content", "")
+            if text:
+                print(f"🖼️ kids photo seen by {model}")
+                return text.strip()
+            print(f"⚠️ kids photo {model}: {r.status_code} {r.text[:160]}")
+        except Exception as e:
+            print(f"⚠️ kids photo {model}: {e}")
+    return ""
+
+
 def apply_kids_switch(user_id, text=None, force=None):
     """'Soy Alisa' / /kids turns Pere + Titi on; 'soy mamá' / /mama turns them off (22 Oct 2026).
     The saved role used to win over 'soy Alisa', so the switch never happened. The parent's role is kept and restored."""
@@ -3469,6 +3624,7 @@ def apply_kids_switch(user_id, text=None, force=None):
     if (force == "on" or any(k in t for k in KIDS_ON)) and prefs.get("family_role") != "alisa":
         prefs["kids_saved_role"] = prefs.get("family_role")
         prefs["family_role"] = "alisa"
+        prefs["kids_turn"], prefs["kids_last"] = 0, 0  # /kids = a new lesson from HELLO (30 Oct 2026)
         return "on"
     if (force == "off" or any(k in t for k in KIDS_OFF)) and prefs.get("family_role") == "alisa":
         prefs["family_role"] = prefs.pop("kids_saved_role", None) or "parent"
@@ -3829,6 +3985,8 @@ def process_message(user_input, chat_id, user_id, message_obj):
         daemon=True
     )
     media_thread.start()
+    if session["context"]["user"]["preferences"].get("family_role") == "alisa":
+        kids_after_reply(session, chat_id, full_reply, media_thread)
 
     # Update learning data without waiting for multimedia to complete
     print("Updating learning data...")
@@ -3960,6 +4118,8 @@ def process_message_with_tracking(user_input, chat_id, user_id, message_obj):
         daemon=True
     )
     media_thread.start()
+    if session["context"]["user"]["preferences"].get("family_role") == "alisa":
+        kids_after_reply(session, chat_id, full_reply, media_thread)
 
     # Update learning data
     print("Updating learning data...")
@@ -5886,6 +6046,20 @@ def handle_photo(message):
                 print(f"DB photo tracking error: {e}", flush=True)
 
         if not enforce_learning_access(message, user_id):
+            return
+
+        # Kids mode (30 Oct 2026): her toy, drawing or lunch is not a text to read - Pere and Titi look at it and talk
+        # about it in the normal lesson flow (same path as her voice notes), so the photo becomes today's sentence.
+        _prefs = user_sessions.get(user_id, {}).get("context", {}).get("user", {}).get("preferences", {})
+        if _prefs.get("family_role") == "alisa":
+            bot.send_message(message.chat.id, "👀 Pere y Titi miran tu foto... / Pere and Titi are looking at your photo...")
+            seen = kids_photo_story(bot.download_file(bot.get_file(message.photo[-1].file_id).file_path))
+            if not seen:
+                bot.send_message(message.chat.id, "🦥 No pude ver bien tu foto. ¿Me cuentas qué es? / I could not see your photo well. Can you tell me what it is?")
+                return
+            caption = (message.caption or "").strip()
+            said = f"[Alisa sent a photo{' and wrote: ' + caption if caption else ''}] The photo shows: {seen}"
+            process_message_with_tracking(said, message.chat.id, user_id, message)
             return
 
         # Step 1: Send initial processing message
