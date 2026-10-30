@@ -74,7 +74,7 @@ def _key(name: str) -> str:
 def _model(provider: str) -> str:
     return {
         # Sonnet, not Haiku — this is the emotional-intelligence surface.
-        "claude": os.environ.get("CLAUDE_CHAIN_MODEL", "").strip() or "claude-sonnet-4-5-20250929",
+        "claude": os.environ.get("CLAUDE_CHAIN_MODEL", "").strip() or "claude-sonnet-4-6",
         # gpt-4o, not mini: mini noticeably flattens warmth on this prompt shape.
         "openai": os.environ.get("OPENAI_CHAIN_MODEL", "").strip() or "gpt-4o",
         "gemini": os.environ.get("GEMINI_MODEL", "").strip() or "gemini-2.5-flash",
