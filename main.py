@@ -1769,7 +1769,10 @@ THIS IS MANDATORY. NO ASTERISKS ALLOWED.
                     memory_block = "\n\n--- PERSISTENT MEMORY ---"
 
                     # Layer 1a: User profile (name, level, country, learning direction)
-                    _profile_ctx = _mem.get_context_for_prompt(_mem.user_id)
+                    # 30 Oct 2026: NOT in kids mode - the profile is the PARENT's (her name, her level), and the tutor
+                    # then called the child "Elena" and invented a "little sister" from the adult's past chats.
+                    _kids = family_role == "alisa"
+                    _profile_ctx = None if _kids else _mem.get_context_for_prompt(_mem.user_id)
                     if _profile_ctx:
                         memory_block += f"\n{_profile_ctx}"
 
@@ -1786,13 +1789,17 @@ THIS IS MANDATORY. NO ASTERISKS ALLOWED.
                         except Exception as _e:
                             print(f"⚠️ LangChain messages fetch: {_e}")
 
-                    # Layer 2: RAG — semantic search over all embedded turns
+                    # Layer 2: RAG — semantic search over all embedded turns (the parent's too, so not in kids mode)
                     try:
+                        if _kids:
+                            raise LookupError("kids mode: no adult RAG")
                         from espaluz_rag import retrieve_context, get_session_id_for_user
                         _session_id = get_session_id_for_user('telegram', _mem.user_id)
                         _rag_ctx = retrieve_context(_session_id, new_message, top_k=3)
                         if _rag_ctx:
                             memory_block += f"\n\n{_rag_ctx}"
+                    except LookupError:
+                        pass
                     except Exception as _e:
                         print(f"⚠️ RAG retrieve non-fatal: {_e}")
 
@@ -1822,6 +1829,8 @@ How to talk to Alisa:
 - End every message with ONE simple question and invite Alisa to answer with a whole sentence, in Spanish or English.
 - If she makes a mistake, praise the try and say the correct whole sentence once; never say "wrong".
 - Once per lesson: write one short sentence and ask her to READ it out loud herself (she is learning to read); ask one "¿Por qué...? / Why...?" question and welcome an answer with "porque / because"; and at the goodbye give her a mission: one sentence to say today to a real person (mamá, a friend, the teacher, the shop in Panama).
+- First react to what Alisa just said: answer her question or say her sentence back correctly, then continue the lesson.
+- The person talking now is ALWAYS Alisa, the child, even though the account is her parent's: call her Alisa, never by the parent's name, and never invent family members (no sister or brother unless Alisa says so in this lesson).
 - If the memory above shows sentences Alisa said or learned before, open by inviting her to say one of them again and praise her, then teach new ones (the same words come back and grow).
 
 Lesson rhythm across the conversation (about 5-10 minutes):
@@ -3760,8 +3769,12 @@ def process_message(user_input, chat_id, user_id, message_obj):
     full_reply, short_reply, thinking_process = ask_claude_with_mcp(session, translated)
     print(f"Received Claude response, length: {len(full_reply)}")
 
-    # Send the main response
-    bot.send_message(chat_id, f"🤖 Espaluz:\n{strip_markdown_formatting(full_reply)}")
+    # Send the main response (30 Oct 2026: shot tags are for the video only; in kids mode the script block is what the
+    # video already says, so a 6-7 year old reads the lesson once, without "[VIDEO SCRIPT START]" or "Pere [hello]:")
+    shown = strip_shot_tags(full_reply)
+    if session.get("context", {}).get("user", {}).get("preferences", {}).get("family_role") == "alisa":
+        shown = re.sub(r"\[VIDEO SCRIPT START\].*?\[VIDEO SCRIPT END\]", "", shown, flags=re.DOTALL).strip() or shown
+    bot.send_message(chat_id, f"🤖 Espaluz:\n{strip_markdown_formatting(shown)}")
     print("Main text response sent")
 
     # Wiring: emit lesson event to CTO AIPA
@@ -3874,8 +3887,12 @@ def process_message_with_tracking(user_input, chat_id, user_id, message_obj):
     full_reply, short_reply, thinking_process = ask_claude_with_mcp(session, translated)
     print(f"Received Claude response, length: {len(full_reply)}")
 
-    # Send the main response
-    bot.send_message(chat_id, f"🤖 Espaluz:\n{strip_markdown_formatting(full_reply)}")
+    # Send the main response (30 Oct 2026: shot tags are for the video only; in kids mode the script block is what the
+    # video already says, so a 6-7 year old reads the lesson once, without "[VIDEO SCRIPT START]" or "Pere [hello]:")
+    shown = strip_shot_tags(full_reply)
+    if session.get("context", {}).get("user", {}).get("preferences", {}).get("family_role") == "alisa":
+        shown = re.sub(r"\[VIDEO SCRIPT START\].*?\[VIDEO SCRIPT END\]", "", shown, flags=re.DOTALL).strip() or shown
+    bot.send_message(chat_id, f"🤖 Espaluz:\n{strip_markdown_formatting(shown)}")
     print("Main text response sent")
 
     # Wiring: emit lesson event to CTO AIPA
