@@ -3303,9 +3303,21 @@ HERO_SHOT_ALIASES = {"count": "counting", "counts": "counting", "numbers": "coun
                      "dancing": "dance", "music": "dance", "hide": "peekaboo", "surprise": "peekaboo"}
 HERO_RECENT = deque(maxlen=12)  # clips just played go to the back of the line, so the next line/turn looks different
 # Twins: a shot repeated back to back gives way to its twin, so every clip gets its turn (30 Oct 2026).
-HERO_SHOT_ALT = {"titi-cheer": "titi-cheer-2", "titi-cheer-2": "titi-cheer", "pere-hello": "duo-hello", "duo-hello": "pere-hello",
-                 "pere-talking-1": "pere-talking-2", "pere-talking-2": "pere-talking-1",
-                 "titi-talking-1": "titi-talking-2", "titi-talking-2": "titi-talking-1"}
+HERO_SHOT_FAMILY = {  # look-alikes that fit the same kind of line, never the other hero alone (30 Oct 2026)
+    "pere-hello": ["duo-hello", "pere-talking-1", "pere-talking-2"], "duo-hello": ["pere-hello", "duo-highfive"],
+    "titi-cheer": ["titi-cheer-2", "titi-dance", "titi-silly"], "titi-cheer-2": ["titi-cheer", "titi-dance", "titi-silly"],
+    "pere-clap": ["duo-highfive", "pere-talking-2"], "duo-highfive": ["pere-clap", "titi-cheer-2"],
+    "pere-talking-1": ["pere-talking-2", "pere-thinking", "pere-listening"],
+    "pere-talking-2": ["pere-talking-1", "pere-thinking", "pere-listening"],
+    "titi-talking-1": ["titi-talking-2", "titi-listening", "titi-silly"],
+    "titi-talking-2": ["titi-talking-1", "titi-listening", "titi-silly"],
+    "pere-listening": ["pere-thinking", "pere-talking-2"], "pere-thinking": ["pere-listening", "pere-talking-1"],
+    "titi-listening": ["titi-talking-1", "titi-talking-2"],
+    "titi-crosscrawl": ["titi-counting-jumps", "titi-dance", "titi-freeze"], "titi-dance": ["titi-crosscrawl", "titi-cheer-2"],
+    "titi-counting-jumps": ["titi-crosscrawl"], "pere-counting": ["pere-thinking"],
+    "titi-silly": ["titi-oops", "titi-cheer"], "titi-oops": ["titi-silly"], "titi-freeze": ["titi-crosscrawl"],
+    "pere-breathing": ["pere-sleepy"], "pere-sleepy": ["pere-breathing"], "duo-peekaboo": ["titi-silly"],
+}
 
 
 def hero_shot_list(who, text, first, last, shot=None):
@@ -3338,11 +3350,16 @@ def hero_shot_list(who, text, first, last, shot=None):
             name = "titi-oops"
         elif any(w in t for w in ("dónde está", "donde esta", "where is", "escondid", "peekaboo", "cucú")):
             name = "duo-peekaboo"
-    alt = HERO_SHOT_ALT.get(name)
-    other = "titi" if who == "pere" else "pere"
-    if alt and HERO_RECENT and HERO_RECENT[-1] == name and not alt.startswith(f"{other}-") \
-            and os.path.exists(os.path.join(HERO_DIR, f"{alt}.mp4")):
-        name = alt  # the same picture twice in a row gives way to its twin (never the other hero alone), so cheers, hellos and talking clips alternate
+    # 30 Oct 2026 (Elena: "are you sure images are rotated? we have 25"): the log showed 14 of 25 clips in 34 lines,
+    # pere-hello and titi-cheer 9x each - the twin swap fired only on back-to-back repeats. Now a clip seen in the last
+    # 6 gives way to the least-recently-seen member of its family (same hero or both, same kind of line).
+    if name and name in HERO_SHOT_FAMILY:
+        age = {}
+        for i, n in enumerate(reversed(HERO_RECENT)):
+            age.setdefault(n, i)  # 0 = just played
+        if age.get(name, 10**6) < 6:
+            pool = [c for c in [name] + HERO_SHOT_FAMILY[name] if os.path.exists(os.path.join(HERO_DIR, f"{c}.mp4"))]
+            name = max(pool, key=lambda c: age.get(c, 10**6))
     if name is None or not os.path.exists(os.path.join(HERO_DIR, f"{name}.mp4")):
         talk = HERO_SHOTS[who]["talk"][:]
         random.shuffle(talk)
