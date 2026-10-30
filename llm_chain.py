@@ -149,6 +149,22 @@ def call_provider(provider: str, system: Optional[str], user: str, max_tokens: i
     return data["choices"][0]["message"]["content"] or ""
 
 
+def free_tier() -> bool:
+    """True while MODEL_TIER=free (30 Oct 2026): Claude goes LAST in every chain, after the free providers.
+
+    cto-aipa's scripts/model-tier.cjs writes MODEL_TIER into this bot's .env from Elena's Anthropic billing
+    mail. Read from the file on every call, so a top-up moves Claude back to first without a restart.
+    """
+    try:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"), encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("MODEL_TIER="):
+                    return line.split("=", 1)[1].strip().strip("\"'") == "free"
+    except OSError:
+        pass
+    return os.environ.get("MODEL_TIER", "").strip() == "free"
+
+
 def complete(system: Optional[str], user: str, max_tokens: int = 1000,
              order: Iterable[str] = PROFILE_QUALITY) -> Tuple[str, List[str]]:
     """Walk the chain until a provider returns a real reply.
@@ -168,6 +184,9 @@ def complete(system: Optional[str], user: str, max_tokens: int = 1000,
     """
     budget = max(int(max_tokens), MIN_TOKENS)
     errors: List[str] = []
+    order = tuple(order)
+    if free_tier() and "claude" in order:  # 30 Oct 2026: free mode = Claude last
+        order = tuple(p for p in order if p != "claude") + ("claude",)
     for provider in order:
         try:
             text = call_provider(provider, system, user, budget)

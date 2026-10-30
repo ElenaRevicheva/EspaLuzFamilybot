@@ -2788,7 +2788,10 @@ def ask_claude_with_mcp(session, translated_input):
     }
 
     try:
-        res = requests.post("https://api.anthropic.com/v1/messages",
+        from llm_chain import free_tier
+        if free_tier():  # 30 Oct 2026: free mode = the fallback below answers, Claude not first
+            raise Exception("MODEL_TIER=free")
+        res = requests.post("https://api.anthropic.com/v1/messages",  # tier-gated
                             headers=headers,
                             json=mcp_request)
 
@@ -4901,8 +4904,11 @@ def _convo_translate(text, source_lang, target_lang):
     msgs = [{"role": "user", "content": prompt}]
 
     try:
+        from llm_chain import free_tier
+        if free_tier():  # 30 Oct 2026: free mode = the fallback below answers, Claude not first
+            raise Exception("MODEL_TIER=free")
         client = anthropic.Anthropic(api_key=os.environ.get("CLAUDE_API_KEY"))
-        response = client.messages.create(model=CLAUDE_MODEL, max_tokens=500, messages=msgs)
+        response = client.messages.create(model=CLAUDE_MODEL, max_tokens=500, messages=msgs)  # tier-gated
         return response.content[0].text.strip()
     except Exception as claude_err:
         print(f"Convo Claude failed ({source_lang}->{target_lang}): {claude_err}", flush=True)
@@ -5428,8 +5434,11 @@ Text: {text}
 Translation:"""
 
     try:
+        from llm_chain import free_tier
+        if free_tier():  # 30 Oct 2026: free mode = the fallback below answers, Claude not first
+            raise Exception("MODEL_TIER=free")
         response = requests.post(
-            "https://api.anthropic.com/v1/messages",
+            "https://api.anthropic.com/v1/messages",  # tier-gated
             headers={
                 "Content-Type": "application/json",
                 "x-api-key": CLAUDE_API_KEY,
