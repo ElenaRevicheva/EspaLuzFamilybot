@@ -1804,12 +1804,13 @@ How to talk to Alisa:
 - Keep sentences short and clear for a 5-7 year old (about 5-10 words), warm and playful, at most 1-2 emojis per message.
 - Let Pere and Titi speak by name ("Pere: ..." / "Titi: ...").
 - The [VIDEO SCRIPT START] ... [VIDEO SCRIPT END] block is 2-4 short lines and EVERY line starts with "Pere [shot]:" or "Titi [shot]:" (both heroes speak), a Spanish sentence then the same sentence in English. Each hero speaks his lines in his own voice, and [shot] names the picture shown while he says the line, so choose the shot that matches what the line says or does.
-  Pere's shots: talk, hello, counting, thinking, clap, listening, breathing, sleepy, goodbye. Titi's shots: talk, cheer, silly, dance, jump, counting, freeze, oops, listening, goodbye. Both together: highfive, peekaboo. Use "talk" when nothing fits. Example:
+  Pere's shots: talk, hello, counting, thinking, clap, listening, breathing, sleepy, goodbye. Titi's shots: talk, hello, cheer, silly, dance, jump, counting, freeze, oops, listening, goodbye. Both together: highfive, peekaboo. Use "talk" when nothing fits. Never give two lines in a row the same shot, and across the lesson use many different ones. Shots by lesson step: hello = Pere [hello] then Titi [hello]; wake-up = Titi [jump], [counting], [freeze] or [dance]; new sentences = Pere [talk], [thinking], [listening], praise = Pere [clap] or Titi [cheer]; the game = Titi [oops], [silly], [peekaboo]; calm = Pere [breathing], [sleepy]; the end = [highfive] then [goodbye]. Example:
   Pere [hello]: Hola, Alisa. Hoy hablamos de animales. / Hello, Alisa. Today we talk about animals.
   Titi [cheer]: ¡Mi animal favorito es el tucán! / My favorite animal is the toucan!
   Pere [listening]: ¿Cuál es tu animal favorito? / What is your favorite animal?
 - End every message with ONE simple question and invite Alisa to answer with a whole sentence, in Spanish or English.
 - If she makes a mistake, praise the try and say the correct whole sentence once; never say "wrong".
+- If the memory above shows sentences Alisa said or learned before, open by inviting her to say one of them again and praise her, then teach new ones (the same words come back and grow).
 
 Lesson rhythm across the conversation (about 5-10 minutes):
 1. Hello from both heroes and one question about her day.
@@ -3275,6 +3276,10 @@ HERO_SHOT_ALIASES = {"count": "counting", "counts": "counting", "numbers": "coun
                      "applause": "clap", "praise": "clap", "happy": "cheer", "excited": "cheer", "cheering": "cheer",
                      "dancing": "dance", "music": "dance", "hide": "peekaboo", "surprise": "peekaboo"}
 HERO_RECENT = deque(maxlen=12)  # clips just played go to the back of the line, so the next line/turn looks different
+# Twins: a shot repeated back to back gives way to its twin, so every clip gets its turn (30 Oct 2026).
+HERO_SHOT_ALT = {"titi-cheer": "titi-cheer-2", "titi-cheer-2": "titi-cheer", "pere-hello": "duo-hello", "duo-hello": "pere-hello",
+                 "pere-talking-1": "pere-talking-2", "pere-talking-2": "pere-talking-1",
+                 "titi-talking-1": "titi-talking-2", "titi-talking-2": "titi-talking-1"}
 
 
 def hero_shot_list(who, text, first, last, shot=None):
@@ -3307,12 +3312,17 @@ def hero_shot_list(who, text, first, last, shot=None):
             name = "titi-oops"
         elif any(w in t for w in ("dónde está", "donde esta", "where is", "escondid", "peekaboo", "cucú")):
             name = "duo-peekaboo"
-    if name == "titi-cheer" and "titi-cheer" in HERO_RECENT and "titi-cheer-2" not in HERO_RECENT:
-        name = "titi-cheer-2"  # the two cheers alternate
+    alt = HERO_SHOT_ALT.get(name)
+    other = "titi" if who == "pere" else "pere"
+    if alt and HERO_RECENT and HERO_RECENT[-1] == name and not alt.startswith(f"{other}-") \
+            and os.path.exists(os.path.join(HERO_DIR, f"{alt}.mp4")):
+        name = alt  # the same picture twice in a row gives way to its twin (never the other hero alone), so cheers, hellos and talking clips alternate
     if name is None or not os.path.exists(os.path.join(HERO_DIR, f"{name}.mp4")):
         talk = HERO_SHOTS[who]["talk"][:]
         random.shuffle(talk)
-        age = {n: i for i, n in enumerate(reversed(HERO_RECENT))}  # 0 = most recent
+        age = {}
+        for i, n in enumerate(reversed(HERO_RECENT)):
+            age.setdefault(n, i)  # 0 = most recent; a clip played twice keeps its newest age
         talk.sort(key=lambda n: -age.get(n, 10**6))
         name = talk[0]
     HERO_RECENT.append(name)
