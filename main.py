@@ -877,6 +877,17 @@ def is_subscribed(user_id):
     return False
 
 
+def _reply_markdown_or_plain(message, text):
+    """30 Oct 2026: the pause message carries the PayPal link (plan_id=...), and an underscore opens Markdown italics
+    that never close -> Telegram 400 "can't parse entities" -> the lapsed user got SILENCE instead of the pay link.
+    Markdown when Telegram accepts it, the same words as plain text when it does not."""
+    try:
+        bot.reply_to(message, text, parse_mode="Markdown")
+    except Exception as e:
+        print(f"⚠️ Markdown rejected ({e}); sending plain text")
+        bot.reply_to(message, text.replace("**", "").replace("*", ""))
+
+
 def enforce_learning_access(message, user_id: str) -> bool:
     """
     Gate tutor/voice/photo learning. Sends pause message if blocked;
@@ -895,12 +906,12 @@ def enforce_learning_access(message, user_id: str) -> bool:
 
     result = paypal_system.is_user_allowed(user_id)
     if not result["allowed"]:
-        bot.reply_to(message, result["message"], parse_mode="Markdown")
+        _reply_markdown_or_plain(message, result["message"])
         return False
 
     reminder = paypal_system.get_payment_reminder_message(user_id, result)
     if reminder:
-        bot.reply_to(message, reminder, parse_mode="Markdown")
+        _reply_markdown_or_plain(message, reminder)
     return True
 
 # === EMOTIONAL INTELLIGENCE & PERSONALIZATION ===
