@@ -32,7 +32,7 @@ Welcome! I'm your emotionally intelligent language tutor for expat families, tra
   ↳ Clears conversation history
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-👧 *KIDS 5–7 · PERE 🦥 & TITI 🐒*
+👧 *KIDS 6–7 · PERE 🦥 & TITI 🐒*
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 /kids — Pere (a calm sloth) and Titi (a playful tamarin) teach your child
   ↳ Real sentences in Spanish and English, games, calm breathing
