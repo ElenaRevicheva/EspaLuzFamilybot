@@ -148,6 +148,16 @@ def paguelofacil_webhook():
             payload_json.get("operationType") or payload_json.get("merchantDescriptor"),
         )
         logging.info("PAGUELOFACIL WEBHOOK body (trunc): %s", json.dumps(payload_json)[:4000])
+        # AIDEAZZ_SVC_HOOK_START
+        try:
+            from aideazz_service_payments import intercept_service_webhook
+            svc_resp = intercept_service_webhook(payload_json)
+            if svc_resp is not None:
+                logging.info("PAGUELOFACIL SVC processed: %s", svc_resp)
+                return jsonify({"status": "received", "result": svc_resp}), 200
+        except Exception as svc_exc:
+            logging.error("PAGUELOFACIL SVC hook error: %s", svc_exc)
+        # AIDEAZZ_SVC_HOOK_END
         result = process_webhook(payload_json)
         logging.info("PAGUELOFACIL processed: %s", result)
         return jsonify({"status": "received", "result": result}), 200

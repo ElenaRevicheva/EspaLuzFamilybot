@@ -1,0 +1,157 @@
+#!/usr/bin/env python3
+"""
+AIdeazz consulting service payments — PagueloFacil SVC:* webhook branch.
+
+Additive only: EspaLuz WA:/TG: flows unchanged in espaluz_paguelofacil.process_webhook.
+
+PARM_1 format: SVC:{sku}:{order_id_hex}
+"""
+from __future__ import annotations
+
+import json
+import logging
+import os
+import re
+from typing import Any, Dict, Optional
+
+import requests
+
+logger = logging.getLogger(__name__)
+
+CTO_INTERNAL_URL = os.getenv(
+    "AIDEAZZ_SERVICE_PAID_URL",
+    "http://127.0.0.1:3000/internal/service-paid",
+).strip()
+INTERNAL_SECRET = os.getenv("INTERNAL_WEBHOOK_SECRET", "").strip() or os.getenv(
+    "OUTREACH_SECRET", ""
+).strip()
+
+# CTO AIPA checks INTERNAL_WEBHOOK_SECRET, else OUTREACH_SECRET — in ITS own env. This
+# process's INTERNAL_WEBHOOK_SECRET is EspaLuz's own and differs (29 Sep 2026: every call
+# got 401). OUTREACH_SECRET is the one both hold; the other is tried once on a 401.
+_CTO_SECRETS = [
+    s
+    for s in dict.fromkeys(
+        [os.getenv("OUTREACH_SECRET", "").strip(), os.getenv("INTERNAL_WEBHOOK_SECRET", "").strip()]
+    )
+    if s
+]
+
+
+def _parse_svc_parm1(value: str) -> Optional[Dict[str, str]]:
+    val = str(value or "").strip()
+    if not val.upper().startswith("SVC:"):
+        return None
+    parts = val.split(":")
+    if len(parts) < 3:
+        return None
+    sku = parts[1].strip()
+    order_id = ":".join(parts[2:]).strip()
+    if not sku or not order_id:
+        return None
+    return {"sku": sku, "order_id": order_id}
+
+
+def _is_payment_approved(payload: Dict[str, Any]) -> bool:
+    status = payload.get("status")
+    if status in (1, "1", True):
+        return True
+    if str(payload.get("Estado", "")).lower() == "aprobada":
+        return True
+    auth = str(payload.get("authStatus") or "").strip()
+    if auth in ("00", "0", "000"):
+        return True
+    msg = str(payload.get("messageSys") or "").lower()
+    return "aprob" in msg
+
+
+def intercept_service_webhook(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """
+    If payload is SVC:* and approved, notify CTO AIPA and return result dict.
+    Returns None if not a service payment (caller should use EspaLuz process_webhook).
+    """
+    parm = str(
+        payload.get("PARM_1") or payload.get("parm_1") or payload.get("parm1") or ""
+    ).strip()
+    parsed = _parse_svc_parm1(parm)
+    description = str(payload.get("description") or payload.get("CDSC") or "").strip()
+    if not parsed:
+        # PagueloFacil never echoes PARM_1 in its webhook (29 Sep 2026, first real paid
+        # order). It does echo the description, accents stripped. Every AIdeazz service
+        # link's description starts with "AIdeazz" (EspaLuz's start with "EspaLuz"), and
+        # new ones carry "Ref <order id>" — CTO AIPA resolves the order from it.
+        if not description.lower().startswith("aideazz"):
+            return None
+        parsed = {"sku": "", "order_id": ""}
+
+    cod_oper = str(payload.get("codOper") or payload.get("relatedTx") or "")
+    if not cod_oper:
+        return {"processed": False, "reason": "missing_codOper", "svc": True}
+
+    if not _is_payment_approved(payload):
+        return {
+            "processed": False,
+            "reason": "not_approved",
+            "cod_oper": cod_oper,
+            "svc": True,
+            "sku": parsed["sku"],
+            "order_id": parsed["order_id"],
+        }
+
+    if not _CTO_SECRETS:
+        logger.error("Aideazz SVC: INTERNAL_WEBHOOK_SECRET / OUTREACH_SECRET missing")
+        return {"processed": False, "reason": "no_internal_secret", "svc": True}
+
+    try:
+        body_out = {
+            "order_id": parsed["order_id"],
+            "cod_oper": cod_oper,
+            "sku": parsed["sku"],
+            "description": description[:300],
+            "total_pay": str(payload.get("totalPay") or payload.get("requestPayAmount") or ""),
+            "payer_email": str(payload.get("email") or ""),
+        }
+        for secret in _CTO_SECRETS:
+            resp = requests.post(
+                CTO_INTERNAL_URL,
+                json=body_out,
+                headers={
+                    "Authorization": f"Bearer {secret}",
+                    "Content-Type": "application/json",
+                },
+                timeout=20,
+            )
+            if resp.status_code != 401:
+                break
+        if resp.status_code == 200:
+            body = resp.json()
+            return {
+                "processed": True,
+                "svc": True,
+                "cod_oper": cod_oper,
+                **parsed,
+                **body,
+            }
+        logger.warning(
+            "Aideazz SVC: CTO internal HTTP %s: %s",
+            resp.status_code,
+            resp.text[:300],
+        )
+        return {
+            "processed": False,
+            "reason": f"cto_http_{resp.status_code}",
+            "svc": True,
+            **parsed,
+        }
+    except Exception as exc:
+        logger.error("Aideazz SVC: CTO notify failed: %s", exc)
+        return {"processed": False, "reason": "cto_notify_error", "svc": True, **parsed}
+
+
+def salvage_svc_from_raw(raw: bytes) -> Optional[Dict[str, str]]:
+    """Optional helper if PARM_1 regex needed on corrupt payloads."""
+    text = raw.decode("utf-8", errors="replace")
+    match = re.search(r'"PARM_1"\s*:\s*"(SVC:[^"]+)"', text)
+    if match:
+        return _parse_svc_parm1(match.group(1))
+    return None
