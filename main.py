@@ -3226,7 +3226,8 @@ HERO_VOICES = {
     "pere": {"voice_id": os.getenv("PERE_VOICE", "Spanish_Rudolph"), "pitch": int(os.getenv("PERE_PITCH", "-2")),
              "speed": float(os.getenv("PERE_SPEED", "0.82")), "emotion": os.getenv("PERE_EMOTION", "calm")},
     "titi": {"voice_id": os.getenv("TITI_VOICE", "Spanish_AnimeCharacter"), "pitch": int(os.getenv("TITI_PITCH", "3")),
-             "speed": float(os.getenv("TITI_SPEED", "1.15")), "emotion": os.getenv("TITI_EMOTION", "happy")},
+             # 0.9, not 1.15 (31 Oct 2026, Alisa: "Titi habla muy rápido"). Twin: generate-voice HERO_VOICES.
+             "speed": float(os.getenv("TITI_SPEED", "0.9")), "emotion": os.getenv("TITI_EMOTION", "happy")},
 }
 
 
