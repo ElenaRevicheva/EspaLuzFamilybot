@@ -566,10 +566,14 @@ create_test_video()
 debug_file_paths()
 
 # === SUPABASE INTEGRATION FUNCTIONS ===
+# The EspaLuz web app (dashboard + kids classroom) runs on this Supabase project. These calls were stubbed out in Jan
+# 2026 on the belief that the project was gone; it is live, so a linked user's dashboard showed nothing from Telegram.
+# Re-enabled 31 Oct 2026. They run in a background thread (see sync_progress_to_saas): the web never slows a reply.
+SAAS_FUNCTIONS_URL = "https://euyidvolwqmzijkfrplh.supabase.co/functions/v1"
+
+
 def track_telegram_conversation(user_id, user_message, bot_reply, session_data):
-    """Track Telegram conversation in Supabase database"""
-    # DISABLED: Using PostgreSQL now - Jan 2026
-    return
+    """Track Telegram conversation in Supabase database (404 = this Telegram user never linked the web app)."""
     try:
         learning_progress = session_data.get("context", {}).get("learning", {}).get("progress", {})
         emotional_state = session_data.get("context", {}).get("emotional_state", {})
@@ -603,7 +607,7 @@ def track_telegram_conversation(user_id, user_message, bot_reply, session_data):
         }
         
         response = requests.post(
-            "https://euyidvolwqmzijkfrplh.supabase.co/functions/v1/submit-progress",
+            f"{SAAS_FUNCTIONS_URL}/submit-progress",
             json=session_payload,
             headers={
                 "Authorization": f"Bearer {os.environ.get('SUPABASE_ANON_KEY')}",
@@ -615,6 +619,8 @@ def track_telegram_conversation(user_id, user_message, bot_reply, session_data):
         if response.status_code == 200:
             print(f"✅ Telegram conversation tracked for user {user_id}")
             return True
+        elif response.status_code == 404:
+            return False  # not linked to the web app - nothing to sync
         else:
             print(f"⚠️ Failed to track conversation: {response.status_code} - {response.text}")
             return False
@@ -638,13 +644,7 @@ def extract_conversation_vocabulary(user_message, bot_reply):
     return vocabulary
 
 def update_connected_bot_activity(user_id):
-    """Update last activity timestamp for connected bot.
-
-    DISABLED: the euyidvolwqmzijkfrplh Supabase project no longer exists — the
-    host is NXDOMAIN, so every call burned a DNS timeout and logged an error on
-    each user message. Activity lives in PostgreSQL now (telegram_users.last_active).
-    """
-    return
+    """Update last activity timestamp for connected bot (re-enabled 31 Oct 2026, see SAAS_FUNCTIONS_URL)."""
     try:
         payload = {
             "telegram_user_id": str(user_id),
@@ -652,7 +652,7 @@ def update_connected_bot_activity(user_id):
         }
         
         response = requests.post(
-            "https://euyidvolwqmzijkfrplh.supabase.co/functions/v1/update-bot-activity",
+            f"{SAAS_FUNCTIONS_URL}/update-bot-activity",
             json=payload,
             headers={
                 "Authorization": f"Bearer {os.environ.get('SUPABASE_ANON_KEY')}",
@@ -663,11 +663,18 @@ def update_connected_bot_activity(user_id):
         
         if response.status_code == 200:
             print(f"✅ Updated activity for user {user_id}")
-        else:
+        elif response.status_code != 404:
             print(f"⚠️ Failed to update activity: {response.status_code}")
             
     except Exception as e:
         print(f"❌ Error updating bot activity: {e}")
+
+def sync_progress_to_saas(user_id, user_message, bot_reply, session_data):
+    """Both web calls, off the reply path."""
+    def _run():
+        if track_telegram_conversation(user_id, user_message, bot_reply, session_data):
+            update_connected_bot_activity(user_id)
+    threading.Thread(target=_run, daemon=True).start()
 
 # === TELEBOT SETUP ===
 
@@ -3537,6 +3544,18 @@ def kids_sentence_check(prev_reply, said):
             + '. Start with one gentle line like "¡Casi! Se dice ...", say the whole sentence once, then go on.')
 
 
+_KID_QUESTION = re.compile(
+    r"\?|¿|^\s*(where|what|why|how|who|which|when|can you|could you|tell me|do you|is it|are there|"
+    r"dónde|donde|qué|por qué|cómo|cuál|quién|cuándo|cuéntame|cuentame)(?![\wáéíóúñ])",
+    re.I)
+
+
+def kids_asked_question(text):
+    """True when the child asked something. 31 Oct 2026: Alisa asked about Parque Metropolitano and got the scheduled
+    toucan hello; she asked where the toucan lives and got the scheduled Simon-says. A question outranks the lesson plan."""
+    return bool(_KID_QUESTION.search((text or "").strip()))
+
+
 def kids_turn_context(session, new_message):
     """The per-turn facts for the tutor: lesson step, this week's story, last mission, sentence check."""
     p = _kid_prefs(session)
@@ -3545,10 +3564,21 @@ def kids_turn_context(session, new_message):
         p["kids_turn"] = 0
     turn = int(p.get("kids_turn", 0) or 0)
     step = KIDS_STEPS[turn] if turn < len(KIDS_STEPS) else KIDS_STEP_FREE
-    out = [f"\nTHIS TURN: turn {turn + 1} of {len(KIDS_STEPS)} of today's lesson. Do ONLY this step: {step}",
-           f"THIS WEEK'S STORY (use it at the HELLO hook and the STORY step, nowhere else): {kids_week_story()}"]
+    p["kids_hold"] = kids_asked_question(new_message)
+    if p["kids_hold"]:
+        hello = "Say hello to Alisa in a few words inside the first line, then " if turn == 0 else ""
+        out = [f"\nTHIS TURN: Alisa ASKED A QUESTION. {hello}ANSWER IT FIRST, truly and simply, for a 6-7 year old: "
+               "2-3 short lines with one real fact (if you are not sure of a fact, say what you do know - never invent). "
+               "Stay on HER topic; do not start a game, a story or a new lesson step this turn. "
+               f"End with ONE question back about what she asked. (The lesson continues next turn with: {step})"]
+        if turn == 0:
+            out.append(f"THIS WEEK'S STORY (only if it is about what she asked; otherwise ignore it): {kids_week_story()}")
+    else:
+        out = [f"\nTHIS TURN: turn {turn + 1} of {len(KIDS_STEPS)} of today's lesson. Do ONLY this step: {step}",
+               f"THIS WEEK'S STORY (use it at the HELLO hook and the STORY step, nowhere else; if Alisa already chose a "
+               f"topic, her topic wins): {kids_week_story()}"]
     mission = p.get("kids_mission")
-    if turn == 0 and mission and p.get("kids_mission_day") != datetime.now().strftime("%Y-%m-%d"):
+    if turn == 0 and mission and not p["kids_hold"] and p.get("kids_mission_day") != datetime.now().strftime("%Y-%m-%d"):
         out.append(f'LAST LESSON\'S MISSION was: "{mission}". In this hello, ask Alisa if she did it and what happened, and celebrate her answer.')
     prev = next((m.get("content", "") for m in reversed(session.get("messages", [])[:-1]) if m.get("role") == "assistant"), "")
     check = kids_sentence_check(prev, new_message) if turn > 0 else ""
@@ -3557,12 +3587,34 @@ def kids_turn_context(session, new_message):
     return "\n".join(out) + "\n"
 
 
+def kids_tidy(text):
+    """How a kids reply looks in the chat (31 Oct 2026, Elena: "kids session is ugly"): no adult "🤖 Espaluz:" header,
+    each hero always wears his own badge (🦥 Pere, 🐒 Titi) instead of whatever emoji the model put first, a blank line
+    between speakers, no stray ✅ before the question."""
+    out = []
+    for line in (text or "").split("\n"):
+        t = line.strip()
+        if not t:
+            continue
+        m = re.match(r"^[^\wáéíóúñ¡¿]*(Pere|Titi)\s*:\s*", t)
+        if m:
+            badge = "🦥 Pere" if m.group(1) == "Pere" else "🐒 Titi"
+            out.append(f"{badge}: {t[m.end():]}")
+        else:
+            out.append(re.sub(r"^[^\wáéíóúñ¡¿\"“«(]+", "", t))
+    return "\n\n".join(out) or text
+
+
 def kids_after_reply(session, chat_id, full_reply, media_thread=None):
     """After a kids reply: advance the turn, remember the mission, count the star, unlock Titi's dance every 5 stars."""
     p = _kid_prefs(session)
     turn = int(p.get("kids_turn", 0) or 0)
-    p["kids_turn"] = turn + 1
     p["kids_last"] = time.time()
+    if p.pop("kids_hold", False):
+        if turn == 0:
+            p["kids_turn"] = 1  # the hello was folded into the answer; never greet again
+        return  # the planned step waits: answering her question was this turn
+    p["kids_turn"] = turn + 1
     if turn == 0 and p.get("kids_mission_day") != datetime.now().strftime("%Y-%m-%d"):
         p.pop("kids_mission", None)  # asked about in this hello; a new one comes at the goodbye
     for line in (full_reply or "").split("\n"):
@@ -3953,7 +4005,9 @@ def process_message(user_input, chat_id, user_id, message_obj):
     shown = strip_shot_tags(full_reply)
     if session.get("context", {}).get("user", {}).get("preferences", {}).get("family_role") == "alisa":
         shown = re.sub(r"\[VIDEO SCRIPT START\].*?\[VIDEO SCRIPT END\]", "", shown, flags=re.DOTALL).strip() or shown
-    bot.send_message(chat_id, f"🤖 Espaluz:\n{strip_markdown_formatting(shown)}")
+        bot.send_message(chat_id, kids_tidy(strip_markdown_formatting(shown)))
+    else:
+        bot.send_message(chat_id, f"🤖 Espaluz:\n{strip_markdown_formatting(shown)}")
     print("Main text response sent")
 
     # Wiring: emit lesson event to CTO AIPA
@@ -4073,7 +4127,9 @@ def process_message_with_tracking(user_input, chat_id, user_id, message_obj):
     shown = strip_shot_tags(full_reply)
     if session.get("context", {}).get("user", {}).get("preferences", {}).get("family_role") == "alisa":
         shown = re.sub(r"\[VIDEO SCRIPT START\].*?\[VIDEO SCRIPT END\]", "", shown, flags=re.DOTALL).strip() or shown
-    bot.send_message(chat_id, f"🤖 Espaluz:\n{strip_markdown_formatting(shown)}")
+        bot.send_message(chat_id, kids_tidy(strip_markdown_formatting(shown)))
+    else:
+        bot.send_message(chat_id, f"🤖 Espaluz:\n{strip_markdown_formatting(shown)}")
     print("Main text response sent")
 
     # Wiring: emit lesson event to CTO AIPA
@@ -4100,8 +4156,7 @@ def process_message_with_tracking(user_input, chat_id, user_id, message_obj):
 
     # 🆕 NEW: Track this conversation in Supabase
     try:
-        track_telegram_conversation(user_id, user_input, full_reply, session)
-        update_connected_bot_activity(user_id)
+        sync_progress_to_saas(user_id, user_input, full_reply, session)
     except Exception as e:
         print(f"⚠️ Supabase tracking failed (non-critical): {e}")
     
@@ -4184,12 +4239,28 @@ def handle_start(message):
         except:
             pass
     
-    # Always reset to start of onboarding for /start
+    # /start used to reset onboarding every time (31 Oct 2026): a returning user lost her country, name and role, and the
+    # next message - even a web connect code - was read as "which country?". A finished profile is kept; /profile changes it.
+    saved = get_user_onboarding(user_id)
+    if saved.get("step") == "complete" and start_arg.lower() != "new":
+        who = saved.get("name") or message.from_user.first_name or ""
+        where = (saved.get("country") or "").replace("_", " ").title()
+        bot.send_message(
+            message.chat.id,
+            f"👋 ¡Hola de nuevo{', ' + who if who else ''}! / Welcome back{', ' + who if who else ''}!\n"
+            + (f"🌍 {where}\n" if where else "")
+            + "\nTu perfil y tu progreso siguen guardados. / Your profile and progress are still saved.\n"
+            "Escríbeme cuando quieras · /kids para Pere y Titi · /menu para todo.\n"
+            "Write to me anytime · /kids for Pere and Titi · /menu for everything.\n"
+            "(/country para cambiar el país · to change country · /start new para empezar de cero · to set up again)",
+        )
+        return
+
     set_user_onboarding(user_id, {"step": "country"})
-    
+
     # Start onboarding - ask for country first
     welcome_msg = ONBOARDING_MESSAGES["country"]
-    
+
     bot.send_message(message.chat.id, welcome_msg)
 
     # Wiring: emit signup event to CTO AIPA
@@ -4406,19 +4477,33 @@ def handle_connect(message):
         print("📤 Sending connect payload:", payload)
         # Supabase key check removed - using PostgreSQL
 
-        # The web-dashboard backend (euyidvolwqmzijkfrplh Supabase) no longer
-        # exists — the host is NXDOMAIN. Calling it made /connect wait on a DNS
-        # timeout and then show the user a raw exception. Progress lives in
-        # PostgreSQL and is already tied to this Telegram account, so say so
-        # plainly instead of failing loudly.
-        print("ℹ️ /connect: web dashboard backend retired; progress is in PostgreSQL")
-        bot.reply_to(
-            message,
-            "✅ Tu progreso ya está guardado en tu cuenta de Telegram.\n"
-            "✅ Your progress is already saved to your Telegram account.\n\n"
-            "No hace falta conectar nada. / Nothing to connect.\n"
-            "Usa /progress para verlo. / Use /progress to see it.",
-        )
+        # 31 Oct 2026: this was stubbed out with "the Supabase project is NXDOMAIN" - it is alive (the web app and the
+        # classroom run on it), so a valid code from the dashboard was answered "nothing to connect" and never sent.
+        try:
+            r = requests.post(
+                f"{SAAS_FUNCTIONS_URL}/connect-bot",
+                json=payload,
+                headers={"Authorization": f"Bearer {os.environ.get('SUPABASE_ANON_KEY')}",
+                         "Content-Type": "application/json"},
+                timeout=15,
+            )
+        except requests.RequestException as e:
+            print(f"❌ /connect: web app unreachable: {e}")
+            bot.reply_to(message, "⚠️ No pude llegar a la web ahora. Inténtalo en un minuto.\n"
+                                  "⚠️ I couldn't reach the web app right now. Try again in a minute.")
+            return
+        print(f"🔗 /connect {code}: {r.status_code} {r.text[:200]}")
+        if r.status_code == 200:
+            bot.reply_to(message, "✅ ¡Conectado! Tu Telegram y tu panel web ya están unidos.\n"
+                                  "✅ Connected! Your Telegram and your web dashboard are linked.\n\n"
+                                  "Tus próximas prácticas aparecerán en la web. / Your next practice shows up on the web.")
+        elif r.status_code == 404:
+            bot.reply_to(message, "❌ Ese código no vale o ya caducó (dura 10 minutos).\n"
+                                  "❌ That code is wrong or expired (it lasts 10 minutes).\n\n"
+                                  "Genera uno nuevo en la web y envía /connect CÓDIGO. / Make a new one on the web and send /connect CODE.")
+        else:
+            bot.reply_to(message, "⚠️ La web no pudo conectar ahora. Inténtalo otra vez en un minuto.\n"
+                                  "⚠️ The web app could not connect right now. Please try again in a minute.")
 
     except Exception as e:
         print("❌ Exception in /connect:", str(e))
@@ -5880,7 +5965,10 @@ def handle_voice(message):
             return
         
         # === NORMAL TUTOR MODE ===
-        bot.send_message(message.chat.id, f"🗣️ Transcripción:\n{transcription}")
+        _kid = (user_sessions.get(str(user_id), {}).get("context", {}).get("user", {})
+                .get("preferences", {}).get("family_role") == "alisa")
+        bot.send_message(message.chat.id, f"🎤 Alisa dijo / Alisa said:\n{transcription}" if _kid
+                         else f"🗣️ Transcripción:\n{transcription}")
 
         process_message_with_tracking(transcription, message.chat.id, str(message.from_user.id), message)
 
