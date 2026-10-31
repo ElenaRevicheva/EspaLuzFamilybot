@@ -3465,7 +3465,7 @@ KIDS_OFF = ("soy mamá", "soy mama", "soy elena", "я мама", "я елена"
 # The tutor used to GUESS where the lesson was from history (it re-greeted and wrote 15-line lessons). Now the bot keeps
 # the turn, the week's story, the last mission and the stars in the session, and tells the tutor each turn.
 KIDS_STEPS = [
-    "HELLO: both heroes say hello in 1-2 short lines, mention this week's story in one line, then ONE question about her day.",
+    "HELLO: both heroes say hello in 1-2 short lines; if a list of EARLIER LESSONS is above, the first line brings back ONE happy thing from it (\"La última vez me dijiste que...\"); mention this week's story in one line, then ONE question about her day.",
     "WAKE-UP GAME with Titi: one quick movement game (jumps, 'Simon dice / Simon says', or right hand to left knee).",
     "NEW SENTENCE 1: Pere teaches ONE useful sentence built on what Alisa talked about, and asks her to say it.",
     "NEW SENTENCE 2: one more sentence on her topic; ask her to say it, or to answer a '¿Por qué...? / Why...?' with 'porque / because'.",
@@ -3580,6 +3580,40 @@ def kids_heard(new_message):
             "note may hold two voices (Alisa and an adult helping): answer ALISA's part.\n")
 
 
+# A hard moment is never brought back at a hello (eval 31 Oct: the web opened a new lesson with "la última vez me
+# dijiste que tu mamá está pegando"). Enforced in code, not left to the model. Twin: espaluz-chat KIDS_HARD.
+_KIDS_HARD = re.compile(r"peg|golpe|\bhit|grit|yell|scold|rega[nñ]|castig|punish|llor|\bcry|cried|triste|\bsad\b|miedo|"
+                        r"scared|asust|duele|hurt|enoj|angry|frustr", re.I)
+
+
+def kids_memory_card(p, lesson):
+    """What Alisa told the heroes in EARLIER lessons (newest first, with what they understood) and the last mission.
+    Hard moments, "didn't hear you" turns and echoes (nobody understood her) are left out. "" when nothing is left."""
+    said = []
+    for item in reversed(p.get("kids_said") or []):
+        n, words, understood = (list(item) + [""])[:3]
+        if n == lesson or _KIDS_HARD.search(words) or _KIDS_HARD.search(understood or ""):
+            continue
+        if re.search(r"no te escuch|didn't hear", understood or "", re.I):
+            continue
+        if understood and " ".join(_kid_words(words)) in " ".join(_kid_words(understood)):
+            continue
+        said.append(f'"{words}" -> you understood: "{understood}"' if understood else f'"{words}"')
+        if len(said) >= 10:
+            break
+    mission = p.get("kids_mission") if p.get("kids_mission_lesson") not in (None, lesson) else None
+    if not said and not mission:
+        return ""
+    return ("\nWHAT ALISA TOLD YOU IN EARLIER LESSONS (her own words, newest first; speech-to-text may be imperfect):\n"
+            + "\n".join(f"- {s}" for s in said)
+            + (f'\nLast mission you gave: "{mission}" - at the hello, ask if she did it.' if mission else "")
+            + "\nUse this like a friend who remembers: at the hello bring back ONE happy, clearly understood thing (a "
+              "favourite thing, a pet, a wish, something she likes doing) taken ONLY from this list, in simple words (\"La "
+              "última vez me dijiste que ... ¿Todavía? / Last time you told me ... Still?\"), and later use what she told "
+              "you instead of asking again. Skip anything that does not make sense, never bring back anything sad or about "
+              "being scolded, and never invent a memory that is not in this list.\n")
+
+
 def kids_turn_context(session, new_message):
     """The per-turn facts for the tutor: lesson step, this week's story, last mission, sentence check."""
     p = _kid_prefs(session)
@@ -3588,8 +3622,17 @@ def kids_turn_context(session, new_message):
         p["kids_turn"] = 0
     turn = int(p.get("kids_turn", 0) or 0)
     step = KIDS_STEPS[turn] if turn < len(KIDS_STEPS) else KIDS_STEP_FREE
+    # 31 Oct 2026 (step 3: memory between lessons): her words are kept per lesson in the session (it survives restarts),
+    # and the heroes see the ones from EARLIER lessons. Twin: espaluz-chat kidsMemoryCard.
+    if turn == 0:
+        p["kids_lesson"] = int(p.get("kids_lesson", 0) or 0) + 1
+    lesson = int(p.get("kids_lesson", 1) or 1)
+    card = kids_memory_card(p, lesson)
+    words = (new_message or "").strip()
+    if words and not words.startswith("/") and words not in [x[1] for x in p.get("kids_said", [])]:
+        p["kids_said"] = (p.get("kids_said") or [])[-29:] + [[lesson, words[:120]]]
     p["kids_hold"] = kids_asked_question(new_message)
-    heard = kids_heard(new_message) if turn > 0 else ""
+    heard = card + (kids_heard(new_message) if turn > 0 else "")
     if p["kids_hold"]:
         hello = "Say hello to Alisa in a few words inside the first line, then " if turn == 0 else ""
         out = [heard + f"\nTHIS TURN: Alisa ASKED A QUESTION. {hello}ANSWER IT FIRST, truly and simply, for a 6-7 year old: "
@@ -3604,9 +3647,7 @@ def kids_turn_context(session, new_message):
                f"{step}",
                f"THIS WEEK'S STORY (use it at the HELLO hook and the STORY step, nowhere else; if Alisa already chose a "
                f"topic, her topic wins): {kids_week_story()}"]
-    mission = p.get("kids_mission")
-    if turn == 0 and mission and not p["kids_hold"] and p.get("kids_mission_day") != datetime.now().strftime("%Y-%m-%d"):
-        out.append(f'LAST LESSON\'S MISSION was: "{mission}". In this hello, ask Alisa if she did it and what happened, and celebrate her answer.')
+    # The last mission now travels in the memory card (kids_memory_card): from an earlier lesson, not "another day".
     prev = next((m.get("content", "") for m in reversed(session.get("messages", [])[:-1]) if m.get("role") == "assistant"), "")
     check = kids_sentence_check(prev, new_message) if turn > 0 else ""
     if check:
@@ -3637,18 +3678,25 @@ def kids_after_reply(session, chat_id, full_reply, media_thread=None):
     p = _kid_prefs(session)
     turn = int(p.get("kids_turn", 0) or 0)
     p["kids_last"] = time.time()
+    # What the heroes understood from her latest words (their first line) goes next to them in her memory.
+    said = p.get("kids_said") or []
+    if said and len(said[-1]) == 2 and said[-1][0] == p.get("kids_lesson"):
+        first = next((l.strip() for l in strip_shot_tags(full_reply or "").split("\n") if l.strip()
+                      and "VIDEO SCRIPT" not in l), "")
+        said[-1].append(re.sub(r"^[^:]{0,20}:\s*", "", first).split(" / ")[0][:120])
     if p.pop("kids_hold", False):
         if turn == 0:
             p["kids_turn"] = 1  # the hello was folded into the answer; never greet again
         return  # the planned step waits: answering her question was this turn
     p["kids_turn"] = turn + 1
-    if turn == 0 and p.get("kids_mission_day") != datetime.now().strftime("%Y-%m-%d"):
+    if turn == 0 and p.get("kids_mission_lesson") not in (None, p.get("kids_lesson")):
         p.pop("kids_mission", None)  # asked about in this hello; a new one comes at the goodbye
     for line in (full_reply or "").split("\n"):
         if re.search(r"misi[oó]n|mission", line, re.I):
             q = re.findall(r"[\"“«]([^\"”»]{5,120})[\"”»]", line)
             p["kids_mission"] = (q[0] if q else re.sub(r"^.*?:\s*", "", strip_shot_tags(line)))[:160]
             p["kids_mission_day"] = datetime.now().strftime("%Y-%m-%d")
+            p["kids_mission_lesson"] = p.get("kids_lesson")
             break
     if turn == 0:
         return  # the hello answers no question of hers, so no star yet
