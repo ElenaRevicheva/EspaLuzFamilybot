@@ -3563,15 +3563,17 @@ def kids_heard(new_message):
             "YOUR FIRST LINE reacts to exactly these words, before anything else. Check these in order:\n"
             # 31 Oct 2026 (web classroom: "mi mamá está pegando porque estoy chupando una paleta" -> echo, then
             # "Simon dice, salta", and "las paletas no son dulces" repeated as true). Twin: espaluz-chat kidsHeard.
-            "1. A feeling or something hard (scolded, sad, scared, hurt, missing someone) -> name the feeling kindly "
-            "(\"Parece que te sentiste triste cuando mamá se enojó. / It sounds like you felt sad when mom got upset.\"), "
+            "1. A feeling she names or clearly shows, or something hard that happened (scolded, sad, scared, hurt, missing "
+            "someone) -> name the feeling kindly. Not wanting to play is NOT sadness (that is 3); never tell her she feels "
+            "something she did not say. (\"Parece que te sentiste triste cuando mamá se enojó. / It sounds like you felt sad when mom got upset.\"), "
             "ask ONE gentle question about how she feels, and stay with her: THIS TURN HAS NO GAME AND NO NEW SENTENCE, skip "
             "the lesson step below. Use soft words; never repeat a frightening word like \"pegar / hit\" back to her.\n"
             '2. An answer to your last question (even one word, like "Starberry") -> say it back as a whole, correct sentence '
             'in both languages and praise it ("¡Tu fruta favorita es la fresa! / Your favourite fruit is the strawberry!"); '
             "that sentence is the one to practise now.\n"
-            "3. Her own idea or a refusal (\"I don't want to jump, I want to ride my bicycle\") -> follow HER idea warmly and "
-            "fit the lesson into it (\"¡Vamos en bici! / Let's ride our bikes!\").\n"
+            "3. Her own idea, topic or a refusal (\"I don't want to jump, I want to ride my bicycle\"; \"no quiero jugar... "
+            "Halloween\") -> follow HER idea warmly and fit the lesson into it (\"¡Vamos en bici! / Let's ride our bikes!\", "
+            "\"¡Hoy es Halloween! ¿De qué te vas a disfrazar? / Today is Halloween! What will you dress up as?\").\n"
             "4. Only if NO part of it makes sense -> do NOT guess and do NOT praise it: say kindly that you did not hear well "
             "and ask her to say it again (\"No te escuché bien. ¿Me lo dices otra vez? / I didn't hear you well. Can you say "
             "it again?\") and stop there: skip the lesson step below. If part of it makes sense, answer that part.\n"
@@ -3584,6 +3586,29 @@ def kids_heard(new_message):
 # dijiste que tu mamá está pegando"). Enforced in code, not left to the model. Twin: espaluz-chat KIDS_HARD.
 _KIDS_HARD = re.compile(r"peg|golpe|\bhit|grit|yell|scold|rega[nñ]|castig|punish|llor|\bcry|cried|triste|\bsad\b|miedo|"
                         r"scared|asust|duele|hurt|enoj|angry|frustr", re.I)
+
+
+# Today in Panama and the day's holiday (Alisa said "Halloween" on 31 Oct and was told she seemed sad). Dates checked:
+# 3 Nov separation from Colombia (1903), 4 Nov flag day, 5 Nov Colón day, 10 Nov first cry of independence in La Villa
+# de Los Santos, 28 Nov independence from Spain (1821), 8 Dec Mother's Day in Panama. Twin: espaluz-chat KIDS_HOLIDAYS.
+KIDS_HOLIDAYS = {
+    "10-31": "Halloween", "11-02": "Día de los Difuntos",
+    "11-03": "Día de la Separación de Panamá de Colombia (1903) - school parades with drums and flags",
+    "11-04": "Día de la Bandera de Panamá", "11-05": "Día de Colón", "11-10": "Primer Grito de Independencia en La Villa de Los Santos",
+    "11-28": "Independencia de Panamá de España (1821)", "12-08": "Día de las Madres en Panamá", "12-24": "Nochebuena",
+    "12-25": "Navidad", "12-31": "Fin de Año", "01-01": "Año Nuevo",
+}
+_ES_DAYS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+_ES_MONTHS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre",
+              "noviembre", "diciembre"]
+
+
+def kids_today():
+    now = datetime.utcnow() - timedelta(hours=5)  # Panama is UTC-5 all year (no daylight saving)
+    h = KIDS_HOLIDAYS.get(now.strftime("%m-%d"))
+    day = f"{_ES_DAYS[now.weekday()]}, {now.day} de {_ES_MONTHS[now.month - 1]}"
+    return (f"TODAY in Panama: {day}" + (f" - {h}. If she brings it up (or it fits), talk about it happily and teach a "
+                                          f"sentence about it." if h else "."))
 
 
 def kids_memory_card(p, lesson):
@@ -3642,11 +3667,18 @@ def kids_turn_context(session, new_message):
         if turn == 0:
             out.append(f"THIS WEEK'S STORY (only if it is about what she asked; otherwise ignore it): {kids_week_story()}")
     else:
+        # 31 Oct 2026 (web lesson 13:46-13:51, same rules here): the story rode along on EVERY turn, so "quiero jugar un
+        # poquitito" became the toucan again, and Titi fell silent for three replies. Story only at the hello and on its
+        # own step; both heroes every turn; today's date and Panama's real holidays. Twin: espaluz-chat kidsTurnContext.
         out = [heard + f"\nTHEN, this turn's lesson step (turn {turn + 1} of {len(KIDS_STEPS)}), built on what she just said "
                f"and only if it fits after your first line (skip it after 1 or 4 above) - her idea always wins over the plan: "
-               f"{step}",
-               f"THIS WEEK'S STORY (use it at the HELLO hook and the STORY step, nowhere else; if Alisa already chose a "
-               f"topic, her topic wins): {kids_week_story()}"]
+               f"{step}"]
+        if turn == 0 or step.startswith("THIS WEEK'S STORY"):
+            out.append(f"THIS WEEK'S STORY (one line at the hello; the whole story only on its own step; if Alisa already "
+                       f"chose a topic, her topic wins): {kids_week_story()}")
+    out.append(kids_today())
+    out.append('BOTH heroes speak in this reply: at least one "Pere [shot]:" line AND one "Titi [shot]:" line (Titi is the '
+               "playful one - let him ask the closing question or make it a little game).")
     # The last mission now travels in the memory card (kids_memory_card): from an earlier lesson, not "another day".
     prev = next((m.get("content", "") for m in reversed(session.get("messages", [])[:-1]) if m.get("role") == "assistant"), "")
     check = kids_sentence_check(prev, new_message) if turn > 0 else ""
