@@ -3585,7 +3585,7 @@ def kids_heard(new_message):
 # A hard moment is never brought back at a hello (eval 31 Oct: the web opened a new lesson with "la última vez me
 # dijiste que tu mamá está pegando"). Enforced in code, not left to the model. Twin: espaluz-chat KIDS_HARD.
 _KIDS_HARD = re.compile(r"peg|golpe|\bhit|grit|yell|scold|rega[nñ]|castig|punish|llor|\bcry|cried|triste|\bsad\b|miedo|"
-                        r"scared|asust|duele|hurt|enoj|angry|frustr", re.I)
+                        r"scared|asust|duele|hurt|enoj|angry|frustr|sangr|blood|lastim|herid|accident", re.I)
 
 
 # Today in Panama and the day's holiday (Alisa said "Halloween" on 31 Oct and was told she seemed sad). Dates checked:
