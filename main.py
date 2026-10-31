@@ -5095,7 +5095,41 @@ def handle_menu(message):
 # END OF NEW ENHANCED COMMANDS
 # =============================================================================
 
-def transcribe_audio(audio_path: str) -> str:
+def whisper_hint(session):
+    """31 Oct 2026 ("hear her better", twin of voice-to-text whisperHint): Whisper takes a `prompt` that tells it what
+    to expect, and we never sent one - a 6-year-old's answers came back as "Starberry" or Portuguese. In Alisa mode the
+    hint is the heroes' last question (like a teacher who knows what she just asked); otherwise a language hint."""
+    base = "Spanish and English, sometimes Russian. "
+    try:
+        if (session or {}).get("context", {}).get("user", {}).get("preferences", {}).get("family_role") != "alisa":
+            return base
+        last = next((m.get("content", "") for m in reversed(session.get("messages", [])) if m.get("role") == "assistant"), "")
+        lines = [re.sub(r"^[^:\[]*(\[[^\]]*\])?:\s*", "", l).strip() for l in strip_shot_tags(last).split("\n")]
+        lines = [l for l in lines if l and "VIDEO SCRIPT" not in l]
+        question = next((l for l in reversed(lines) if "?" in l), lines[-1] if lines else "")
+        return f"A 6-year-old girl answers Pere and Titi in Spanish or English. They just asked: {question[:200]}"
+    except Exception:  # noqa: BLE001 — a hint must never break transcription
+        return base
+
+
+def _echoes_hint(text, hint):
+    """With a hint and near-silence Whisper can "hear" the hint itself: a transcript of only hint words is dropped."""
+    t = _kid_words(text)
+    if len(t) < 3:
+        return False
+    h = set(_kid_words(hint))
+    return sum(1 for w in t if w in h) / len(t) > 0.8
+
+
+# Whisper's known phantoms on silence or noise (measured 31 Oct on Groq whisper-large-v3-turbo: 3 s of silence ->
+# "Thank you." / "you", pink noise -> "I'm not sure."; no_speech_prob is always 0 there, so only the text can tell).
+# A bare "gracias" is NOT on the list: a child may really say it. Twin: voice-to-text PHANTOMS.
+_PHANTOMS = {"thank you", "you", "thanks for watching", "thank you for watching", "im not sure", "i m not sure",
+             "subtitles by the amara org community", "gracias por ver el video",
+             "subtitulos realizados por la comunidad de amara org", ""}
+
+
+def transcribe_audio(audio_path: str, hint: str = "Spanish and English, sometimes Russian. ") -> str:
     """Transcribe a voice note: Groq Whisper first, OpenAI Whisper as the backup (23 Oct 2026).
 
     It was OpenAI only. When OpenAI ran out of credits on 23 Oct (429 insufficient_quota) every voice note got
@@ -5115,12 +5149,16 @@ def transcribe_audio(audio_path: str) -> str:
                     url,
                     headers={"Authorization": f"Bearer {key}"},
                     files={"file": (os.path.basename(audio_path), f)},
-                    data={"model": model, "response_format": "text"},
+                    data={"model": model, "response_format": "text", "prompt": hint, "temperature": "0"},
                     timeout=60,
                 )
             if res.status_code == 200 and res.text.strip():
                 if name != "groq":
                     print(f"🎙️ Transcription via {name} (groq failed)")
+                if _echoes_hint(res.text, hint) or " ".join(_kid_words(res.text)) in _PHANTOMS:
+                    print(f"🎙️ silence phantom or hint echo -> treated as silence: {res.text.strip()[:120]}")
+                    return None
+                print(f"🎙️ hint: {hint[:120]}")
                 return res.text.strip()
             print(f"❌ Transcription error ({name}): {res.status_code} {res.text[:160]}")
         except Exception as e:
@@ -6058,7 +6096,7 @@ def handle_voice(message):
 
         subprocess.run(["ffmpeg", "-i", temp_ogg_path, temp_mp3_path], check=True)
 
-        transcription = transcribe_audio(temp_mp3_path)
+        transcription = transcribe_audio(temp_mp3_path, whisper_hint(user_sessions.get(str(user_id))))
 
         if not transcription:
             bot.reply_to(message, "❌ No pude transcribir este mensaje de voz. / I couldn't transcribe this voice message.")
