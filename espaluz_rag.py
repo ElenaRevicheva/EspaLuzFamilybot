@@ -97,7 +97,9 @@ def _embed(text: str) -> list[float] | None:
 # ─── DB helpers ────────────────────────────────────────────────────────────
 
 def _conn():
-    return psycopg2.connect(DB_URL)
+    # Resolved at call time too: an import before load_dotenv() must not leave RAG without a database for the
+    # life of the process (the old server copy hid that case behind a hardcoded password; never again).
+    return psycopg2.connect(DB_URL or os.getenv('DATABASE_URL_UNIFIED'))
 
 
 # ─── Public API ────────────────────────────────────────────────────────────
