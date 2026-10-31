@@ -3611,10 +3611,35 @@ def kids_today():
                                           f"sentence about it." if h else "."))
 
 
-def kids_memory_card(p, lesson):
+def kids_web_memory(session):
+    """What Alisa told Pere and Titi in her WEB classroom lessons, from the SaaS kids-memory function (31 Oct 2026, Elena:
+    "a lesson on one is remembered on the other"). The function needs ESPALUZ_BOT_SECRET and a /connect-linked account;
+    without either, or when the web is slow, this is {} and the lesson runs on Telegram memory alone."""
+    secret = os.environ.get("ESPALUZ_BOT_SECRET")
+    uid = next((u for u, s in user_sessions.items() if s is session), None)
+    if not secret or uid is None:
+        return {}
+    try:
+        r = requests.post(f"{SAAS_FUNCTIONS_URL}/kids-memory", json={"telegram_user_id": str(uid)}, timeout=4,
+                          headers={"Authorization": f"Bearer {os.environ.get('SUPABASE_ANON_KEY')}",
+                                   "x-espaluz-bot-secret": secret})
+        if r.status_code != 200:
+            print(f"⚠️ kids web memory: HTTP {r.status_code}")
+            return {}
+        j = r.json()
+        print(f"🧠 kids web memory: linked={j.get('linked')} lines={len(j.get('said') or [])}")
+        return j
+    except Exception as e:
+        print(f"⚠️ kids web memory: {e}")
+        return {}
+
+
+def kids_memory_card(p, lesson, web=None):
     """What Alisa told the heroes in EARLIER lessons (newest first, with what they understood) and the last mission.
-    Hard moments, "didn't hear you" turns and echoes (nobody understood her) are left out. "" when nothing is left."""
-    said = []
+    Hard moments, "didn't hear you" turns and echoes (nobody understood her) are left out. "" when nothing is left.
+    `web` = kids_web_memory(): her web classroom lessons (already filtered by the same rules on the server) come first."""
+    said = [f'"{w.get("words")}" -> you understood: "{w.get("understood")}" (in the web classroom)'
+            for w in (web or {}).get("said") or [] if w.get("words")][:5]
     for item in reversed(p.get("kids_said") or []):
         n, words, understood = (list(item) + [""])[:3]
         if n == lesson or _KIDS_HARD.search(words) or _KIDS_HARD.search(understood or ""):
@@ -3627,6 +3652,7 @@ def kids_memory_card(p, lesson):
         if len(said) >= 10:
             break
     mission = p.get("kids_mission") if p.get("kids_mission_lesson") not in (None, lesson) else None
+    mission = mission or (web or {}).get("mission") or None
     if not said and not mission:
         return ""
     return ("\nWHAT ALISA TOLD YOU IN EARLIER LESSONS (her own words, newest first; speech-to-text may be imperfect):\n"
@@ -3652,7 +3678,10 @@ def kids_turn_context(session, new_message):
     if turn == 0:
         p["kids_lesson"] = int(p.get("kids_lesson", 0) or 0) + 1
     lesson = int(p.get("kids_lesson", 1) or 1)
-    card = kids_memory_card(p, lesson)
+    # Her web lessons are fetched once, at the hello, and kept for the rest of this lesson.
+    if turn == 0:
+        p["kids_web"] = kids_web_memory(session)
+    card = kids_memory_card(p, lesson, p.get("kids_web"))
     words = (new_message or "").strip()
     if words and not words.startswith("/") and words not in [x[1] for x in p.get("kids_said", [])]:
         p["kids_said"] = (p.get("kids_said") or [])[-29:] + [[lesson, words[:120]]]
