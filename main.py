@@ -3641,7 +3641,11 @@ def kids_web_memory(session):
 # the SaaS (kids-memory, mode "lessons"); Telegram /kids lessons from this bot's own session. Same filters as the memory
 # card: no hard moments, no adult's words, no garbled turns.
 KIDS_REPORT_GAP = 20 * 60
-_KIDS_ADULT = re.compile(r"\bmi hij[oa]\b|\bmy (daughter|son)\b|\bmam[aá] aqu[ií]\b|\bsoy (la|su) mam[aá]\b", re.I)
+# 31 Oct 17:31: "It's Alisa's mom now, Elena. Alisa doesn't want to brush her teeth" was not caught and would have gone
+# into the report as Alisa's own words. Twin: espaluz-chat / kids-memory KIDS_ADULT.
+_KIDS_ADULT = re.compile(r"\bmi hij[oa]\b|\bmy (daughter|son)\b|\bmam[aá] aqu[ií]\b|\bsoy (la|su) mam[aá]\b|"
+                         r"\b(it'?s|this is|soy|habla) [^.!?]{0,20}\b(mom|mum|mother|mam[aá])\b|\balisa'?s (mom|mum|mother)\b|"
+                         r"\balisa (has|had|is|was|does|doesn'?t|did|didn'?t|promised|no quiere|quiere|tiene|est[aá])\b", re.I)
 _KIDS_STARTER = re.compile(r"quiero empezar la clase|i want to start the class", re.I)
 
 
