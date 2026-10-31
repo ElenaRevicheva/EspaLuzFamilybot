@@ -4489,6 +4489,18 @@ def handle_kids(message):
     if user_id not in user_sessions:
         user_sessions[user_id] = create_initial_session(user_id, message.from_user, message.chat)
     apply_kids_switch(user_id, force="on")
+    # 31 Oct 2026 (Elena: the same introduction every time): the heroes introduce themselves only on the very first
+    # lesson; after that a short welcome back, and their first reply brings back something she told them (memory card).
+    p = _kid_prefs(user_sessions[user_id])
+    if any(p.get(k) for k in ("kids_introduced", "kids_lesson", "kids_said", "kids_turn", "kids_last", "kids_stars")):
+        p["kids_introduced"] = True
+        save_persistent_sessions()
+        bot.send_message(message.chat.id, "🦥 Pere y 🐒 Titi: ¡Hola de nuevo, Alisa! Te estábamos esperando.\n"
+                                          "Hello again, Alisa! We were waiting for you.\n\n"
+                                          "¿Qué nos cuentas hoy? / What will you tell us today?\n"
+                                          "(Mamá / papá: /mama para volver · to go back)")
+        return
+    p["kids_introduced"] = True
     save_persistent_sessions()
     caption = ("🦥 Pere: ¡Hola! Soy Pere. Hablo despacito y te enseño frases nuevas.\n"
                "Hello! I'm Pere. I speak slowly and I teach you new sentences.\n\n"
