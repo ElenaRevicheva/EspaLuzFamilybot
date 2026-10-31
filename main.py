@@ -2615,40 +2615,26 @@ def translate_to_es_en(text):
     baño"). Now each language is requested separately on gpt-4o-mini, and a
     result where both lines match is rejected rather than shown.
     """
+    # 31 Oct 2026: this was OpenAI-only and has been dead since its credit ran out on 23 Oct ("Translation skipped" on
+    # every message). It now walks the same provider chain as the tutor, paid first: Claude (when MODEL_TIER is not
+    # free) and OpenAI answer when they have credit and refuse in well under a second when they do not, then the free
+    # providers. A top-up is used automatically, with no setting to change.
     def _one(target_name):
         try:
-            res = requests.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers={"Authorization": f"Bearer {OPENAI_API_KEY}",
-                         "Content-Type": "application/json"},
-                json={
-                    "model": "gpt-4o-mini",
-                    "temperature": 0.2,
-                    "max_tokens": 500,
-                    "messages": [{
-                        "role": "user",
-                        "content": (
-                            f"Translate the text below into {target_name}.\n"
-                            f"Reply with ONLY the {target_name} translation - no labels, "
-                            f"no quotes, no explanation.\n\nText: {text}"
-                        ),
-                    }],
-                },
-                timeout=30,
+            from llm_chain import complete
+            text_out, errors = complete(
+                None,
+                f"Translate the text below into {target_name}.\n"
+                f"Reply with ONLY the {target_name} translation - no labels, "
+                f"no quotes, no explanation.\n\nText: {text}",
+                max_tokens=500,
+                order=("claude", "openai", "gemini", "groq", "grok"),
             )
-            body = res.json()
-            if "error" in body:
-                print(f"OpenAI API error ({target_name}): {body['error'].get('message','unknown')}")
+            if not text_out.strip():
+                print(f"Translation failed ({target_name}): {'; '.join(errors)[:300]}")
                 return None
-            choices = body.get("choices") or []
-            if not choices:
-                print(f"Unexpected API response ({target_name}): {body}")
-                return None
-            return choices[0]["message"]["content"].strip()
-        except requests.exceptions.Timeout:
-            print(f"Translation timeout ({target_name})")
-            return None
-        except Exception as e:
+            return text_out.strip().strip('"').strip()
+        except Exception as e:  # noqa: BLE001
             print(f"Translation error ({target_name}): {e}")
             return None
 
@@ -3870,13 +3856,7 @@ def process_photo(photo_file):
         image.save(buffered, format="JPEG", quality=95)  # Higher quality
         base64_image = base64.b64encode(buffered.getvalue()).decode('utf-8')
 
-        headers = {
-            "Authorization": f"Bearer {OPENAI_API_KEY}",
-            "Content-Type": "application/json"
-        }
-
         payload = {
-            "model": "gpt-4o",
             "messages": [
                 {
                     "role": "system",
@@ -3910,17 +3890,27 @@ def process_photo(photo_file):
             "max_tokens": 4000  # Increased for long texts
         }
 
-        response = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
-        result = response.json()
-
-        if "choices" in result and len(result["choices"]) > 0:
-            extracted_text = result["choices"][0]["message"]["content"]
-            
-            # ENHANCEMENT: Add text length info
-            word_count = len(extracted_text.split())
-            return f"📄 Extracted {word_count} words:\n\n{extracted_text}"
-        else:
-            return "❌ GPT-4o did not return a usable response."
+        # 31 Oct 2026: OpenAI-only since forever, dead since its credit ran out on 23 Oct. Paid first (gpt-4o reads long
+        # pages best and refuses in a split second when dry), then Grok vision on the key the bot already has (the
+        # kids photo path has used it since 30 Oct). A top-up is picked up automatically.
+        for url, key, model in (("https://api.openai.com/v1/chat/completions", OPENAI_API_KEY, "gpt-4o"),
+                                ("https://api.x.ai/v1/chat/completions", os.environ.get("XAI_API_KEY"),
+                                 os.environ.get("XAI_MODEL", "").strip() or "grok-4.20-0309-non-reasoning")):
+            if not key:
+                continue
+            try:
+                response = requests.post(url, headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                                         json={**payload, "model": model}, timeout=90)
+                result = response.json()
+                extracted_text = ((result.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
+                if extracted_text.strip():
+                    print(f"🖼️ photo read by {model}")
+                    word_count = len(extracted_text.split())
+                    return f"📄 Extracted {word_count} words:\n\n{extracted_text}"
+                print(f"⚠️ photo {model}: {response.status_code} {response.text[:160]}")
+            except Exception as e:  # noqa: BLE001 — try the next provider
+                print(f"⚠️ photo {model}: {e}")
+        return "❌ No pude leer la foto ahora. / I couldn't read the photo right now. Please try again."
 
     except Exception as e:
         print(f"Error in GPT-4o image processing: {e}")
@@ -4203,9 +4193,9 @@ def process_message_with_tracking(user_input, chat_id, user_id, message_obj):
                 try:
                     from espaluz_rag import save_turn, get_session_id_for_user
                     _rag_sid = get_session_id_for_user('telegram', memory.user_id)
-                    save_turn(_rag_sid, 'user', user_input)
-                    save_turn(_rag_sid, 'assistant', full_reply)
-                    print(f"✅ RAG embeddings saved for session {_rag_sid[:8]}...")
+                    # 31 Oct 2026: this printed "saved" for 9 days while every embedding failed - log what happened.
+                    _saved = int(save_turn(_rag_sid, 'user', user_input)) + int(save_turn(_rag_sid, 'assistant', full_reply))
+                    print(f"{'✅' if _saved == 2 else '⚠️'} RAG embeddings saved {_saved}/2 for session {_rag_sid[:8]}...")
                 except Exception as _rag_e:
                     print(f"⚠️ RAG save non-fatal: {_rag_e}")
             # Track vocabulary learned

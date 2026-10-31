@@ -1,89 +1,95 @@
 """
 EspaLuz RAG — Semantic Memory Retrieval
 ========================================
-Embeds conversation turns using OpenAI text-embedding-3-small,
-stores vectors in PostgreSQL (pgvector), retrieves semantically
-similar past interactions before each Claude call.
+Embeds conversation turns, stores vectors in PostgreSQL (pgvector), retrieves semantically similar past
+interactions before each tutor reply. Shared by EspaLuzFamilybot and EspaLuzWhatsApp (same file in both repos,
+same table) — change one, change both.
 
-Architecture:
-  save_turn(session_id, role, content)
-    → embed(content) → INSERT into espaluz_embeddings
+31 Oct 2026 — embeddings run LOCALLY on Oracle, free, always.
+It used OpenAI text-embedding-3-small only. OpenAI ran out of credit on 23 Oct; the last vector anyone stored is
+22 Oct 15:30 UTC, and every turn since logged "RAG embed error: 429" while main.py printed "RAG embeddings saved".
+The bots had a memory they could not write to or search. No free embedding API is on our keys (Gemini 402
+prepaid, xAI has no embedding model), so a small multilingual model (ES/EN/RU) runs inside the bot process via
+fastembed (ONNX, no torch): $0, no quota, nothing to top up.
 
-  retrieve_context(session_id, query, top_k=3)
-    → embed(query) → cosine similarity search → formatted string
+Why ONE model and not "paid first when funded" like the chat waterfall: vectors from two models cannot be
+compared, so switching models with the balance would make half the memory unsearchable. Paid credit is spent
+where it shows (the tutor's replies through llm_chain); here the free model is the right one every day.
+Local vectors live in their own column, `embedding_local vector(384)`: the old `embedding` column is
+vector(1536) with an ivfflat index built for OpenAI, and it keeps the 531 OpenAI rows of before 23 Oct untouched
+(tagged `model='text-embedding-3-small'`). rag_backfill.py re-embeds the whole history with the local model.
 
-Cost: ~$0.00002 per message (text-embedding-3-small = $0.02/1M tokens)
+  save_turn(session_id, role, content)       → embed → INSERT embedding_local (model = EMBED_MODEL)
+  retrieve_context(session_id, query, top_k) → embed → cosine search over embedding_local
 """
 
 import os
 import json
 import logging
+import threading
 import psycopg2
 import psycopg2.extras
 
 logger = logging.getLogger(__name__)
 
 DB_URL = os.getenv('DATABASE_URL_UNIFIED')  # set in .env; this module is imported lazily, long after load_dotenv()
-EMBED_MODEL = 'text-embedding-3-small'
-EMBED_DIM = 1536
+EMBED_MODEL = os.getenv('RAG_EMBED_MODEL', 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')
+EMBED_DIM = 384
+# Cosine similarity of this model for "the same topic" sits lower than OpenAI's (0.75 was tuned for OpenAI).
+MIN_SIMILARITY = float(os.getenv('RAG_MIN_SIMILARITY', '0.55'))
+# One download shared by both bots.
+_CACHE_DIR = os.getenv('RAG_MODEL_CACHE', '/home/ubuntu/.cache/espaluz-fastembed')
 
-# Kept for backwards compatibility with anything that read this at import.
-# Do NOT use it internally — see _openai_key() for why.
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
+_model = None
+_model_lock = threading.Lock()
+_model_failed = False
 
 
-def _openai_key() -> str:
-    """
-    Resolve the embedding key at CALL time, falling back to the bots' .env.
+def _get_model():
+    """Load the local model once per process (first call downloads it, ~220 MB, into the shared cache)."""
+    global _model, _model_failed
+    if _model is not None or _model_failed:
+        return _model
+    with _model_lock:
+        if _model is None and not _model_failed:
+            try:
+                from fastembed import TextEmbedding
+                os.makedirs(_CACHE_DIR, exist_ok=True)
+                _model = TextEmbedding(model_name=EMBED_MODEL, cache_dir=_CACHE_DIR)
+                logger.info(f'RAG: local embedding model ready ({EMBED_MODEL})')
+            except Exception as e:  # noqa: BLE001 — RAG is non-fatal; say so once, loudly
+                _model_failed = True
+                logger.error(f'RAG: local embedding model unavailable, semantic memory OFF: {e}')
+    return _model
 
-    This was previously a module-level os.getenv() evaluated at IMPORT time.
-    If any import of this module happened before load_dotenv() ran, the key
-    was permanently empty for the entire life of the process: every save_turn
-    and retrieve_context returned nothing, one warning was logged, and the
-    bot carried on with no semantic memory at all. Silent amnesia that looks
-    exactly like a working bot — so it is resolved lazily, and from disk if
-    the environment has not been populated.
-    """
-    v = (os.getenv('OPENAI_API_KEY') or '').strip()
-    if v:
-        return v
-    here = os.path.dirname(os.path.abspath(__file__))
-    for path in (os.path.join(here, '.env'),
-                 '/home/ubuntu/EspaLuzWhatsApp/.env',
-                 '/home/ubuntu/EspaLuzFamilybot/.env'):
-        try:
-            with open(path, 'r', encoding='utf-8') as f:
-                for line in f:
-                    line = line.strip()
-                    if line.startswith('OPENAI_API_KEY='):
-                        val = line.split('=', 1)[1].strip().strip('"').strip("'")
-                        if val:
-                            return val
-        except OSError:
-            continue
-    return ''
+
+_schema_ready = False
+
+
+def _ensure_schema():
+    """Tag every row with the model that made it, so a search never compares vectors from different models."""
+    global _schema_ready
+    if _schema_ready:
+        return
+    with _conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("ALTER TABLE espaluz_embeddings ADD COLUMN IF NOT EXISTS model text "
+                        "NOT NULL DEFAULT 'text-embedding-3-small'")
+            cur.execute(f"ALTER TABLE espaluz_embeddings ADD COLUMN IF NOT EXISTS embedding_local vector({EMBED_DIM})")
+        conn.commit()
+    _schema_ready = True
 
 
 # ─── Embedding ─────────────────────────────────────────────────────────────
 
 def _embed(text: str) -> list[float] | None:
-    """Call OpenAI embedding API. Returns list of 1536 floats or None on error."""
-    key = _openai_key()
-    if not key:
-        logger.warning('RAG: OPENAI_API_KEY not set (checked env and .env files)')
+    """Embed one text with the local model. Returns EMBED_DIM floats or None on error."""
+    model = _get_model()
+    if model is None or not (text or '').strip():
         return None
     try:
-        import requests
-        resp = requests.post(
-            'https://api.openai.com/v1/embeddings',
-            headers={'Authorization': f'Bearer {key}',
-                     'Content-Type': 'application/json'},
-            json={'model': EMBED_MODEL, 'input': text[:8000]},
-            timeout=10
-        )
-        resp.raise_for_status()
-        return resp.json()['data'][0]['embedding']
-    except Exception as e:
+        return [float(x) for x in next(iter(model.embed([text[:2000]])))]
+    except Exception as e:  # noqa: BLE001
         logger.warning(f'RAG embed error: {e}')
         return None
 
@@ -108,14 +114,15 @@ def save_turn(session_id: str, role: str, content: str) -> bool:
     if vec is None:
         return False
     try:
+        _ensure_schema()
         with _conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    INSERT INTO espaluz_embeddings (session_id, role, content, embedding)
-                    VALUES (%s, %s, %s, %s::vector)
+                    INSERT INTO espaluz_embeddings (session_id, role, content, embedding_local, model)
+                    VALUES (%s, %s, %s, %s::vector, %s)
                     """,
-                    (session_id, role, content[:2000], json.dumps(vec))
+                    (session_id, role, content[:2000], json.dumps(vec), EMBED_MODEL)
                 )
             conn.commit()
         return True
@@ -136,19 +143,23 @@ def retrieve_context(session_id: str, query: str, top_k: int = 3) -> str:
     if vec is None:
         return ''
     try:
+        _ensure_schema()
         with _conn() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                 cur.execute(
                     """
                     SELECT role, content,
-                           1 - (embedding <=> %s::vector) AS similarity
+                           1 - (embedding_local <=> %s::vector) AS similarity
                     FROM espaluz_embeddings
                     WHERE session_id = %s
-                      AND 1 - (embedding <=> %s::vector) > 0.75
-                    ORDER BY embedding <=> %s::vector
+                      AND model = %s
+                      AND embedding_local IS NOT NULL
+                      AND 1 - (embedding_local <=> %s::vector) > %s
+                    ORDER BY embedding_local <=> %s::vector
                     LIMIT %s
                     """,
-                    (json.dumps(vec), session_id, json.dumps(vec), json.dumps(vec), top_k)
+                    (json.dumps(vec), session_id, EMBED_MODEL, json.dumps(vec), MIN_SIMILARITY,
+                     json.dumps(vec), top_k)
                 )
                 rows = cur.fetchall()
 
