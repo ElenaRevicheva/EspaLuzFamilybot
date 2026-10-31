@@ -3735,7 +3735,9 @@ def kids_report_web():
         reported = p.setdefault("kids_reported_web", [])
         lessons, cur = [], []
         for t in fam.get("turns") or []:
-            if cur and (_utc(t["at"]) - _utc(cur[-1]["at"])).total_seconds() > KIDS_REPORT_GAP:
+            # A lesson ends after 20 quiet minutes, or when ¡Empezar! starts a new one (31 Oct: three lessons 11-13 min
+            # apart were reported as one 61-minute lesson).
+            if cur and ((_utc(t["at"]) - _utc(cur[-1]["at"])).total_seconds() > KIDS_REPORT_GAP or _KIDS_STARTER.search(t["said"])):
                 lessons.append(cur)
                 cur = []
             cur.append(t)
