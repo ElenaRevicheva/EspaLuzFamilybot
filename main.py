@@ -3635,6 +3635,167 @@ def kids_web_memory(session):
         return {}
 
 
+# === 31 Oct 2026, step 4: the parent report (ONE_FAMILY_MEMORY_PLAN Phase 4, "the paid value") ===
+# After each kids lesson (20 min with no new turn) the parent gets a short Telegram message built BY CODE from what the
+# child actually said - no model re-tells the lesson, so nothing in it can be invented. Web classroom lessons come from
+# the SaaS (kids-memory, mode "lessons"); Telegram /kids lessons from this bot's own session. Same filters as the memory
+# card: no hard moments, no adult's words, no garbled turns.
+KIDS_REPORT_GAP = 20 * 60
+_KIDS_ADULT = re.compile(r"\bmi hij[oa]\b|\bmy (daughter|son)\b|\bmam[aá] aqu[ií]\b|\bsoy (la|su) mam[aá]\b", re.I)
+_KIDS_STARTER = re.compile(r"quiero empezar la clase|i want to start the class", re.I)
+
+
+def _utc(iso):
+    return datetime.strptime(str(iso)[:19], "%Y-%m-%dT%H:%M:%S")
+
+
+def _first_line(reply):
+    line = next((l.strip() for l in (reply or "").split("\n") if l.strip()), "")
+    return re.sub(r"^[^:\[]*(\[[^\]]*\])?:\s*", "", line).split(" / ")[0]
+
+
+def _report_said(pairs):
+    """Her three richest sentences of the lesson, in the order she said them. pairs = [(her words, first reply line)]."""
+    out = []
+    for words, understood in pairs:
+        w = (words or "").strip()
+        if (not w or w.startswith(("📷", "/")) or _KIDS_STARTER.search(w) or _KIDS_HARD.search(w) or _KIDS_ADULT.search(w)
+                or re.search(r"no te escuch|didn't hear", understood or "", re.I) or len(w.split()) < 4 or w in out):
+            continue
+        out.append(w[:140])
+    keep = sorted(sorted(range(len(out)), key=lambda i: -len(out[i].split()))[:3])
+    return [out[i] for i in keep]
+
+
+def _report_practice(replies):
+    """The last sentence the heroes asked her to repeat or read (Spanish half)."""
+    best = ""
+    for reply in replies:
+        for line in (reply or "").split("\n"):
+            es = line.split(" / ")[0]
+            if not re.search(r"repite|repeat|\blee\b|\bread\b|puedes decir|\bdilo\b", es, re.I):
+                continue
+            q = re.findall(r"[“\"«]([^”\"»]{12,140})[”\"»]", es)
+            m = re.search(r"(?:repite conmigo|repeat with me)\s*:\s*(.{12,140})", es, re.I)
+            if q:
+                best = q[-1]
+            elif m:
+                best = m.group(1)
+    return best.strip(" .")
+
+
+def _report_mission(replies):
+    for reply in reversed(replies):
+        line = next((l for l in (reply or "").split("\n") if re.search(r"misi[oó]n|mission", l, re.I)), "")
+        if line:
+            q = re.findall(r"[“\"«]([^”\"»]{5,140})[”\"»]", line)
+            return (q[0] if q else re.sub(r"^.*?:\s*", "", line.split(" / ")[0]))[:160]
+    return ""
+
+
+def kids_report_text(surface, start, end, answers, said, practice="", mission="", photos=()):
+    pa = lambda t: t - timedelta(hours=5)  # Panama is UTC-5 all year
+    when = (f"{pa(end).day} {pa(end):%b}, "
+            + (f"{pa(start):%H:%M}–{pa(end):%H:%M} ({max(1, round((end - start).total_seconds() / 60))} min)"
+               if start else f"ended {pa(end):%H:%M}"))
+    lines = [f"📒 Alisa's lesson · {surface} · {when}", f"⭐ {answers} answers"]
+    if said:
+        lines += ["", "🗣️ She said (as the microphone heard it):"] + [f"• “{s}”" for s in said]
+    if photos:
+        lines += ["", "📷 She showed: " + "; ".join(photos[:3])]
+    if practice:
+        lines += ["", f"🔁 Practise tonight: “{practice}”"]
+    if mission:
+        lines += [f"🎯 Mission: {mission}"]
+    return "\n".join(lines + ["", "— Pere 🦥 y Titi 🐒 · EspaLuz"])
+
+
+def _session_for(uid):
+    return user_sessions.get(str(uid)) or user_sessions.get(int(uid)) if str(uid).isdigit() else user_sessions.get(uid)
+
+
+def kids_report_web():
+    secret = os.environ.get("ESPALUZ_BOT_SECRET")
+    if not secret:
+        return
+    r = requests.post(f"{SAAS_FUNCTIONS_URL}/kids-memory", timeout=20,
+                      json={"mode": "lessons", "since": (datetime.utcnow() - timedelta(hours=12)).isoformat() + "Z"},
+                      headers={"Authorization": f"Bearer {os.environ.get('SUPABASE_ANON_KEY')}", "x-espaluz-bot-secret": secret})
+    if r.status_code != 200:
+        print(f"⚠️ kids report (web): HTTP {r.status_code}")
+        return
+    now = datetime.utcnow()
+    for fam in r.json().get("families") or []:
+        uid, session = fam.get("telegram_user_id"), _session_for(fam.get("telegram_user_id"))
+        if not session:
+            continue
+        p = _kid_prefs(session)
+        # First run: lessons that ended in the last hour still get their report; nothing older is sent.
+        since = _utc(p.setdefault("kids_reported_web_since", (now - timedelta(hours=1)).isoformat()))
+        reported = p.setdefault("kids_reported_web", [])
+        lessons, cur = [], []
+        for t in fam.get("turns") or []:
+            if cur and (_utc(t["at"]) - _utc(cur[-1]["at"])).total_seconds() > KIDS_REPORT_GAP:
+                lessons.append(cur)
+                cur = []
+            cur.append(t)
+        if cur:
+            lessons.append(cur)
+        for lesson in lessons:
+            start, end = _utc(lesson[0]["at"]), _utc(lesson[-1]["at"])
+            if (now - end).total_seconds() < KIDS_REPORT_GAP or end < since or lesson[0]["at"] in reported:
+                continue
+            reported.append(lesson[0]["at"])
+            del reported[:-50]
+            mine = [t for t in lesson if not _KIDS_STARTER.search(t["said"])]
+            if len(mine) < 2:
+                continue
+            replies = [t["reply"] for t in lesson]
+            photos = [re.sub(r"^📷 \(foto: |\)$", "", t["said"])[:100] for t in mine if t["said"].startswith("📷 (foto:")]
+            text = kids_report_text("web classroom", start, end, len(mine),
+                                    _report_said([(t["said"], _first_line(t["reply"])) for t in mine]),
+                                    _report_practice(replies), _report_mission(replies), photos)
+            bot.send_message(int(uid), text)
+            print(f"📒 parent report sent (web lesson {start:%H:%M}-{end:%H:%M} UTC, {len(mine)} answers)")
+        save_persistent_sessions()
+
+
+def kids_report_telegram():
+    now = time.time()
+    changed = False
+    for uid, session in list(user_sessions.items()):
+        p = (session.get("context") or {}).get("user", {}).get("preferences", {}) if isinstance(session, dict) else {}
+        lesson = int(p.get("kids_lesson") or 0)
+        if not lesson:
+            continue
+        if "kids_reported_tg" not in p:  # first run: no backlog of old lessons
+            p["kids_reported_tg"], changed = lesson, True
+            continue
+        if lesson <= int(p["kids_reported_tg"]) or now - float(p.get("kids_last") or 0) < KIDS_REPORT_GAP:
+            continue
+        p["kids_reported_tg"], changed = lesson, True
+        pairs = [(x[1], (list(x) + [""])[2]) for x in p.get("kids_said") or [] if x and x[0] == lesson]
+        if len(pairs) < 2:
+            continue
+        mission = p.get("kids_mission") if p.get("kids_mission_lesson") == lesson else ""
+        bot.send_message(int(uid), kids_report_text("Telegram", None, datetime.utcfromtimestamp(float(p["kids_last"])),
+                                                    len(pairs), _report_said(pairs), mission=mission or ""))
+        print(f"📒 parent report sent (Telegram lesson {lesson}, {len(pairs)} answers)")
+    if changed:
+        save_persistent_sessions()
+
+
+def kids_report_loop():
+    time.sleep(60)
+    while True:
+        for job in (kids_report_web, kids_report_telegram):
+            try:
+                job()
+            except Exception as e:
+                print(f"⚠️ {job.__name__}: {e}")
+        time.sleep(600)
+
+
 def kids_memory_card(p, lesson, web=None):
     """What Alisa told the heroes in EARLIER lessons (newest first, with what they understood) and the last mission.
     Hard moments, "didn't hear you" turns and echoes (nobody understood her) are left out. "" when nothing is left.
@@ -6752,6 +6913,7 @@ except Exception as e:
 
 # === Start the bot with polling mode ===
 if __name__ == "__main__":
+    threading.Thread(target=kids_report_loop, daemon=True).start()  # the parent report after each kids lesson
     while True:  # Add infinite retry loop
         try:
             print("🤖 Espaluz starting in polling mode...")
