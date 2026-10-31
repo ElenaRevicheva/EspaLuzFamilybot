@@ -1858,7 +1858,7 @@ Lesson rhythm across the conversation (about 5-10 minutes):
 Themes she likes: animals, family, food, school and the classroom, my day, the clock and time, numbers to 100, the weather, feelings, friends, and Panama (sloths, toucans, the beach, the Canal).
 Never ask for personal information such as addresses, school names or phone numbers.
 """
-        system_content += kids_turn_context(session, new_message)
+        _kids_turn = kids_turn_context(session, new_message)  # appended LAST, after "Today is" (31 Oct 2026)
     elif family_role == "marina":
         system_content += """
 You're speaking with Marina, a 65-year-old learning Spanish and English. Be respectful, patient, and provide clear explanations with common examples. 
@@ -2267,6 +2267,9 @@ I'll adjust my tone to be: {emotional_calibration.get('response_tone', 'supporti
 
     # Today's date for context
     system_content += f"\n\nToday is {datetime.now().strftime('%Y-%m-%d')}."
+    # The kids turn instruction carries Alisa's own words; the model weighs the end of the prompt most (31 Oct 2026).
+    if family_role == "alisa":
+        system_content += _kids_turn
 
     # Prepare messages without system prompt
     messages = session["messages"][-MAX_HISTORY_MESSAGES:]
@@ -3501,25 +3504,35 @@ def _kid_words(s):
     return re.findall(r"[a-zñ]+", s)
 
 
+# Words too common to prove she was repeating a sentence (31 Oct 2026: "I woke up very early ... I want to ride my
+# bicycle" matched the target "I feel very happy" on "i" + "very" = 50%, and the tutor answered "¡Casi! Se dice...").
+_KID_STOP = set(("i you he she it we they a an the to of and or is am are was very so my your me yo tu el la "
+                 "los las un una y o es soy eres muy mi me te se de del que en con por para lo le no si").split())
+_ASKED_TO_REPEAT = re.compile(r"repite|repeat|dime|d[ií]lo|say it|can you say|puedes decir|ahora t[uú]|now you|lee |read ", re.I)
+
+
 def kids_sentence_check(prev_reply, said):
-    """Gentle pronunciation check: the sentence the heroes just asked for vs what speech-to-text heard.
-    Returns one instruction line for the tutor, or "" when there is nothing to compare."""
+    """Gentle pronunciation check: the sentence the heroes just asked for vs what speech-to-text heard. Runs only when
+    the heroes asked her to repeat or read, and only on real (non-stopword) words: 3+ shared and 70%+ of the target.
+    Returns one instruction line for the tutor, or "" when there is nothing to compare. Twin: espaluz-chat."""
     said_w = _kid_words(said)
-    if len(said_w) < 3 or not prev_reply:
+    if len(said_w) < 3 or not prev_reply or not _ASKED_TO_REPEAT.search(prev_reply):
         return ""
+    said_c = [w for w in said_w if w not in _KID_STOP]
     cands = re.findall(r"[\"“«]([^\"”»]{8,120})[\"”»]", prev_reply)
     for line in prev_reply.split("\n"):
         if " / " in line:
             cands += [p.split(":", 1)[-1].strip() for p in line.split(" / ")]
     best, best_score = None, 0.0
     for c in cands:
-        cw = _kid_words(c)
-        if len(cw) < 3:
+        cw = {w for w in _kid_words(c) if w not in _KID_STOP}
+        if len(cw) < 2:
             continue
-        score = len(set(cw) & set(said_w)) / len(set(cw))
-        if score > best_score:
+        shared = len(cw & set(said_c))
+        score = shared / len(cw)
+        if shared >= min(3, len(cw)) and score > best_score:
             best, best_score = c, score
-    if not best or best_score < 0.5:
+    if not best or best_score < 0.7:
         return ""
     missing = [w for w in _kid_words(best) if w not in said_w]
     extra = [w for w in said_w if w not in _kid_words(best)]
@@ -3542,6 +3555,22 @@ def kids_asked_question(text):
     return bool(_KID_QUESTION.search((text or "").strip()))
 
 
+def kids_heard(new_message):
+    """31 Oct 2026 (Alisa's re-test on the web, same rules here): the step instruction never quoted the child, so the
+    model followed the step and forgot "react to her first" - "Starberry" got a sentence about sloths, a garbled
+    transcript was praised as perfect. Every turn now opens with her exact words and what to do with them."""
+    return (f'\nALISA JUST SAID (speech-to-text, may be imperfect): "{(new_message or "").strip()[:300]}"\n'
+            "YOUR FIRST LINE reacts to exactly these words, before anything else:\n"
+            '- An answer to your last question (even one word, like "Starberry") -> say it back as a whole, correct sentence '
+            'in both languages and praise it ("¡Tu fruta favorita es la fresa! / Your favourite fruit is the strawberry!"); '
+            "that sentence is the one to practise now.\n"
+            "- Her own idea or a refusal (\"I don't want to jump, I want to ride my bicycle\") -> follow HER idea warmly and "
+            "fit the lesson into it (\"¡Vamos en bici! / Let's ride our bikes!\").\n"
+            "- Words that do not make sense together -> do NOT guess what she meant and do NOT praise it: say kindly that you "
+            "did not hear well and ask her to say it again (\"No te escuché bien. ¿Me lo dices otra vez? / I didn't hear you "
+            "well. Can you say it again?\") and STOP there: no game, no new sentence, wait for her.\n")
+
+
 def kids_turn_context(session, new_message):
     """The per-turn facts for the tutor: lesson step, this week's story, last mission, sentence check."""
     p = _kid_prefs(session)
@@ -3551,16 +3580,18 @@ def kids_turn_context(session, new_message):
     turn = int(p.get("kids_turn", 0) or 0)
     step = KIDS_STEPS[turn] if turn < len(KIDS_STEPS) else KIDS_STEP_FREE
     p["kids_hold"] = kids_asked_question(new_message)
+    heard = kids_heard(new_message) if turn > 0 else ""
     if p["kids_hold"]:
         hello = "Say hello to Alisa in a few words inside the first line, then " if turn == 0 else ""
-        out = [f"\nTHIS TURN: Alisa ASKED A QUESTION. {hello}ANSWER IT FIRST, truly and simply, for a 6-7 year old: "
+        out = [heard + f"\nTHIS TURN: Alisa ASKED A QUESTION. {hello}ANSWER IT FIRST, truly and simply, for a 6-7 year old: "
                "2-3 short lines with one real fact (if you are not sure of a fact, say what you do know - never invent). "
                "Stay on HER topic; do not start a game, a story or a new lesson step this turn. "
-               f"End with ONE question back about what she asked. (The lesson continues next turn with: {step})"]
+               f"End with ONE question about the SAME topic she asked about. (The lesson continues next turn with: {step})"]
         if turn == 0:
             out.append(f"THIS WEEK'S STORY (only if it is about what she asked; otherwise ignore it): {kids_week_story()}")
     else:
-        out = [f"\nTHIS TURN: turn {turn + 1} of {len(KIDS_STEPS)} of today's lesson. Do ONLY this step: {step}",
+        out = [heard + f"\nTHEN, this turn's lesson step (turn {turn + 1} of {len(KIDS_STEPS)}), built on what she just said "
+               f"and only if it fits after your first line - her idea always wins over the plan: {step}",
                f"THIS WEEK'S STORY (use it at the HELLO hook and the STORY step, nowhere else; if Alisa already chose a "
                f"topic, her topic wins): {kids_week_story()}"]
     mission = p.get("kids_mission")
