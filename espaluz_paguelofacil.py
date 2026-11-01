@@ -644,6 +644,13 @@ def process_webhook(payload: Dict[str, Any]) -> Dict[str, Any]:
         email=email,
         platform=platform,
     )
+    # 1 Nov 2026: the same payment, counted once, in the one payment truth (espaluz_payment_truth.py).
+    try:
+        import espaluz_payment_truth as truth
+        logging.info("PagueloFacil: payment truth %s",
+                     truth.pf_payment(platform, user_id, cod_oper, amount, email, result.get("paid_until")))
+    except Exception as truth_err:
+        logging.error("PagueloFacil: payment truth error: %s", truth_err)
     notify_ok = notify_user_paid(user_id, cod_oper, result.get("paid_until"), platform=platform)
     return {"processed": True, "cod_oper": cod_oper, "notify_ok": notify_ok, **result}
 

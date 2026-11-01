@@ -173,7 +173,15 @@ def paypal_webhook():
         webhook_data = request.get_json() or {}
         event_type = webhook_data.get('event_type', '')
         resource = webhook_data.get('resource', {})
-        
+
+        # 1 Nov 2026: the one payment truth (espaluz_payment_truth.py) - verified by PayPal, counted once, paid_until
+        # read back from PayPal. The JSON writes below stay until the gates read the truth (plan phase 2).
+        try:
+            import espaluz_payment_truth as truth
+            logging.info(f"payment truth: {truth.paypal_event(request.headers, webhook_data, os.getenv('PAYPAL_CLIENT_ID'), os.getenv('PAYPAL_CLIENT_SECRET'), os.getenv('PAYPAL_WEBHOOK_ID'))}")
+        except Exception as truth_err:
+            logging.error(f"payment truth error: {truth_err}")
+
         logging.info(f'WEBHOOK RECEIVED: {event_type}')
         logging.info(f'Resource data: {str(resource)[:500]}')
         
@@ -248,6 +256,28 @@ def home():
     )
 
 
+def _payment_truth_safety_net():
+    """1 Nov 2026: every 6 hours, re-read every known PayPal subscription from PayPal, so a missed or dropped webhook
+    never leaves a paying family 'expired'. Both EspaLuz PayPal apps belong to one merchant account."""
+    import threading
+    import time
+
+    def loop():
+        import espaluz_payment_truth as truth
+        try:
+            truth.ensure_schema()
+        except Exception as e:
+            logging.error(f"payment truth schema: {e}")
+        while True:
+            try:
+                truth.reconcile(os.getenv('PAYPAL_CLIENT_ID'), os.getenv('PAYPAL_CLIENT_SECRET'))
+            except Exception as e:
+                logging.error(f"payment truth reconcile: {e}")
+            time.sleep(6 * 3600)
+    threading.Thread(target=loop, daemon=True).start()
+
+
 if __name__ == '__main__':
+    _payment_truth_safety_net()
     logging.info('Starting PayPal Webhook Server on port 5000...')
     app.run(host='0.0.0.0', port=5000, debug=False)
