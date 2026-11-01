@@ -491,8 +491,24 @@ class TelegramPayPalSystem:
         """Check if user is allowed to use the bot (subscription, PF prepaid, or trial)."""
         user_id_str = str(user_id)
 
-        # 1. PayPal subscription (email-linked — not PagueloFacil)
-        paypal_sub = self._check_paypal_subscription(user_id_str)
+        # 0. The one payment truth (1 Nov 2026, espaluz_payment_truth.py): paid_until read from PayPal / PágueloFácil.
+        # When it knows this person, it decides the paid part; the old JSON "active" flag never expired by itself.
+        truth = None
+        try:
+            import espaluz_payment_truth
+            mapped = self._load_json(self.mapping_file).get(user_id_str) or {}
+            truth = espaluz_payment_truth.access(emails=[mapped.get("email", "")] if isinstance(mapped, dict) else [],
+                                                 telegram_id=user_id_str)
+        except Exception as e:
+            print(f"⚠️ payment truth unavailable, old checks used: {e}")
+        if truth and truth["paid_until"] is not None:
+            if truth["paid"]:
+                return {"allowed": True, "reason": "subscription" if truth["source"] == "paypal" else truth["source"],
+                        "message": f"✅ Paid until {truth['paid_until']:%d %b %Y}"}
+            paypal_sub = {}  # the paid time ended: the old JSON flag no longer counts; PágueloFácil and trial below still can
+        else:
+            # 1. PayPal subscription (email-linked — not PagueloFacil)
+            paypal_sub = self._check_paypal_subscription(user_id_str)
         if paypal_sub.get("is_active"):
             return {
                 "allowed": True,
@@ -753,7 +769,7 @@ Para continuar con EspaLuz / To continue with EspaLuz:
 🇵🇦 **PagueloFacil** (pago único $11 → 30 días, auto-activación)
 👉 Envía /pagar
 
-💳 **PayPal** (recurring — 1 week FREE, then $7.77/month)
+💳 **PayPal** (recurring — 2 weeks FREE, then $11/month)
 👉 {PAYPAL_SUBSCRIPTION_LINK}
 
 🔑 After PayPal: send your Subscription ID (I-XXXX) or email via /link.

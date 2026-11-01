@@ -81,6 +81,29 @@ def _record(key, status, source, paid_until=None, sub_data=None, telegram_id=Non
             (key.lower(), telegram_id, whatsapp_id, status, source, json.dumps(sub_data), sid, sid, paid_until))
 
 
+def access(emails=(), telegram_id=None, whatsapp_id=None):
+    """What the gates ask (plan phase 2): this person's row that is paid the longest, found by any of their ids
+    (email, Telegram id, or the phone WhatsApp linking stored in telegram_id/whatsapp_id). None = no row, or the
+    database could not answer - then the caller keeps its old checks rather than locking anyone out."""
+    digits = re.sub(r"\D", "", str(whatsapp_id or "")) or None
+    try:
+        with _conn() as c, c.cursor() as cur:
+            cur.execute(
+                """SELECT email, status, source, paid_until, paid_until > NOW() FROM subscribers
+                   WHERE lower(email) = ANY(%s) OR telegram_id = %s
+                      OR (%s::text IS NOT NULL AND (regexp_replace(coalesce(whatsapp_id,''), '\\D', '', 'g') = %s
+                                                    OR regexp_replace(coalesce(telegram_id,''), '\\D', '', 'g') = %s))
+                   ORDER BY paid_until DESC NULLS LAST LIMIT 1""",
+                ([e.lower() for e in emails if e], str(telegram_id) if telegram_id else None, digits, digits, digits))
+            row = cur.fetchone()
+    except Exception as e:
+        logging.warning(f"payment truth: access lookup failed: {e}")
+        return None
+    if not row:
+        return None
+    return {"email": row[0], "status": row[1], "source": row[2], "paid_until": row[3], "paid": bool(row[4])}
+
+
 # ---------------- PayPal ----------------
 
 def _token(client_id, secret):
