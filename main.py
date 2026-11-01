@@ -3684,6 +3684,45 @@ def kids_report_loop():
         time.sleep(600)
 
 
+def payment_reminder_loop():
+    """1 Nov 2026 (payment truth phase 3, Elena: "reminded beforehand that the free trial is coming to an end"): the
+    existing reminders - 2 days and 24 h before a trial or a PágueloFácil month ends, with /pagar + the PayPal link,
+    each sent once - used to wait for the user's next message. Every 10 minutes they now go out on time. A family paid
+    by PayPal gets none: it renews by itself."""
+    time.sleep(90)
+    while True:
+        try:
+            if PAYPAL_SYSTEM_AVAILABLE and paypal_system:
+                import espaluz_payment_truth
+                ids = set(paypal_system._load_trials().keys())
+                try:
+                    from espaluz_paguelofacil import _load_store
+                    ids |= {str(u.get("user_id")) for u in _load_store().get("users", {}).values()
+                            if u.get("platform") == "telegram" and u.get("user_id")}
+                except Exception:
+                    pass
+                for uid in ids:
+                    if not uid.isdigit():
+                        continue
+                    truth = espaluz_payment_truth.access(telegram_id=uid)
+                    if truth and truth["paid"] and truth["source"] == "paypal":
+                        continue
+                    pf = paguelofacil_system.get_access_info(uid) if paguelofacil_system else {"active": False}
+                    if pf.get("active"):
+                        result = {"reason": "paguelofacil", "paguelofacil_info": pf}
+                    elif paypal_system.get_trial_status(uid).get("is_active"):
+                        result = {"reason": "trial"}
+                    else:
+                        continue
+                    msg = paypal_system.get_payment_reminder_message(uid, result)
+                    if msg:
+                        bot.send_message(int(uid), msg)
+                        print(f"⏰ payment reminder sent on time ({result['reason']})")
+        except Exception as e:
+            print(f"⚠️ payment_reminder_loop: {e}")
+        time.sleep(600)
+
+
 def kids_tidy(text):
     """How a kids reply looks in the chat (31 Oct 2026, Elena: "kids session is ugly"): no adult "🤖 Espaluz:" header,
     each hero always wears his own badge (🦥 Pere, 🐒 Titi) instead of whatever emoji the model put first, a blank line
@@ -5549,13 +5588,13 @@ def handle_pagar(message):
 
     access = paguelofacil_system.get_access_info(user_id)
     if access.get("active"):
+        # 1 Nov 2026: this used to refuse ("renew early with /pagar" - and /pagar refused again). Early renewal is
+        # allowed: grant_access adds the 30 days on top of the days left.
         bot.reply_to(
             message,
-            f"✅ Ya tienes acceso activo hasta {access['paid_until']} ({access['days_remaining']} días).\n"
-            "You already have active access.\n\n"
-            "Para renovar antes de que expire, usa /pagar de nuevo.",
+            f"✅ Tienes acceso hasta {access.get('paid_until_display') or access['paid_until'][:10]} ({access['days_remaining']} días).\n"
+            "You have access until then. Paying now adds 30 more days on top.",
         )
-        return
 
     bot.reply_to(message, "🔗 Generando enlace de pago seguro… / Creating secure payment link…")
     result = paguelofacil_system.create_payment_link(user_id)
@@ -6698,6 +6737,7 @@ except Exception as e:
 # === Start the bot with polling mode ===
 if __name__ == "__main__":
     threading.Thread(target=kids_report_loop, daemon=True).start()  # the parent report after each kids lesson
+    threading.Thread(target=payment_reminder_loop, daemon=True).start()  # trial / PágueloFácil reminders on time
     while True:  # Add infinite retry loop
         try:
             print("🤖 Espaluz starting in polling mode...")

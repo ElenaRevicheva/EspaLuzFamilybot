@@ -44,6 +44,7 @@ class TelegramPayPalSystem:
         
         # Initialize files if they don't exist
         self._ensure_files()
+        self._import_json_trials()
     
     def _ensure_files(self):
         """Ensure data files exist"""
@@ -393,10 +394,52 @@ class TelegramPayPalSystem:
             logging.error(f"❌ Error storing verified subscriber: {e}")
     
     # ==================== TRIAL SYSTEM ====================
+    # 1 Nov 2026 (payment truth phase 3, cto-aipa docs/espaluz/ONE_PAYMENT_TRUTH_PLAN_2026-11-01.md): Telegram trials
+    # live in the SAME espaluz_unified.user_trials table as WhatsApp's, keyed "tg:<telegram id>". telegram_trials.json
+    # is imported once (never overwrites a row) and kept as an archive; it is the fallback only if the database is down.
+
+    def _trials_db(self):
+        import psycopg2
+        return psycopg2.connect(os.getenv("ESPALUZ_UNIFIED_DB_URL") or os.getenv("DATABASE_URL_UNIFIED"))
+
+    def _load_trials(self) -> Dict[str, Any]:
+        try:
+            with self._trials_db() as c, c.cursor() as cur:
+                cur.execute("SELECT user_id, trial_start, trial_end, status, messages_sent, user_info "
+                            "FROM user_trials WHERE user_id LIKE 'tg:%'")
+                return {r[0][3:]: {"user_id": r[0][3:], "trial_start": r[1].isoformat(), "trial_end": r[2].isoformat(),
+                                   "status": r[3], "messages_sent": r[4] or 0, "org_code": (r[5] or {}).get("org_code"),
+                                   "created_at": r[1].isoformat()} for r in cur.fetchall()}
+        except Exception as e:
+            logging.warning(f"Telegram trials: database unavailable, JSON fallback: {e}")
+            return self._load_json(self.trials_file)
+
+    def _save_trial(self, user_id: str, data: Dict[str, Any], only_if_new: bool = False) -> None:
+        try:
+            with self._trials_db() as c, c.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO user_trials (user_id, trial_start, trial_end, status, messages_sent, user_info, created_at) "
+                    "VALUES (%s,%s,%s,%s,%s,%s::jsonb,NOW()) ON CONFLICT (user_id) DO "
+                    + ("NOTHING" if only_if_new else
+                       "UPDATE SET trial_end = EXCLUDED.trial_end, status = EXCLUDED.status, messages_sent = EXCLUDED.messages_sent"),
+                    ("tg:" + str(user_id), data["trial_start"], data["trial_end"], data.get("status", "active"),
+                     data.get("messages_sent", 0), json.dumps({"platform": "telegram", "org_code": data.get("org_code")})))
+            return
+        except Exception as e:
+            logging.warning(f"Telegram trials: database unavailable, JSON fallback: {e}")
+        trials = self._load_json(self.trials_file)
+        trials[str(user_id)] = data
+        self._save_json(self.trials_file, trials)
+
+    def _import_json_trials(self) -> None:
+        for uid, data in (self._load_json(self.trials_file) or {}).items():
+            if isinstance(data, dict) and data.get("trial_end"):
+                self._save_trial(uid, data, only_if_new=True)
+
     
     def start_trial(self, user_id: str, org_code: str = None) -> Dict[str, Any]:
         """Start a free trial for a user"""
-        trials = self._load_json(self.trials_file)
+        trials = self._load_trials()
         user_id_str = str(user_id)
         
         # Check if user already has a trial
@@ -419,8 +462,7 @@ class TelegramPayPalSystem:
             "created_at": trial_start.isoformat()
         }
         
-        trials[user_id_str] = trial_data
-        self._save_json(self.trials_file, trials)
+        self._save_trial(user_id_str, trial_data)
         self._clear_trial_reminders(user_id_str)
         
         logging.info(f"✅ Started {trial_days}-day trial for user {user_id}")
@@ -428,7 +470,7 @@ class TelegramPayPalSystem:
     
     def get_trial_status(self, user_id: str) -> Dict[str, Any]:
         """Get trial status for a user"""
-        trials = self._load_json(self.trials_file)
+        trials = self._load_trials()
         user_id_str = str(user_id)
         
         if user_id_str not in trials:
@@ -460,16 +502,16 @@ class TelegramPayPalSystem:
     
     def increment_message_count(self, user_id: str):
         """Increment message count for a user"""
-        trials = self._load_json(self.trials_file)
+        trials = self._load_trials()
         user_id_str = str(user_id)
         
         if user_id_str in trials:
             trials[user_id_str]["messages_sent"] = trials[user_id_str].get("messages_sent", 0) + 1
-            self._save_json(self.trials_file, trials)
+            self._save_trial(user_id_str, trials[user_id_str])
     
     def extend_trial(self, user_id: str, extra_days: int = 7) -> bool:
         """Extend a user's trial (admin function)"""
-        trials = self._load_json(self.trials_file)
+        trials = self._load_trials()
         user_id_str = str(user_id)
         
         if user_id_str not in trials:
@@ -480,7 +522,7 @@ class TelegramPayPalSystem:
         
         trials[user_id_str]["trial_end"] = new_end.isoformat()
         trials[user_id_str]["status"] = "active"
-        self._save_json(self.trials_file, trials)
+        self._save_trial(user_id_str, trials[user_id_str])
         
         logging.info(f"✅ Extended trial for {user_id} by {extra_days} days")
         return True
@@ -904,7 +946,7 @@ Renueva cuando quieras / Renew anytime:
     
     def get_all_trials(self) -> Dict[str, Any]:
         """Get all trial users"""
-        return self._load_json(self.trials_file)
+        return self._load_trials()
     
     def get_all_subscribers(self) -> Dict[str, Any]:
         """Get all subscribers"""
@@ -912,7 +954,7 @@ Renueva cuando quieras / Renew anytime:
     
     def get_stats(self) -> Dict[str, Any]:
         """Get system statistics"""
-        trials = self._load_json(self.trials_file)
+        trials = self._load_trials()
         subscribers = self._load_json(self.subscribers_file)
         
         now = datetime.now()
