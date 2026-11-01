@@ -3357,7 +3357,7 @@ def hero_tts(speaker, text, path):
                           json={"text": text, "userId": "telegram", "hero": speaker},
                           headers={"Authorization": f"Bearer {os.environ.get('SUPABASE_ANON_KEY', '')}"})
         j = r.json() if r.status_code == 200 else {}
-        if j.get("audioContent") and str(j.get("spokenBy", "")).startswith(("gemini", "minimax")):
+        if j.get("audioContent"):  # any voice the shared service gives (Gemini, MiniMax, OpenAI after a top-up)
             with open(path, "wb") as f:
                 f.write(base64.b64decode(j["audioContent"]))
             return True
