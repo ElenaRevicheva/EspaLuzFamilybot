@@ -3565,7 +3565,7 @@ def _report_mission(replies):
     return ""
 
 
-def kids_report_text(surface, start, end, answers, said, practice="", mission="", photos=()):
+def kids_report_text(surface, start, end, answers, said, practice="", mission="", photos=(), together=""):
     pa = lambda t: t - timedelta(hours=5)  # Panama is UTC-5 all year
     when = (f"{pa(end).day} {pa(end):%b}, "
             + (f"{pa(start):%H:%M}–{pa(end):%H:%M} ({max(1, round((end - start).total_seconds() / 60))} min)"
@@ -3579,6 +3579,8 @@ def kids_report_text(surface, start, end, answers, said, practice="", mission=""
         lines += ["", f"🔁 Practise tonight: “{practice}”"]
     if mission:
         lines += [f"🎯 Mission: {mission}"]
+    if together:  # the Leaply-style game for parent + child (kids-memory TOGETHER, the same on every channel)
+        lines += ["", f"🧠 Tomorrow, 2 minutes together: {together}"]
     return "\n".join(lines + ["", "— Pere 🦥 y Titi 🐒 · EspaLuz"])
 
 
@@ -3591,13 +3593,14 @@ def kids_report_web():
     if not secret:
         return
     r = requests.post(f"{SAAS_FUNCTIONS_URL}/kids-memory", timeout=20,
-                      json={"mode": "lessons", "since": (datetime.utcnow() - timedelta(hours=12)).isoformat() + "Z"},
+                      json={"mode": "lessons", "since": (datetime.utcnow() - timedelta(hours=47)).isoformat() + "Z"},
                       headers={"Authorization": f"Bearer {os.environ.get('SUPABASE_ANON_KEY')}", "x-espaluz-bot-secret": secret})
     if r.status_code != 200:
         print(f"⚠️ kids report (web): HTTP {r.status_code}")
         return
     now = datetime.utcnow()
-    for fam in r.json().get("families") or []:
+    j = r.json()
+    for fam in j.get("families") or []:
         uid, session = fam.get("telegram_user_id"), _session_for(fam.get("telegram_user_id"))
         if not session:
             continue
@@ -3630,9 +3633,18 @@ def kids_report_web():
             surface = "Telegram" if all(t.get("src") == "telegram" for t in lesson) else "web classroom"
             text = kids_report_text(surface, start, end, len(mine),
                                     _report_said([(t["said"], _first_line(t["reply"])) for t in mine]),
-                                    _report_practice(replies), _report_mission(replies), photos)
+                                    _report_practice(replies), _report_mission(replies), photos,
+                                    j.get("together_tomorrow") or "")
             bot.send_message(int(uid), text)
             print(f"📒 parent report sent ({surface} lesson {start:%H:%M}-{end:%H:%M} UTC, {len(mine)} answers)")
+        # 1 Nov 2026 (Leaply Kids, the daily ritual): once a day from 17:00 Panama, a family that had a lesson in the
+        # last two days gets today's 2-minute game to do together, then Pere and Titi. It stops by itself when lessons stop.
+        day = now - timedelta(hours=5)
+        if j.get("together_today") and day.hour >= 17 and p.get("kids_ritual_day") != day.strftime("%Y-%m-%d"):
+            p["kids_ritual_day"] = day.strftime("%Y-%m-%d")
+            bot.send_message(int(uid), "🧠 Hoy, 5 minutos con Alisa / 5 minutes with Alisa today\n\n"
+                                       f"🤸 {j['together_today']}\n\nLuego Pere y Titi / Then Pere and Titi: /kids")
+            print("🧠 kids daily ritual sent (Telegram)")
         save_persistent_sessions()
 
 
