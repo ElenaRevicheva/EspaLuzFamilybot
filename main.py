@@ -1816,50 +1816,8 @@ THIS IS MANDATORY. NO ASTERISKS ALLOWED.
         except Exception as e:
             print(f"⚠️ Memory retrieval non-fatal: {e}")
 
-    # Add family member customization
-    if family_role == "alisa":
-        # Elena, 22 Oct 2026: real bilingual sentences (not single words), taught by Pere + Titi. 30 Oct 2026: ages 6-7 (first grade), not toddlers.
-        system_content += """
-You're speaking with Alisa, a girl aged 6 to 7 (first grade) who is learning Spanish and English. She is a schoolchild, not a toddler: never use baby talk. Two friends from Panama teach her together:
-- Pere: a calm, gentle baby sloth with a juicy green knitted scarf. He speaks slowly and kindly, teaches the new sentences and leads the calm breathing.
-- Titi: a tiny, playful Geoffroy's tamarin with an orange bandana. He loves movement games and sometimes makes a funny little mistake on purpose so Alisa can correct him.
-
-How to talk to Alisa:
-- Always use real, complete sentences, never single words. Say each idea in Spanish first, then the same idea in English on the next line.
-  Example: "Hoy vamos a jugar con los colores del arcoiris. / Today we are going to play with the colors of the rainbow."
-- Keep sentences clear for a 6-7 year old (about 6-12 words; two ideas may be joined with "y / and" or "porque / because"), warm and playful, at most 1-2 emojis per message.
-- Let Pere and Titi speak by name ("Pere: ..." / "Titi: ...").
-- The [VIDEO SCRIPT START] ... [VIDEO SCRIPT END] block is 2-4 short lines and EVERY line starts with "Pere [shot]:" or "Titi [shot]:" (both heroes speak), a Spanish sentence then the same sentence in English. Each hero speaks his lines in his own voice, and [shot] names the picture shown while he says the line, so choose the shot that matches what the line says or does.
-  Pere's shots: talk, hello, counting, thinking, clap, listening, breathing, sleepy, goodbye. Titi's shots: talk, hello, cheer, silly, dance, jump, counting, freeze, oops, listening, goodbye. Both together: highfive, peekaboo. Use "talk" when nothing fits. Never give two lines in a row the same shot, and across the lesson use many different ones. Shots by lesson step: hello = Pere [hello] then Titi [hello]; wake-up = Titi [jump], [counting], [freeze] or [dance]; new sentences = Pere [talk], [thinking], [listening], praise = Pere [clap] or Titi [cheer]; the game (a riddle or "what's wrong?") = Titi [oops], [silly], [peekaboo]; calm = Pere [breathing], [sleepy]; the end = [highfive] then [goodbye]. Example:
-  Pere [hello]: Hola, Alisa. Hoy hablamos de animales. / Hello, Alisa. Today we talk about animals.
-  Titi [cheer]: ¡Mi animal favorito es el tucán! / My favorite animal is the toucan!
-  Pere [listening]: ¿Cuál es tu animal favorito? / What is your favorite animal?
-- End every message with ONE simple question and invite Alisa to answer with a whole sentence, in Spanish or English.
-- If she makes a mistake, praise the try and say the correct whole sentence once; never say "wrong".
-- Once per lesson: write one short sentence and ask her to READ it out loud herself (she is learning to read); ask one "¿Por qué...? / Why...?" question and welcome an answer with "porque / because"; and at the goodbye give her a mission: one sentence to say today to a real person (mamá, a friend, the teacher, the shop in Panama).
-- First react to what Alisa just said: answer her question or say her sentence back correctly, then continue the lesson.
-- Your Spanish must be perfectly correct, because a child copies it. "muy" never goes with a verb, use "mucho" ("Amo mucho a mi mamá", never "Amo a mi mamá muy"); for loving people use "querer" or "amar", not "gustar". "¿Qué xopá?" is casual Panamanian slang for "what's up", not a loving greeting.
-- Each message is ONE step of the lesson rhythm below (THIS TURN names it). After the first hello, never greet again and never restart the lesson; continue from where the conversation is.
-- A real dialogue, not a lecture: 2-3 short lines and ONE question, then stop and wait for her. Repeat her own words back to her (corrected if needed). Follow HER topic: if she talks about her cat, today's sentences are about her cat.
-- Both ways: if she speaks English, give her the Spanish; if she speaks Spanish, give her the English. Buddy-style apps teach one language; she learns both.
-- Correct only REAL mistakes. If Alisa said it correctly, keep her words exactly (a child who says "mi gata blanca" has a girl cat: never change it to "gato blanco"). Remember what Alisa already told you in this lesson (a pet's name, a friend, a colour) and use it; never ask for it again.
-- If she sent a photo (a toy, a drawing, her lunch), Pere and Titi talk about what is in it with real curiosity and build today's sentence from it.
-- The person talking now is ALWAYS Alisa, the child, even though the account is her parent's: call her Alisa, never by the parent's name, and never invent family members (no sister or brother unless Alisa says so in this lesson).
-- If the memory above shows sentences Alisa said or learned before, open by inviting her to say one of them again and praise her, then teach new ones (the same words come back and grow).
-
-Lesson rhythm across the conversation (about 5-10 minutes):
-1. Hello from both heroes and one question about her day.
-2. Wake-up game with Titi: jumps, "Simon dice / Simon says", or the cross-crawl (right hand to left knee, left hand to right knee).
-3. Pere teaches 3 useful new sentences on today's theme, one at a time, and asks her to repeat each.
-4. A game with Titi that uses those sentences: a riddle ("Soy verde y lento. ¿Quién soy? / I am green and slow. Who am I?"), Titi's funny mistake to correct, or reading one sentence aloud.
-5. Calm moment with Pere: hands on the belly, three slow breaths together, and one feelings sentence ("Me siento feliz. / I feel happy.").
-6. Praise, a star, today's mission (one sentence to say to a real person), and goodbye from both.
-
-Themes she likes: animals, family, food, school and the classroom, my day, the clock and time, numbers to 100, the weather, feelings, friends, and Panama (sloths, toucans, the beach, the Canal).
-Never ask for personal information such as addresses, school names or phone numbers.
-"""
-        _kids_turn = kids_turn_context(session, new_message)  # appended LAST, after "Today is" (31 Oct 2026)
-    elif family_role == "marina":
+    # Add family member customization (Alisa is not here since 1 Nov 2026: her lessons run on the kids brain)
+    if family_role == "marina":
         system_content += """
 You're speaking with Marina, a 65-year-old learning Spanish and English. Be respectful, patient, and provide clear explanations with common examples. 
 Use short sentences with straightforward vocabulary. Explain cultural context when relevant. Be supportive and encouraging, recognizing the challenge of learning languages later in life.
@@ -2267,9 +2225,6 @@ I'll adjust my tone to be: {emotional_calibration.get('response_tone', 'supporti
 
     # Today's date for context
     system_content += f"\n\nToday is {datetime.now().strftime('%Y-%m-%d')}."
-    # The kids turn instruction carries Alisa's own words; the model weighs the end of the prompt most (31 Oct 2026).
-    if family_role == "alisa":
-        system_content += _kids_turn
 
     # Prepare messages without system prompt
     messages = session["messages"][-MAX_HISTORY_MESSAGES:]
@@ -2774,6 +2729,12 @@ def _telegram_llm_fallback_reply(mcp_request, content_input):
 
 def ask_claude_with_mcp(session, translated_input):
     """Use Claude API with Groq → OpenAI fallbacks, formatted for bilingual response and video script."""
+
+    # Alisa's lessons come from the ONE kids brain (1 Nov 2026). The hero video is cut from the heroes' tagged lines,
+    # which this bot's video maker reads inside the script block, so the reply is also wrapped as the script.
+    if session.get("context", {}).get("user", {}).get("preferences", {}).get("family_role") == "alisa":
+        reply = kids_brain_reply(session, session.pop("kids_image", None))
+        return f"{reply}\n\n[VIDEO SCRIPT START]\n{reply}\n[VIDEO SCRIPT END]", strip_emojis(reply), ""
 
     user_message = session["messages"][-1]["content"] if session["messages"] else ""
     should_use_extended = is_complex_language_topic(user_message)
@@ -3462,32 +3423,9 @@ KIDS_ON = ("soy alisa", "я алиса", "i am alisa", "i'm alisa")
 KIDS_OFF = ("soy mamá", "soy mama", "soy elena", "я мама", "я елена", "i am mom", "i'm mom")
 
 
-# ===== Kids lesson state (30 Oct 2026, Elena: "a real dialogue, informational and emotionally rich, beat Buddy") =====
-# The tutor used to GUESS where the lesson was from history (it re-greeted and wrote 15-line lessons). Now the bot keeps
-# the turn, the week's story, the last mission and the stars in the session, and tells the tutor each turn.
-KIDS_STEPS = [
-    "HELLO: both heroes say hello in 1-2 short lines; if a list of EARLIER LESSONS is above, the first line brings back ONE happy thing from it (\"La última vez me dijiste que...\"); mention this week's story in one line, then ONE question about her day.",
-    "WAKE-UP GAME with Titi: one quick movement game (jumps, 'Simon dice / Simon says', or right hand to left knee).",
-    "NEW SENTENCE 1: Pere teaches ONE useful sentence built on what Alisa talked about, and asks her to say it.",
-    "NEW SENTENCE 2: one more sentence on her topic; ask her to say it, or to answer a '¿Por qué...? / Why...?' with 'porque / because'.",
-    "GAME with Titi: a riddle, Titi's funny mistake for her to correct, or ask her to READ one short sentence aloud.",
-    "THIS WEEK'S STORY: the heroes ask Alisa to help solve the story's problem; name how the hero feels; tell the Panama fact.",
-    "CALM with Pere: hands on the belly, three slow breaths together, and one feelings sentence.",
-    "GOODBYE: praise, a star, today's mission (one sentence to say to a real person), and goodbye from both.",
-]
-KIDS_STEP_FREE = "FREE TALK: the lesson is done; keep talking about HER topic, short, one question, warm."
-# One story per week (ISO week). Every fact is checked: Geoffroy's tamarin lives in Panama; sloths come down about once a
-# week; the keel-billed toucan's bill is big but light; the golden frog is a national symbol of Panama; Canal locks lift
-# ships like steps of water (opened 1914); sea turtles nest on Panama's beaches; the harpy eagle is Panama's national bird.
-KIDS_STORIES = [
-    "Titi lost his favourite mango in Parque Natural Metropolitano and feels sad; Alisa helps him look (up, down, behind, under). Fact: the Geoffroy's tamarin, like Titi, lives in Panama's forests.",
-    "Pere is scared of the thunder in the rainy season; Alisa helps him feel brave with slow breaths. Fact: sloths come down from their tree only about once a week.",
-    "A toucan feels shy about her big colourful beak; Alisa tells her why it is beautiful. Fact: the toucan's beak is big but very light.",
-    "Titi cannot find his friend the golden frog; Alisa helps by counting and looking near the stream. Fact: the golden frog is a symbol of Panama.",
-    "Pere and Titi watch a big ship cross the Panama Canal and feel excited; Alisa helps count the steps of water. Fact: the Canal's locks lift ships like steps of water, and it opened in 1914.",
-    "Baby sea turtles walk to the sea at night and feel a little scared; Alisa cheers for them. Fact: sea turtles lay their eggs on Panama's beaches.",
-    "A big harpy eagle visits the park and Titi feels nervous; Alisa helps them become friends. Fact: the harpy eagle is Panama's national bird.",
-]
+# ===== Kids lessons (1 Nov 2026, ONE_FAMILY_MEMORY_PLAN Phase 3, Elena: "it should be one brain") =====
+# The lesson steps, the week's stories, the memory card, the sentence check, the holidays and every safety rule live
+# in ONE place: the SaaS espaluz-chat function (kids_brain_reply below). This bot keeps only what Telegram needs.
 KIDS_NEW_LESSON_AFTER = 3 * 3600  # 3 hours of quiet = a new lesson starts at HELLO
 
 
@@ -3495,8 +3433,61 @@ def _kid_prefs(session):
     return session.setdefault("context", {}).setdefault("user", {}).setdefault("preferences", {})
 
 
-def kids_week_story():
-    return KIDS_STORIES[datetime.now().isocalendar()[1] % len(KIDS_STORIES)]
+def kids_brain_reply(session, image_b64=None):
+    """One lesson turn from the kids brain - the SaaS espaluz-chat function, the same Pere and Titi as the web classroom
+    and EspaLuz WhatsApp - called with the bot's shared secret and the Telegram user id. A family linked with /connect
+    gets its memory from every channel and the turn is saved there (source 'telegram'); an unlinked family is a guest:
+    the same heroes and rules, no memory between channels. Returns the heroes' tagged lines ("Pere [hello]: ...")."""
+    p = _kid_prefs(session)
+    uid = str(session.get("user_id") or next((u for u, s in user_sessions.items() if s is session), ""))
+    if time.time() - float(p.get("kids_last", 0) or 0) > KIDS_NEW_LESSON_AFTER:
+        p["kids_turn"] = 0
+    if int(p.get("kids_turn", 0) or 0) == 0:
+        p["kids_lesson"] = int(p.get("kids_lesson", 0) or 0) + 1
+        p["kids_history"] = []
+    hist = p.get("kids_history") or []
+    said = (session.get("messages") or [{}])[-1].get("content", "") or "📷"
+    kids = {"history": hist[-10:], "turn": len(hist) // 2}
+    if image_b64:
+        kids["image"] = image_b64
+    if not p.get("kids_linked") and p.get("kids_mission"):
+        kids["mission"] = p["kids_mission"]  # a linked family's last mission comes from its memory card instead
+    data = {}
+    try:
+        r = requests.post(f"{SAAS_FUNCTIONS_URL}/espaluz-chat", timeout=90,
+                          json={"message": said, "telegram_user_id": uid, "guest": True, "kids": kids},
+                          headers={"Authorization": f"Bearer {os.environ.get('SUPABASE_ANON_KEY')}",
+                                   "x-espaluz-bot-secret": os.environ.get("ESPALUZ_BOT_SECRET", "")})
+        data = r.json() if r.status_code == 200 else {}
+        if not data.get("response"):
+            print(f"⚠️ kids brain: HTTP {r.status_code} {r.text[:160]}")
+    except Exception as e:
+        print(f"⚠️ kids brain: {e}")
+    reply = (data.get("response") or "").strip()
+    if not reply:
+        return ("Pere [listening]: Uy, me quedé dormido un momento. ¿Me lo dices otra vez? / "
+                "Oops, I fell asleep for a moment. Can you say it again?")
+    heard = data.get("userMessage") or said
+    p["kids_linked"] = bool(data.get("linked"))
+    p["kids_history"] = (hist + [{"role": "user", "content": heard}, {"role": "assistant", "content": reply}])[-20:]
+    # Her words per lesson, for the parent report of a guest family (a linked family's report comes from the SaaS).
+    if heard.strip() and not heard.startswith("/"):
+        p["kids_said"] = (p.get("kids_said") or [])[-29:] + [[p.get("kids_lesson"), heard.strip()[:120]]]
+    print(f"🦥🐒 kids turn {len(hist) // 2} answered by the kids brain ({data.get('provider')}, "
+          f"{'linked' if p['kids_linked'] else 'guest'})")
+    return reply
+
+
+def kids_stars_server(uid):
+    """A linked family's stars, counted by the SaaS over every channel (kids-memory mode "stars"); None if unknown."""
+    try:
+        r = requests.post(f"{SAAS_FUNCTIONS_URL}/kids-memory", timeout=15, json={"mode": "stars", "telegram_user_id": str(uid)},
+                          headers={"Authorization": f"Bearer {os.environ.get('SUPABASE_ANON_KEY')}",
+                                   "x-espaluz-bot-secret": os.environ.get("ESPALUZ_BOT_SECRET", "")})
+        return int(r.json().get("stars")) if r.status_code == 200 else None
+    except Exception as e:
+        print(f"⚠️ kids stars: {e}")
+        return None
 
 
 def _kid_words(s):
@@ -3505,134 +3496,10 @@ def _kid_words(s):
     return re.findall(r"[a-zñ]+", s)
 
 
-# Words too common to prove she was repeating a sentence (31 Oct 2026: "I woke up very early ... I want to ride my
-# bicycle" matched the target "I feel very happy" on "i" + "very" = 50%, and the tutor answered "¡Casi! Se dice...").
-_KID_STOP = set(("i you he she it we they a an the to of and or is am are was very so my your me yo tu el la "
-                 "los las un una y o es soy eres muy mi me te se de del que en con por para lo le no si").split())
-_ASKED_TO_REPEAT = re.compile(r"repite|repeat|dime|d[ií]lo|say it|can you say|puedes decir|ahora t[uú]|now you|lee |read ", re.I)
-
-
-def kids_sentence_check(prev_reply, said):
-    """Gentle pronunciation check: the sentence the heroes just asked for vs what speech-to-text heard. Runs only when
-    the heroes asked her to repeat or read, and only on real (non-stopword) words: 3+ shared and 70%+ of the target.
-    Returns one instruction line for the tutor, or "" when there is nothing to compare. Twin: espaluz-chat."""
-    said_w = _kid_words(said)
-    if len(said_w) < 3 or not prev_reply or not _ASKED_TO_REPEAT.search(prev_reply):
-        return ""
-    said_c = [w for w in said_w if w not in _KID_STOP]
-    cands = re.findall(r"[\"“«]([^\"”»]{8,120})[\"”»]", prev_reply)
-    for line in prev_reply.split("\n"):
-        if " / " in line:
-            cands += [p.split(":", 1)[-1].strip() for p in line.split(" / ")]
-    best, best_score = None, 0.0
-    for c in cands:
-        cw = {w for w in _kid_words(c) if w not in _KID_STOP}
-        if len(cw) < 2:
-            continue
-        shared = len(cw & set(said_c))
-        score = shared / len(cw)
-        if shared >= min(3, len(cw)) and score > best_score:
-            best, best_score = c, score
-    if not best or best_score < 0.7:
-        return ""
-    missing = [w for w in _kid_words(best) if w not in said_w]
-    extra = [w for w in said_w if w not in _kid_words(best)]
-    if not missing:
-        return f'SENTENCE CHECK: she said the target sentence "{best}" correctly - celebrate it in one line.'
-    return (f'SENTENCE CHECK: target "{best}"; speech-to-text heard "{said}"; missing words: {", ".join(missing[:4])}'
-            + (f'; she said instead: {", ".join(extra[:4])}' if extra else "")
-            + '. Start with one gentle line like "¡Casi! Se dice ...", say the whole sentence once, then go on.')
-
-
-_KID_QUESTION = re.compile(
-    r"\?|¿|^\s*(where|what|why|how|who|which|when|can you|could you|tell me|do you|is it|are there|"
-    r"dónde|donde|qué|por qué|cómo|cuál|quién|cuándo|cuéntame|cuentame)(?![\wáéíóúñ])",
-    re.I)
-
-
-def kids_asked_question(text):
-    """True when the child asked something. 31 Oct 2026: Alisa asked about Parque Metropolitano and got the scheduled
-    toucan hello; she asked where the toucan lives and got the scheduled Simon-says. A question outranks the lesson plan."""
-    return bool(_KID_QUESTION.search((text or "").strip()))
-
-
-def kids_heard(new_message):
-    """31 Oct 2026 (Alisa's re-test on the web, same rules here): the step instruction never quoted the child, so the
-    model followed the step and forgot "react to her first" - "Starberry" got a sentence about sloths, a garbled
-    transcript was praised as perfect. Every turn now opens with her exact words and what to do with them."""
-    return (f'\nALISA JUST SAID (speech-to-text, may be imperfect): "{(new_message or "").strip()[:300]}"\n'
-            "YOUR FIRST LINE reacts to exactly these words, before anything else. Check these in order:\n"
-            # 31 Oct 2026 (web classroom: "mi mamá está pegando porque estoy chupando una paleta" -> echo, then
-            # "Simon dice, salta", and "las paletas no son dulces" repeated as true). Twin: espaluz-chat kidsHeard.
-            "1. A feeling she names or clearly shows, or something hard that happened (scolded, sad, scared, hurt, missing "
-            "someone) -> name the feeling kindly. Not wanting to play is NOT sadness (that is 3); never tell her she feels "
-            "something she did not say. (\"Parece que te sentiste triste cuando mamá se enojó. / It sounds like you felt sad when mom got upset.\"), "
-            "ask ONE gentle question about how she feels, and stay with her: THIS TURN HAS NO GAME AND NO NEW SENTENCE, skip "
-            "the lesson step below. Use soft words; never repeat a frightening word like \"pegar / hit\" back to her.\n"
-            '2. An answer to your last question (even one word, like "Starberry") -> say it back as a whole, correct sentence '
-            'in both languages and praise it ("¡Tu fruta favorita es la fresa! / Your favourite fruit is the strawberry!"); '
-            "that sentence is the one to practise now.\n"
-            "3. Her own idea, topic or a refusal (\"I don't want to jump, I want to ride my bicycle\"; \"no quiero jugar... "
-            "Halloween\") -> follow HER idea warmly and fit the lesson into it (\"¡Vamos en bici! / Let's ride our bikes!\", "
-            "\"¡Hoy es Halloween! ¿De qué te vas a disfrazar? / Today is Halloween! What will you dress up as?\").\n"
-            "4. Only if NO part of it makes sense -> do NOT guess and do NOT praise it: say kindly that you did not hear well "
-            "and ask her to say it again (\"No te escuché bien. ¿Me lo dices otra vez? / I didn't hear you well. Can you say "
-            "it again?\") and stop there: skip the lesson step below. If part of it makes sense, answer that part.\n"
-            "Always: if her words contain something untrue, never repeat it as true - say the correct version simply (\"Las "
-            "paletas son dulces, pero tienen mucho azúcar. / Lollipops are sweet, but they have a lot of sugar.\"). The voice "
-            "note may hold two voices (Alisa and an adult helping): answer ALISA's part.\n")
-
-
 # A hard moment is never brought back at a hello (eval 31 Oct: the web opened a new lesson with "la última vez me
 # dijiste que tu mamá está pegando"). Enforced in code, not left to the model. Twin: espaluz-chat KIDS_HARD.
 _KIDS_HARD = re.compile(r"peg|golpe|\bhit|grit|yell|scold|rega[nñ]|castig|punish|llor|\bcry|cried|triste|\bsad\b|miedo|"
                         r"scared|asust|duele|hurt|enoj|angry|frustr|sangr|blood|lastim|herid|accident", re.I)
-
-
-# Today in Panama and the day's holiday (Alisa said "Halloween" on 31 Oct and was told she seemed sad). Dates checked:
-# 3 Nov separation from Colombia (1903), 4 Nov flag day, 5 Nov Colón day, 10 Nov first cry of independence in La Villa
-# de Los Santos, 28 Nov independence from Spain (1821), 8 Dec Mother's Day in Panama. Twin: espaluz-chat KIDS_HOLIDAYS.
-KIDS_HOLIDAYS = {
-    "10-31": "Halloween", "11-02": "Día de los Difuntos",
-    "11-03": "Día de la Separación de Panamá de Colombia (1903) - school parades with drums and flags",
-    "11-04": "Día de la Bandera de Panamá", "11-05": "Día de Colón", "11-10": "Primer Grito de Independencia en La Villa de Los Santos",
-    "11-28": "Independencia de Panamá de España (1821)", "12-08": "Día de las Madres en Panamá", "12-24": "Nochebuena",
-    "12-25": "Navidad", "12-31": "Fin de Año", "01-01": "Año Nuevo",
-}
-_ES_DAYS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
-_ES_MONTHS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre",
-              "noviembre", "diciembre"]
-
-
-def kids_today():
-    now = datetime.utcnow() - timedelta(hours=5)  # Panama is UTC-5 all year (no daylight saving)
-    h = KIDS_HOLIDAYS.get(now.strftime("%m-%d"))
-    day = f"{_ES_DAYS[now.weekday()]}, {now.day} de {_ES_MONTHS[now.month - 1]}"
-    return (f"TODAY in Panama: {day}" + (f" - {h}. If she brings it up (or it fits), talk about it happily and teach a "
-                                          f"sentence about it." if h else "."))
-
-
-def kids_web_memory(session):
-    """What Alisa told Pere and Titi in her WEB classroom lessons, from the SaaS kids-memory function (31 Oct 2026, Elena:
-    "a lesson on one is remembered on the other"). The function needs ESPALUZ_BOT_SECRET and a /connect-linked account;
-    without either, or when the web is slow, this is {} and the lesson runs on Telegram memory alone."""
-    secret = os.environ.get("ESPALUZ_BOT_SECRET")
-    uid = next((u for u, s in user_sessions.items() if s is session), None)
-    if not secret or uid is None:
-        return {}
-    try:
-        r = requests.post(f"{SAAS_FUNCTIONS_URL}/kids-memory", json={"telegram_user_id": str(uid)}, timeout=4,
-                          headers={"Authorization": f"Bearer {os.environ.get('SUPABASE_ANON_KEY')}",
-                                   "x-espaluz-bot-secret": secret})
-        if r.status_code != 200:
-            print(f"⚠️ kids web memory: HTTP {r.status_code}")
-            return {}
-        j = r.json()
-        print(f"🧠 kids web memory: linked={j.get('linked')} lines={len(j.get('said') or [])}")
-        return j
-    except Exception as e:
-        print(f"⚠️ kids web memory: {e}")
-        return {}
 
 
 # === 31 Oct 2026, step 4: the parent report (ONE_FAMILY_MEMORY_PLAN Phase 4, "the paid value") ===
@@ -3644,7 +3511,8 @@ KIDS_REPORT_GAP = 20 * 60
 # 31 Oct 17:31: "It's Alisa's mom now, Elena. Alisa doesn't want to brush her teeth" was not caught and would have gone
 # into the report as Alisa's own words. Twin: espaluz-chat / kids-memory KIDS_ADULT.
 _KIDS_ADULT = re.compile(r"\bmi hij[oa]\b|\bmy (daughter|son)\b|\bmam[aá] aqu[ií]\b|\bsoy (la|su) mam[aá]\b|"
-                         r"\b(it'?s|this is|soy|habla) [^.!?]{0,20}\b(mom|mum|mother|mam[aá])\b|\balisa'?s (mom|mum|mother)\b|"
+                         r"\b(it'?s|it is|this is|soy|habla) [^.!?]{0,20}\b(mom|mum|mother|mam[aá])\b|\balisa'?s (mom|mum|mother)\b|"
+                         r"\b(mom|mum|mother|mam[aá]) (of|de) alisa\b|"
                          r"\balisa (has|had|is|was|does|doesn'?t|did|didn'?t|promised|no quiere|quiere|tiene|est[aá])\b", re.I)
 _KIDS_STARTER = re.compile(r"quiero empezar la clase|i want to start the class", re.I)
 
@@ -3758,11 +3626,13 @@ def kids_report_web():
                 continue
             replies = [t["reply"] for t in lesson]
             photos = [re.sub(r"^📷 \(foto: |\)$", "", t["said"])[:100] for t in mine if t["said"].startswith("📷 (foto:")]
-            text = kids_report_text("web classroom", start, end, len(mine),
+            # 1 Nov 2026: linked Telegram lessons are saved by the kids brain too, so each lesson says where it was.
+            surface = "Telegram" if all(t.get("src") == "telegram" for t in lesson) else "web classroom"
+            text = kids_report_text(surface, start, end, len(mine),
                                     _report_said([(t["said"], _first_line(t["reply"])) for t in mine]),
                                     _report_practice(replies), _report_mission(replies), photos)
             bot.send_message(int(uid), text)
-            print(f"📒 parent report sent (web lesson {start:%H:%M}-{end:%H:%M} UTC, {len(mine)} answers)")
+            print(f"📒 parent report sent ({surface} lesson {start:%H:%M}-{end:%H:%M} UTC, {len(mine)} answers)")
         save_persistent_sessions()
 
 
@@ -3772,7 +3642,7 @@ def kids_report_telegram():
     for uid, session in list(user_sessions.items()):
         p = (session.get("context") or {}).get("user", {}).get("preferences", {}) if isinstance(session, dict) else {}
         lesson = int(p.get("kids_lesson") or 0)
-        if not lesson:
+        if not lesson or p.get("kids_linked"):  # a linked family's Telegram lessons are reported from the SaaS (above)
             continue
         if "kids_reported_tg" not in p:  # first run: no backlog of old lessons
             p["kids_reported_tg"], changed = lesson, True
@@ -3800,88 +3670,6 @@ def kids_report_loop():
             except Exception as e:
                 print(f"⚠️ {job.__name__}: {e}")
         time.sleep(600)
-
-
-def kids_memory_card(p, lesson, web=None):
-    """What Alisa told the heroes in EARLIER lessons (newest first, with what they understood) and the last mission.
-    Hard moments, "didn't hear you" turns and echoes (nobody understood her) are left out. "" when nothing is left.
-    `web` = kids_web_memory(): her web classroom lessons (already filtered by the same rules on the server) come first."""
-    said = [f'"{w.get("words")}" -> you understood: "{w.get("understood")}" (in the web classroom)'
-            for w in (web or {}).get("said") or [] if w.get("words")][:5]
-    for item in reversed(p.get("kids_said") or []):
-        n, words, understood = (list(item) + [""])[:3]
-        if n == lesson or _KIDS_HARD.search(words) or _KIDS_HARD.search(understood or ""):
-            continue
-        if re.search(r"no te escuch|didn't hear", understood or "", re.I):
-            continue
-        if understood and " ".join(_kid_words(words)) in " ".join(_kid_words(understood)):
-            continue
-        said.append(f'"{words}" -> you understood: "{understood}"' if understood else f'"{words}"')
-        if len(said) >= 10:
-            break
-    mission = p.get("kids_mission") if p.get("kids_mission_lesson") not in (None, lesson) else None
-    mission = mission or (web or {}).get("mission") or None
-    if not said and not mission:
-        return ""
-    return ("\nWHAT ALISA TOLD YOU IN EARLIER LESSONS (her own words, newest first; speech-to-text may be imperfect):\n"
-            + "\n".join(f"- {s}" for s in said)
-            + (f'\nLast mission you gave: "{mission}" - at the hello, ask if she did it.' if mission else "")
-            + "\nUse this like a friend who remembers: at the hello bring back ONE happy, clearly understood thing (a "
-              "favourite thing, a pet, a wish, something she likes doing) taken ONLY from this list, in simple words (\"La "
-              "última vez me dijiste que ... ¿Todavía? / Last time you told me ... Still?\"), and later use what she told "
-              "you instead of asking again. Skip anything that does not make sense, never bring back anything sad or about "
-              "being scolded, and never invent a memory that is not in this list.\n")
-
-
-def kids_turn_context(session, new_message):
-    """The per-turn facts for the tutor: lesson step, this week's story, last mission, sentence check."""
-    p = _kid_prefs(session)
-    now = time.time()
-    if now - float(p.get("kids_last", 0) or 0) > KIDS_NEW_LESSON_AFTER:
-        p["kids_turn"] = 0
-    turn = int(p.get("kids_turn", 0) or 0)
-    step = KIDS_STEPS[turn] if turn < len(KIDS_STEPS) else KIDS_STEP_FREE
-    # 31 Oct 2026 (step 3: memory between lessons): her words are kept per lesson in the session (it survives restarts),
-    # and the heroes see the ones from EARLIER lessons. Twin: espaluz-chat kidsMemoryCard.
-    if turn == 0:
-        p["kids_lesson"] = int(p.get("kids_lesson", 0) or 0) + 1
-    lesson = int(p.get("kids_lesson", 1) or 1)
-    # Her web lessons are fetched once, at the hello, and kept for the rest of this lesson.
-    if turn == 0:
-        p["kids_web"] = kids_web_memory(session)
-    card = kids_memory_card(p, lesson, p.get("kids_web"))
-    words = (new_message or "").strip()
-    if words and not words.startswith("/") and words not in [x[1] for x in p.get("kids_said", [])]:
-        p["kids_said"] = (p.get("kids_said") or [])[-29:] + [[lesson, words[:120]]]
-    p["kids_hold"] = kids_asked_question(new_message)
-    heard = card + (kids_heard(new_message) if turn > 0 else "")
-    if p["kids_hold"]:
-        hello = "Say hello to Alisa in a few words inside the first line, then " if turn == 0 else ""
-        out = [heard + f"\nTHIS TURN: Alisa ASKED A QUESTION. {hello}ANSWER IT FIRST, truly and simply, for a 6-7 year old: "
-               "2-3 short lines with one real fact (if you are not sure of a fact, say what you do know - never invent). "
-               "Stay on HER topic; do not start a game, a story or a new lesson step this turn. "
-               f"End with ONE question about the SAME topic she asked about. (The lesson continues next turn with: {step})"]
-        if turn == 0:
-            out.append(f"THIS WEEK'S STORY (only if it is about what she asked; otherwise ignore it): {kids_week_story()}")
-    else:
-        # 31 Oct 2026 (web lesson 13:46-13:51, same rules here): the story rode along on EVERY turn, so "quiero jugar un
-        # poquitito" became the toucan again, and Titi fell silent for three replies. Story only at the hello and on its
-        # own step; both heroes every turn; today's date and Panama's real holidays. Twin: espaluz-chat kidsTurnContext.
-        out = [heard + f"\nTHEN, this turn's lesson step (turn {turn + 1} of {len(KIDS_STEPS)}), built on what she just said "
-               f"and only if it fits after your first line (skip it after 1 or 4 above) - her idea always wins over the plan: "
-               f"{step}"]
-        if turn == 0 or step.startswith("THIS WEEK'S STORY"):
-            out.append(f"THIS WEEK'S STORY (one line at the hello; the whole story only on its own step; if Alisa already "
-                       f"chose a topic, her topic wins): {kids_week_story()}")
-    out.append(kids_today())
-    out.append('BOTH heroes speak in this reply: at least one "Pere [shot]:" line AND one "Titi [shot]:" line (Titi is the '
-               "playful one - let him ask the closing question or make it a little game).")
-    # The last mission now travels in the memory card (kids_memory_card): from an earlier lesson, not "another day".
-    prev = next((m.get("content", "") for m in reversed(session.get("messages", [])[:-1]) if m.get("role") == "assistant"), "")
-    check = kids_sentence_check(prev, new_message) if turn > 0 else ""
-    if check:
-        out.append(check)
-    return "\n".join(out) + "\n"
 
 
 def kids_tidy(text):
@@ -3913,11 +3701,7 @@ def kids_after_reply(session, chat_id, full_reply, media_thread=None):
         first = next((l.strip() for l in strip_shot_tags(full_reply or "").split("\n") if l.strip()
                       and "VIDEO SCRIPT" not in l), "")
         said[-1].append(re.sub(r"^[^:]{0,20}:\s*", "", first).split(" / ")[0][:120])
-    if p.pop("kids_hold", False):
-        if turn == 0:
-            p["kids_turn"] = 1  # the hello was folded into the answer; never greet again
-        return  # the planned step waits: answering her question was this turn
-    p["kids_turn"] = turn + 1
+    p["kids_turn"] = turn + 1  # counts exchanges; the kids brain itself holds the lesson step when she asks a question
     if turn == 0 and p.get("kids_mission_lesson") not in (None, p.get("kids_lesson")):
         p.pop("kids_mission", None)  # asked about in this hello; a new one comes at the goodbye
     for line in (full_reply or "").split("\n"):
@@ -3927,14 +3711,21 @@ def kids_after_reply(session, chat_id, full_reply, media_thread=None):
             p["kids_mission_day"] = datetime.now().strftime("%Y-%m-%d")
             p["kids_mission_lesson"] = p.get("kids_lesson")
             break
-    if turn == 0:
-        return  # the hello answers no question of hers, so no star yet
-    p["kids_stars"] = int(p.get("kids_stars", 0) or 0) + 1
-    if p["kids_stars"] % 5:
-        return
-    stars = p["kids_stars"]
+    linked = bool(p.get("kids_linked"))
+    if not linked:  # a guest family's stars are counted here; a linked family's by the SaaS, over every channel
+        if turn == 0:
+            return  # the hello answers no question of hers, so no star yet
+        p["kids_stars"] = int(p.get("kids_stars", 0) or 0) + 1
+        if p["kids_stars"] % 5:
+            return
 
     def _dance():
+        stars = p.get("kids_stars")
+        if linked:  # the same number as the web classroom and WhatsApp (1 Nov 2026)
+            stars = kids_stars_server(chat_id)
+            if not stars or stars % 5 or p.get("kids_celebrated") == stars:
+                return
+            p["kids_celebrated"] = stars
         if media_thread is not None:
             media_thread.join(timeout=240)  # after the heroes' video, never on top of it
         clip = os.path.join(HERO_DIR, "titi-dance.mp4")
@@ -3945,30 +3736,6 @@ def kids_after_reply(session, chat_id, full_reply, media_thread=None):
         except Exception as e:
             print(f"⚠️ star dance not sent: {e}")
     threading.Thread(target=_dance, daemon=True).start()
-
-
-def kids_photo_story(photo_bytes):
-    """What is in the child's photo, in two short sentences (toy, drawing, food...). Grok sees images on the key the
-    bot already has (verified 30 Oct); OpenAI gpt-4o has had no credits since 23 Oct. Returns "" when nobody can see."""
-    b64 = base64.b64encode(photo_bytes).decode()
-    ask = [{"type": "text", "text": "A 6-year-old girl sent this photo to her Spanish tutors. In 2 short sentences, what is in it? Name the main things and colours. No text reading."},
-           {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + b64}}]
-    for url, key, model in (("https://api.x.ai/v1/chat/completions", os.environ.get("XAI_API_KEY"),
-                             os.environ.get("XAI_MODEL", "").strip() or "grok-4.20-0309-non-reasoning"),
-                            ("https://api.openai.com/v1/chat/completions", OPENAI_API_KEY, "gpt-4o")):
-        if not key:
-            continue
-        try:
-            r = requests.post(url, headers={"Authorization": f"Bearer {key}"}, timeout=60,
-                              json={"model": model, "max_tokens": 200, "messages": [{"role": "user", "content": ask}]})
-            text = (r.json().get("choices") or [{}])[0].get("message", {}).get("content", "")
-            if text:
-                print(f"🖼️ kids photo seen by {model}")
-                return text.strip()
-            print(f"⚠️ kids photo {model}: {r.status_code} {r.text[:160]}")
-        except Exception as e:
-            print(f"⚠️ kids photo {model}: {e}")
-    return ""
 
 
 def apply_kids_switch(user_id, text=None, force=None):
@@ -4414,8 +4181,8 @@ def process_message_with_tracking(user_input, chat_id, user_id, message_obj):
     session["context"]["conversation"]["message_count"] += 1
     session["context"]["conversation"]["last_interaction_time"] = datetime.now().isoformat()
 
-    # Get translation (skip if translation fails)
-    translated = translate_to_es_en(user_input)
+    # Get translation (skip if translation fails; a kids photo has no words to translate)
+    translated = translate_to_es_en(user_input) if user_input != "📷" else None
     if translated:
         bot.send_message(chat_id, f"📝 Traducción:\n{translated}")
         print("Translation sent")
@@ -4433,7 +4200,8 @@ def process_message_with_tracking(user_input, chat_id, user_id, message_obj):
     # Send the main response (30 Oct 2026: shot tags are for the video only; in kids mode the script block is what the
     # video already says, so a 6-7 year old reads the lesson once, without "[VIDEO SCRIPT START]" or "Pere [hello]:")
     shown = strip_shot_tags(full_reply)
-    if session.get("context", {}).get("user", {}).get("preferences", {}).get("family_role") == "alisa":
+    kids = session.get("context", {}).get("user", {}).get("preferences", {}).get("family_role") == "alisa"
+    if kids:
         shown = re.sub(r"\[VIDEO SCRIPT START\].*?\[VIDEO SCRIPT END\]", "", shown, flags=re.DOTALL).strip() or shown
         bot.send_message(chat_id, kids_tidy(strip_markdown_formatting(shown)))
     else:
@@ -4462,9 +4230,10 @@ def process_message_with_tracking(user_input, chat_id, user_id, message_obj):
     # Update session with Claude's response
     session["messages"].append({"role": "assistant", "content": full_reply})
 
-    # 🆕 NEW: Track this conversation in Supabase
+    # 🆕 NEW: Track this conversation in Supabase (a kids turn is already saved by the kids brain, as a classroom lesson)
     try:
-        sync_progress_to_saas(user_id, user_input, full_reply, session)
+        if not kids:
+            sync_progress_to_saas(user_id, user_input, full_reply, session)
     except Exception as e:
         print(f"⚠️ Supabase tracking failed (non-critical): {e}")
     
@@ -6500,13 +6269,10 @@ def handle_photo(message):
         _prefs = user_sessions.get(user_id, {}).get("context", {}).get("user", {}).get("preferences", {})
         if _prefs.get("family_role") == "alisa":
             bot.send_message(message.chat.id, "👀 Pere y Titi miran tu foto... / Pere and Titi are looking at your photo...")
-            seen = kids_photo_story(bot.download_file(bot.get_file(message.photo[-1].file_id).file_path))
-            if not seen:
-                bot.send_message(message.chat.id, "🦥 No pude ver bien tu foto. ¿Me cuentas qué es? / I could not see your photo well. Can you tell me what it is?")
-                return
-            caption = (message.caption or "").strip()
-            said = f"[Alisa sent a photo{' and wrote: ' + caption if caption else ''}] The photo shows: {seen}"
-            process_message_with_tracking(said, message.chat.id, user_id, message)
+            # The kids brain looks at the photo itself (1 Nov 2026), as it does for the web classroom and WhatsApp.
+            photo = bot.download_file(bot.get_file(message.photo[-1].file_id).file_path)
+            user_sessions[user_id]["kids_image"] = base64.b64encode(photo).decode()
+            process_message_with_tracking("📷", message.chat.id, user_id, message)
             return
 
         # Step 1: Send initial processing message
