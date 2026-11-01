@@ -3450,6 +3450,9 @@ def kids_brain_reply(session, image_b64=None):
     kids = {"history": hist[-10:], "turn": len(hist) // 2}
     if image_b64:
         kids["image"] = image_b64
+    if p.get("kids_mode") == "class":  # /clase (1 Nov 2026): the first-grade class path; a guest keeps its own count
+        kids["mode"] = "class"
+        kids["class_count"] = int(p.get("kids_class_count", 0) or 0)
     if not p.get("kids_linked") and p.get("kids_mission"):
         kids["mission"] = p["kids_mission"]  # a linked family's last mission comes from its memory card instead
     data = {}
@@ -3469,6 +3472,8 @@ def kids_brain_reply(session, image_b64=None):
                 "Oops, I fell asleep for a moment. Can you say it again?")
     heard = data.get("userMessage") or said
     p["kids_linked"] = bool(data.get("linked"))
+    if kids.get("mode") == "class" and not hist:  # this hello started a class
+        p["kids_class_count"] = int(p.get("kids_class_count", 0) or 0) + 1
     p["kids_history"] = (hist + [{"role": "user", "content": heard}, {"role": "assistant", "content": reply}])[-20:]
     # Her words per lesson, for the parent report of a guest family (a linked family's report comes from the SaaS).
     if heard.strip() and not heard.startswith("/"):
@@ -4509,6 +4514,7 @@ def handle_kids(message):
     # 31 Oct 2026 (Elena: the same introduction every time): the heroes introduce themselves only on the very first
     # lesson; after that a short welcome back, and their first reply brings back something she told them (memory card).
     p = _kid_prefs(user_sessions[user_id])
+    p["kids_mode"] = None  # /kids = free talk; /clase = a class
     if any(p.get(k) for k in ("kids_introduced", "kids_lesson", "kids_said", "kids_turn", "kids_last", "kids_stars")):
         p["kids_introduced"] = True
         save_persistent_sessions()
@@ -4537,6 +4543,24 @@ def handle_kids(message):
     except Exception as e:
         print(f"⚠️ /kids hello video failed: {e}")
         bot.send_message(message.chat.id, caption)
+
+
+@bot.message_handler(commands=["clase", "class"])
+@bot.message_handler(func=lambda m: (m.text or "").strip().lower().strip("!.") in ("clase", "class", "una clase"))
+def handle_clase(message):
+    """1 Nov 2026 (Elena: "also classes, like regular kids of 6-7 study at school and at home"): a first-grade class on
+    the shared path (the kids brain's CLASS mode) - Pere keeps the lesson, Titi twists it, the child judges."""
+    user_id = str(message.from_user.id)
+    if not enforce_learning_access(message, user_id):
+        return
+    if user_id not in user_sessions:
+        user_sessions[user_id] = create_initial_session(user_id, message.from_user, message.chat)
+    apply_kids_switch(user_id, force="on")
+    p = _kid_prefs(user_sessions[user_id])
+    p["kids_mode"], p["kids_turn"], p["kids_last"] = "class", 0, 0  # a class always starts from its hello
+    save_persistent_sessions()
+    process_message_with_tracking("¡Hola Pere y Titi! Quiero empezar la clase. / Hello Pere and Titi! I want to start the class.",
+                                  message.chat.id, user_id, message)
 
 
 @bot.message_handler(commands=["mama"])
