@@ -246,3 +246,70 @@ def reconcile(client_id, secret):
             logging.warning(f"payment truth: reconcile {sub_id[:6]}…: {e}")
     logging.warning(f"💳 payment truth: reconcile synced {done} PayPal subscription(s)")
     return done
+
+
+# ---------------- The web's copy (plan phase 4) ----------------
+
+SAAS_FUNCTIONS_URL = "https://euyidvolwqmzijkfrplh.supabase.co/functions/v1"
+
+
+def _wa_family_id(phone):
+    """The same hashed id EspaLuz WhatsApp sends to the web on `connect CODE` (espaluz_bridge.whatsapp_family_id)."""
+    import hashlib
+    return "wa_" + hashlib.sha256(("espaluz-wa:" + re.sub(r"\D", "", phone or "")).encode()).hexdigest()[:32]
+
+
+def _mirror_call(payload):
+    r = requests.post(SAAS_FUNCTIONS_URL + "/payment-mirror", json=payload, timeout=60,
+                      headers={"Authorization": "Bearer " + os.getenv("SUPABASE_ANON_KEY", ""),
+                               "x-espaluz-bot-secret": os.getenv("ESPALUZ_BOT_SECRET", "")})
+    r.raise_for_status()
+    return r.json()
+
+
+def mirror_web(client_id, secret):
+    """Write each web account's paid status from the truth (never from the browser). A web account matches a truth row
+    by its login email, its Telegram link (directly or through the Telegram bot's email link), its WhatsApp link (hashed
+    phone), or a PayPal subscription the browser claimed - that claim is first checked with PayPal itself."""
+    web = _mirror_call({"mode": "links"})
+    for p in web.get("pending") or []:  # the browser said "I subscribed": PayPal confirms it or nothing happens
+        sid = str(p.get("paypal_subscription_id") or "")
+        if sid.startswith("I-"):
+            try:
+                paypal_sync(sid, client_id, secret)
+            except Exception as e:
+                logging.warning(f"payment truth: web claim {sid[:6]}…: {e}")
+    with _conn() as c, c.cursor() as cur:
+        cur.execute("SELECT email, telegram_id, whatsapp_id, paid_until, source, subscription_data FROM subscribers "
+                    "WHERE paid_until IS NOT NULL")
+        rows = cur.fetchall()
+    try:
+        tg_map = json.load(open(os.path.join(_BASE, "telegram_phone_email_mapping.json"), encoding="utf-8"))
+    except Exception:
+        tg_map = {}
+    now = datetime.now(timezone.utc)
+    out = []
+    for u in web.get("users") or []:
+        uid = u["user_id"]
+        emails = {(u.get("email") or "").lower()} - {""}
+        tg_ids = {l["platform_user_id"] for l in web.get("links") or [] if l["user_id"] == uid and l["platform"] == "telegram"}
+        wa_ids = {l["platform_user_id"] for l in web.get("links") or [] if l["user_id"] == uid and l["platform"] == "whatsapp"}
+        claims = {p.get("paypal_subscription_id") for p in web.get("pending") or [] if p["user_id"] == uid} - {None}
+        for t in tg_ids:
+            m = tg_map.get(str(t))
+            if isinstance(m, dict) and m.get("email"):
+                emails.add(m["email"].lower())
+        best = None
+        for email, tg, wa, paid_until, source, data in rows:
+            ids = set((data or {}).get("paypal_subscription_ids") or [])
+            if (email.lower() in emails or (tg and tg in tg_ids) or (wa and _wa_family_id(wa) in wa_ids)
+                    or (claims & ids)):
+                if best is None or paid_until > best[0]:
+                    best = (paid_until, source, sorted(claims & ids)[:1] or sorted(ids)[:1])
+        if best:
+            out.append({"user_id": uid, "paid_until": best[0].isoformat(), "source": best[1],
+                        "status": "active" if best[0] > now else "expired",
+                        "paypal_subscription_id": best[2][0] if best[2] else None})
+    res = _mirror_call({"mode": "write", "rows": out}) if out else {"written": 0}
+    logging.warning(f"💳 payment truth: web mirror wrote {res.get('written')} of {len(web.get('users') or [])} account(s)")
+    return out

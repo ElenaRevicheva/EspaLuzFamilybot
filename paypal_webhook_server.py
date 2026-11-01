@@ -268,12 +268,21 @@ def _payment_truth_safety_net():
             truth.ensure_schema()
         except Exception as e:
             logging.error(f"payment truth schema: {e}")
+        tick = 0
         while True:
+            if tick % 36 == 0:  # every 6 hours
+                try:
+                    truth.reconcile(os.getenv('PAYPAL_CLIENT_ID'), os.getenv('PAYPAL_CLIENT_SECRET'))
+                except Exception as e:
+                    logging.error(f"payment truth reconcile: {e}")
+            # 1 Nov 2026 (phase 4): every 10 minutes the web's paid status is written from the truth - and a PayPal
+            # subscription the browser just claimed is confirmed with PayPal - so a new web subscriber waits minutes.
             try:
-                truth.reconcile(os.getenv('PAYPAL_CLIENT_ID'), os.getenv('PAYPAL_CLIENT_SECRET'))
+                truth.mirror_web(os.getenv('PAYPAL_CLIENT_ID'), os.getenv('PAYPAL_CLIENT_SECRET'))
             except Exception as e:
-                logging.error(f"payment truth reconcile: {e}")
-            time.sleep(6 * 3600)
+                logging.error(f"payment truth web mirror: {e}")
+            tick += 1
+            time.sleep(600)
     threading.Thread(target=loop, daemon=True).start()
 
 
