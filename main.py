@@ -3348,7 +3348,22 @@ def media_seconds(path):
 
 
 def hero_tts(speaker, text, path):
-    """One hero line in that hero's cartoon voice (MiniMax Speech 2.6 HD on Replicate) -> mp3 at path; False on failure."""
+    """One hero line in that hero's cartoon voice -> audio at path; False on failure.
+    1 Nov 2026 (Elena: "go free" - Replicate is $0.10 per 1,000 characters and ran dry at 17:41 UTC): first the SaaS
+    generate-voice function, the one voice service web and WhatsApp use, whose free Gemini voice answers first;
+    only if it does not give a hero voice, MiniMax on Replicate directly as before. ffmpeg reads WAV in an .mp3 name."""
+    try:
+        r = requests.post(f"{SAAS_FUNCTIONS_URL}/generate-voice", timeout=90,
+                          json={"text": text, "userId": "telegram", "hero": speaker},
+                          headers={"Authorization": f"Bearer {os.environ.get('SUPABASE_ANON_KEY', '')}"})
+        j = r.json() if r.status_code == 200 else {}
+        if j.get("audioContent") and str(j.get("spokenBy", "")).startswith(("gemini", "minimax")):
+            with open(path, "wb") as f:
+                f.write(base64.b64decode(j["audioContent"]))
+            return True
+        print(f"⚠️ shared hero voice {speaker}: HTTP {r.status_code} {str(j.get('spokenBy') or r.text[:120])}")
+    except Exception as e:
+        print(f"⚠️ shared hero voice {speaker}: {e}")
     token = os.getenv("REPLICATE_API_TOKEN", "").strip()
     if not token:
         return False
