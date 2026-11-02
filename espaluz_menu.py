@@ -112,8 +112,8 @@ Just send me any message! I understand:
 /feedback — Share your experience
   ↳ Help us improve (and collect testimonials!)
 
-/refer — Get your referral link
-  ↳ Give 1 month free, get 1 month free
+/invite — Your personal invite link
+  ↳ Give another family 14 days free
 
 /metrics — See community stats (admin)
 

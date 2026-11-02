@@ -3704,6 +3704,93 @@ def kids_report_loop():
         time.sleep(600)
 
 
+_MOODS_ES = {"happy": "con alegría", "joy": "con alegría", "excited": "con entusiasmo", "calm": "con calma",
+             "neutral": "con calma", "curious": "con curiosidad", "confident": "con confianza", "grateful": "con gratitud",
+             "proud": "con orgullo", "tired": "con cansancio", "frustrated": "con frustración", "anxious": "con nervios",
+             "stressed": "con estrés", "sad": "con tristeza", "confused": "con dudas", "overwhelmed": "con agobio"}
+
+
+def compose_weekly_recap(first_name, family_names, words, active_days, top_mood, link):
+    """The weekly family recap (2 Nov 2026) - a fixed template over data already stored, no model: words saved this
+    week, family names, the week's most frequent mood, active days, and the family's invite link."""
+    hi = f", {first_name}" if first_name else ""
+    lines = [f"📅 Su semana con EspaLuz{hi} / Your week with EspaLuz{hi}", ""]
+    if family_names:
+        lines.append(f"👨‍👩‍👧 Familia / Family: {', '.join(family_names)}")
+    lines.append(f"🗓️ Días de práctica / Days practised: {active_days} de 7 / of 7")
+    if words:
+        shown = ", ".join(words[:8]) + (" …" if len(words) > 8 else "")
+        lines.append(f"📚 Palabras nuevas / New words: {len(words)} — {shown}")
+    if top_mood:
+        lines.append(f"💛 Ánimo más frecuente / Most frequent mood: {_MOODS_ES.get(top_mood.lower(), top_mood)} ({top_mood})")
+    lines += ["", "¡Siga así, paso a paso! / Keep going, step by step!", "",
+              f"🎁 Regale 14 días gratis a otra familia / Give another family 14 days free:\n{link}"]
+    return "\n".join(lines)
+
+
+WEEKLY_RECAP_MIN_MESSAGES = 3
+_weekly_recap_last_pass = [0.0]
+
+
+def weekly_recap_pass(now=None):
+    """At most once per 7 days per user, only for users with >= 3 messages this week. Marked sent in the analytics
+    store (espaluz_analytics.json, key weekly_recap_sent) BEFORE sending, so a restart or a failed send never repeats
+    it. Runs from payment_reminder_loop at most once an hour, daytime in Panama (14-23 UTC)."""
+    if not (ENHANCED_BRAIN_AVAILABLE and UNIFIED_MEMORY_AVAILABLE):
+        return 0
+    now = now or datetime.now()
+    utc_hour = datetime.utcnow().hour
+    if time.time() - _weekly_recap_last_pass[0] < 3600 or not (14 <= utc_hour <= 23):
+        return 0
+    _weekly_recap_last_pass[0] = time.time()
+    week_ago = now - timedelta(days=7)
+    sent = analytics.data.setdefault("weekly_recap_sent", {})
+    count = 0
+    for uid, u in list(analytics.data.get("users", {}).items()):
+        try:
+            if not str(uid).isdigit():
+                continue
+            last = sent.get(uid)
+            if last and datetime.fromisoformat(last) > week_ago:
+                continue
+            days = sorted({d for d in (u.get("days_active") or []) if d >= week_ago.strftime("%Y-%m-%d")})
+            if not days:
+                continue
+            mem = EspaLuzMemory(platform='telegram', platform_user_id=str(uid))
+            if not mem.user_id:
+                continue
+            msgs = mem.get_recent_messages(mem.user_id, limit=300)
+            n_user = 0
+            for m in msgs:
+                ts = m.get("timestamp")
+                if ts is not None and getattr(ts, "tzinfo", None) is not None:
+                    ts = ts.astimezone().replace(tzinfo=None)
+                if m.get("role") == "user" and ts and ts > week_ago:
+                    n_user += 1
+            if n_user < WEEKLY_RECAP_MIN_MESSAGES:
+                continue
+            with mem._get_connection() as conn, conn.cursor() as cur:
+                cur.execute("SELECT word FROM vocabulary WHERE user_id = %s AND learned_at > NOW() - INTERVAL '7 days' "
+                            "ORDER BY learned_at DESC", (mem.user_id,))
+                words = [r[0] for r in cur.fetchall()]
+            trend = mem.get_emotional_trend(mem.user_id, days=7) or {}
+            top_mood = max(trend, key=lambda e: trend[e].get("count", 0)) if trend else None
+            ob = onboarding_states.get(str(uid), {})
+            family = [c.get("name") for c in (ob.get("children") or []) if isinstance(c, dict) and c.get("name")]
+            spouse = ob.get("spouse")
+            if spouse and spouse.lower() not in ("single parent", "none", "no"):
+                family.insert(0, spouse)
+            text = compose_weekly_recap(ob.get("name"), family, words, len(days), top_mood, invite_link(uid))
+            sent[uid] = now.isoformat()
+            analytics._save_data()  # marked first: at most once, even if the send below fails
+            bot.send_message(int(uid), text, disable_web_page_preview=True)
+            count += 1
+            print(f"📅 weekly recap sent ({n_user} msgs, {len(words)} words)")
+        except Exception as e:
+            print(f"⚠️ weekly recap {str(uid)[-3:]}: {e}")
+    return count
+
+
 def payment_reminder_loop():
     """1 Nov 2026 (payment truth phase 3, Elena: "reminded beforehand that the free trial is coming to an end"): the
     existing reminders - 2 days and 24 h before a trial or a PágueloFácil month ends, with /pagar + the PayPal link,
@@ -3740,6 +3827,10 @@ def payment_reminder_loop():
                         print(f"⏰ payment reminder sent on time ({result['reason']})")
         except Exception as e:
             print(f"⚠️ payment_reminder_loop: {e}")
+        try:
+            weekly_recap_pass()  # 2 Nov 2026: the weekly family recap rides this loop (no new scheduler)
+        except Exception as e:
+            print(f"⚠️ weekly_recap_pass: {e}")
         time.sleep(600)
 
 
@@ -4378,8 +4469,23 @@ def handle_start(message):
     
     # Atlas micro-test: t.me/EspaLuzFamily_bot?start=expat_language_2026-06-28
     start_arg = (message.text or "").split(maxsplit=1)[1].strip() if len((message.text or "").split()) > 1 else ""
-    atlas_concept_id = start_arg if start_arg and "_" in start_arg and len(start_arg) <= 64 else None
-    
+    is_ref = start_arg.lower().startswith("ref_")
+    is_org = start_arg.lower().startswith("org_")
+    atlas_concept_id = (start_arg if start_arg and "_" in start_arg and len(start_arg) <= 64
+                        and not (is_ref or is_org) else None)
+
+    # 2 Nov 2026: invite links (?start=ref_CODE) are recorded for NEW people only; partner links (?start=org_CODE)
+    # apply the org code exactly like /org CODE. Both checked before track_activity marks this person as known.
+    try:
+        is_new = user_id not in onboarding_states and not (
+            ENHANCED_BRAIN_AVAILABLE and user_id in analytics.data.get("users", {}))
+        if is_ref and is_new:
+            record_invite(user_id, start_arg[4:].strip().lower())
+        if is_org:
+            bot.send_message(message.chat.id, org_code_reply(user_id, start_arg[4:]))
+    except Exception as e:
+        print(f"⚠️ start payload {start_arg[:4]}: {e}")
+
     # Track activity if enhanced brain available
     if ENHANCED_BRAIN_AVAILABLE:
         try:
@@ -4731,14 +4837,14 @@ Just chat! Text, voice 🎤, photos 📷
 ━━━━━━━━━━━━━━━━━━━━━━━━
 /org CODE — Enter org code
 /feedback — Share experience
-/refer — Referral program
+/invite — Your invite link (14 days free for a family)
 /metrics — Community stats
 
 ━━━━━━━━━━━━━━━━━━━━━━━━
 🔐 *ACCOUNT*
 ━━━━━━━━━━━━━━━━━━━━━━━━
 /trial — Check free trial status
-/pagar — Pay $11 via PagueloFacil (30 days)
+/pagar — PagueloFacil: $11 / 1 month · /pagar 3 · 6 · 12 for longer passes
 /subscribe — PayPal & payment options
 /link — Link PayPal Subscription ID
 /connect CODE — Web dashboard
@@ -4958,39 +5064,174 @@ uppercase, with the underscore.
 Pregunte a su colegio o cámara — o use /trial para la prueba estándar.""", parse_mode="Markdown")
         return
     
-    code = parts[1].upper().strip()
-    org = validate_org_code(code)
-    
-    if org:
-        user_id = str(message.from_user.id)
-        track_activity(user_id, code)
-        
-        response = f"""✅ *{org['welcome_message']}*
+    bot.reply_to(message, org_code_reply(str(message.from_user.id), parts[1]))
 
-🏢 Organization: {org['name']}
-📅 Trial Period: {org['trial_days']} days
-🌎 Country: {org['country']}
 
-You now have extended access! Start chatting to learn."""
-        bot.reply_to(message, response, parse_mode="Markdown")
-    else:
-        bot.reply_to(message, "❌ Invalid organization code.\n\nPlease check with your organization for the correct code.")
+def org_code_reply(user_id, raw_code):
+    """2 Nov 2026: the one place an org code is applied (/org CODE and t.me/EspaLuzFamily_bot?start=org_CODE). It used
+    to only log the code and say "You now have extended access!" while nothing changed; now the days are granted in the
+    trial table the gate reads (paypal_system.apply_org_code) and the reply states the days actually granted."""
+    code = (raw_code or "").upper().strip()
+    org = validate_org_code(code) if ENHANCED_BRAIN_AVAILABLE else None
+    if not org:
+        return ("❌ Este código no existe. Revíselo con su organización (MAYÚSCULAS y guion bajo).\n"
+                "This code does not exist. Please check it with your organization (uppercase, with the underscore).")
+    try:
+        track_activity(str(user_id), code)
+    except Exception:
+        pass
+    if not (PAYPAL_SYSTEM_AVAILABLE and paypal_system):
+        return ("⚠️ El código es válido, pero no pude activarlo ahora. Inténtelo más tarde.\n"
+                "The code is valid, but I could not activate it right now. Please try again later.")
+    try:
+        res = paypal_system.apply_org_code(str(user_id), code, int(org.get("trial_days") or 0))
+    except Exception as e:
+        print(f"⚠️ org code {code}: {e}")
+        return ("⚠️ El código es válido, pero no pude activarlo ahora. Inténtelo más tarde.\n"
+                "The code is valid, but I could not activate it right now. Please try again later.")
+    if res.get("ok"):
+        until = res["trial_end"][:10]
+        return (f"✅ {org['name']}\n\n"
+                f"Acceso gratis para su familia: {res['days']} días (hasta {until}).\n"
+                f"Free access for your family: {res['days']} days (until {until}).\n\n"
+                "Escríbame cuando quiera. / Write to me anytime.")
+    if res.get("reason") == "paying":
+        return ("💛 Su suscripción ya está activa, así que no hay nada que añadir. ¡Gracias por estar aquí!\n"
+                "Your subscription is already active, so there is nothing to add. Thank you for being here!")
+    return (f"ℹ️ Ya usó un código de organización ({res.get('org_code')}). Solo se puede usar uno por persona.\n"
+            f"You have already used an organization code ({res.get('org_code')}). Only one per person.")
 
 @bot.message_handler(commands=["feedback"])
 def handle_feedback(message):
-    """Collect user feedback and testimonials"""
-    feedback_prompt = """💬 *We'd love your feedback!*
+    """Collect user feedback: the NEXT message is stored with analytics.add_testimonial (2 Nov 2026), then a consent
+    question. Stored only - never published by the bot."""
+    feedback_prompt = """💬 ¿Cómo le va con EspaLuz? / How is EspaLuz going for you?
 
-Please reply with:
-• ⭐ Your rating (1-5 stars)
-• 💬 A short sentence about your experience
-• ✅ "Share" if we can use it publicly, or "Private"
+Escriba en su próximo mensaje una o dos frases (y, si quiere, una nota del 1 al 5).
+In your next message, write a sentence or two (and, if you like, a rating from 1 to 5).
 
-*Example:*
-"5 ⭐ EspaLuz helped my whole family adapt to Panama! Share"
+Gracias / Thank you 🙏"""
+    if ENHANCED_BRAIN_AVAILABLE:
+        try:
+            analytics.data.setdefault("pending_feedback", {})[str(message.from_user.id)] = {
+                "step": "text", "at": datetime.now().isoformat()}
+            analytics._save_data()
+        except Exception as e:
+            print(f"⚠️ feedback pending state: {e}")
+    bot.reply_to(message, feedback_prompt)
 
-Your feedback helps other expat families discover us. Thank you! 🙏"""
-    bot.reply_to(message, feedback_prompt, parse_mode="Markdown")
+
+_YES = {"si", "sí", "yes", "y", "s", "ok", "claro", "sure", "vale", "dale"}
+
+
+def _feedback_rating(text):
+    """A 1-5 rating only if the user gave one ("5", "4/5", "⭐⭐⭐"); otherwise None - never assumed."""
+    m = (re.search(r"(?<![\d.])([1-5])\s*(?:/\s*5|⭐|★|stars?|estrellas?)", text, re.I)
+         or re.fullmatch(r"\s*([1-5])\s*", text))
+    if m:
+        return int(m.group(1))
+    stars = text.count("⭐") + text.count("★")
+    return stars if 1 <= stars <= 5 else None
+
+
+def handle_pending_feedback(message, user_id, text):
+    """True when this message was the answer to /feedback (or to its consent question) and was consumed here."""
+    if not ENHANCED_BRAIN_AVAILABLE:
+        return False
+    try:
+        pending = analytics.data.get("pending_feedback", {}).get(user_id)
+        if not pending:
+            return False
+        if text.startswith("/") or datetime.now() - datetime.fromisoformat(pending["at"]) > timedelta(hours=24):
+            analytics.data["pending_feedback"].pop(user_id, None)
+            analytics._save_data()
+            return False
+        if pending.get("step") == "text":
+            analytics.add_testimonial(user_id, text[:1000], rating=_feedback_rating(text))
+            analytics.data["testimonials"][-1].update({"quote_consent": False, "published": False})
+            analytics.data["pending_feedback"][user_id] = {
+                "step": "consent", "at": datetime.now().isoformat(), "date": analytics.data["testimonials"][-1]["date"]}
+            analytics._save_data()
+            bot.reply_to(message, "💛 Gracias, guardado. / Thank you, saved.\n\n"
+                                  "¿Podemos citarle sin su nombre? Responda sí o no.\n"
+                                  "May we quote you without your name? Reply yes or no.")
+            return True
+        # consent step: yes -> consent; anything else -> no (the default), and a non-answer goes on to the tutor
+        answer = text.strip().lower().strip("!.¡")
+        consent = answer in _YES
+        for t in reversed(analytics.data.get("testimonials", [])):
+            if t.get("user_id") == user_id and t.get("date") == pending.get("date"):
+                t["quote_consent"] = consent
+                break
+        analytics.data["pending_feedback"].pop(user_id, None)
+        analytics._save_data()
+        if consent or answer in {"no", "nop", "nope", "n"}:
+            bot.reply_to(message, ("✅ Gracias, podremos citarle sin su nombre. / Thank you, we may quote you without your name."
+                                   if consent else
+                                   "✅ Entendido, queda solo para nosotros. / Understood, it stays private."))
+            return True
+        return False
+    except Exception as e:
+        print(f"⚠️ feedback capture: {e}")
+        return False
+
+
+def invite_code(user_id):
+    """Short stable code for a user's invite link - a hash, never the raw Telegram id."""
+    import hashlib
+    return hashlib.sha256(("espaluz-invite:" + str(user_id)).encode()).hexdigest()[:10]
+
+
+def invite_link(user_id):
+    return f"https://t.me/EspaLuzFamily_bot?start=ref_{invite_code(user_id)}"
+
+
+def find_inviter(code):
+    """The user whose invite_code is `code`, among people the bot already knows (analytics + onboarding)."""
+    known = set(onboarding_states.keys())
+    if ENHANCED_BRAIN_AVAILABLE:
+        known |= set(analytics.data.get("users", {}).keys())
+    for uid in known:
+        if invite_code(uid) == code:
+            return uid
+    return None
+
+
+def record_invite(new_user_id, code):
+    """/start ref_CODE from a NEW user: record it with analytics.track_referral (no paid time granted - pricing is
+    Elena's call). Self-invites and a person already recorded as invited are ignored."""
+    if not ENHANCED_BRAIN_AVAILABLE:
+        return False
+    try:
+        inviter = find_inviter(code)
+        if not inviter or inviter == new_user_id:
+            return False
+        for refs in analytics.data.get("referrals", {}).values():
+            if any(r.get("referred_id") == new_user_id for r in refs):
+                return False
+        analytics.track_referral(inviter, new_user_id)
+        print(f"🔗 invite recorded ({code})")
+        return True
+    except Exception as e:
+        print(f"⚠️ invite record: {e}")
+        return False
+
+
+@bot.message_handler(commands=["invite", "invitar", "refer"])
+def handle_invite(message):
+    """2 Nov 2026: a personal invite link (replaces /refer's "you BOTH get 1 month FREE", which nothing granted)."""
+    days = 14
+    try:
+        from espaluz_paypal_system import DEFAULT_TRIAL_DAYS
+        days = DEFAULT_TRIAL_DAYS
+    except Exception:
+        pass
+    link = invite_link(message.from_user.id)
+    bot.reply_to(message,
+                 f"💛 Su enlace personal / Your personal link:\n{link}\n\n"
+                 f"Regale a otra familia {days} días gratis de EspaLuz.\n"
+                 f"Give another family {days} days of EspaLuz free.",
+                 disable_web_page_preview=True)
 
 @bot.message_handler(commands=["metrics"])
 def handle_metrics(message):
@@ -5100,37 +5341,7 @@ Try: /slang to see local expressions."""
     else:
         bot.reply_to(message, f"❌ Country '{country_name}' not found.\n\nTry: panama, mexico, colombia, argentina, spain, costa_rica")
 
-@bot.message_handler(commands=["refer"])
-def handle_refer(message):
-    """Show referral program info"""
-    user_id = str(message.from_user.id)
-    
-    # Get referral stats if available
-    referral_count = 0
-    if ENHANCED_BRAIN_AVAILABLE:
-        try:
-            if user_id in analytics.data.get("referrals", {}):
-                referral_count = len(analytics.data["referrals"][user_id])
-        except:
-            pass
-    
-    response = f"""🔗 *Share EspaLuz with Friends!*
-
-*How it works:*
-1. Share EspaLuz with friends
-2. When they subscribe, you BOTH get 1 month FREE
-3. No limit on referrals!
-
-*Your referral stats:*
-• Friends referred: {referral_count}
-• Free months earned: {referral_count}
-
-To refer someone:
-1. Tell them to message @EspaLuzBot
-2. Have them mention your username when subscribing
-
-Thank you for spreading the word! 🙏"""
-    bot.reply_to(message, response, parse_mode="Markdown")
+# /refer moved to handle_invite (2 Nov 2026): the old text promised "you BOTH get 1 month FREE", which nothing granted.
 
 @bot.message_handler(commands=["menu"])
 def handle_menu(message):
@@ -5625,18 +5836,29 @@ def handle_pagar(message):
         )
         return
 
+    # Season passes (2 Nov 2026): /pagar = 1 month (unchanged), /pagar 3|6|12 = longer passes from PASS_TABLE.
+    from espaluz_paguelofacil import PASS_TABLE, pass_for_months
+    parts = (message.text or "").split()
+    months = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 1
+    chosen = pass_for_months(months)
+    if not chosen:
+        lines = [f"• /pagar {m if m > 1 else ''}".rstrip() + f" — ${p['amount']} · {p['days']} días / days"
+                 for m in sorted(PASS_TABLE) for p in [pass_for_months(m)]]
+        bot.reply_to(message, "💳 Pases EspaLuz / EspaLuz passes:\n" + "\n".join(lines))
+        return
+
     access = paguelofacil_system.get_access_info(user_id)
     if access.get("active"):
         # 1 Nov 2026: this used to refuse ("renew early with /pagar" - and /pagar refused again). Early renewal is
-        # allowed: grant_access adds the 30 days on top of the days left.
+        # allowed: grant_access adds the paid days on top of the days left.
         bot.reply_to(
             message,
             f"✅ Tienes acceso hasta {access.get('paid_until_display') or access['paid_until'][:10]} ({access['days_remaining']} días).\n"
-            "You have access until then. Paying now adds 30 more days on top.",
+            f"You have access until then. Paying now adds {chosen['days']} more days on top.",
         )
 
     bot.reply_to(message, "🔗 Generando enlace de pago seguro… / Creating secure payment link…")
-    result = paguelofacil_system.create_payment_link(user_id)
+    result = paguelofacil_system.create_payment_link(user_id, months=chosen["months"])
 
     if not result.get("success"):
         bot.send_message(
@@ -5648,6 +5870,7 @@ def handle_pagar(message):
 
     url = result["url"]
     amount = result.get("amount", PAGUELOFACIL_AMOUNT)
+    others = " · ".join(f"/pagar {m} = ${pass_for_months(m)['amount']}" for m in sorted(PASS_TABLE) if m != chosen["months"])
     bot.send_message(
         message.chat.id,
         f"""💳 **Pago único EspaLuz — ${amount}**
@@ -5656,7 +5879,8 @@ def handle_pagar(message):
 
 👉 {url}
 
-• Acceso: **30 días** completos
+• Acceso: **{chosen['days']} días** completos / {chosen['days']} days
+• Otros pases / Other passes: {others}
 • Tras pagar, **no necesitas /link** — te confirmamos aquí automáticamente
 • El enlace expira en 1 hora
 
@@ -6219,6 +6443,10 @@ def handle_text(message):
             track_activity(user_id)
         except:
             pass
+
+    # /feedback's answer (and its consent reply) is stored before the access gate: a lapsed family can still tell us
+    if handle_pending_feedback(message, user_id, text):
+        return
 
     if not enforce_learning_access(message, user_id):
         return
