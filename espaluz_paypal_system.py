@@ -421,7 +421,9 @@ class TelegramPayPalSystem:
                     "INSERT INTO user_trials (user_id, trial_start, trial_end, status, messages_sent, user_info, created_at) "
                     "VALUES (%s,%s,%s,%s,%s,%s::jsonb,NOW()) ON CONFLICT (user_id) DO "
                     + ("NOTHING" if only_if_new else
-                       "UPDATE SET trial_end = EXCLUDED.trial_end, status = EXCLUDED.status, messages_sent = EXCLUDED.messages_sent"),
+                       "UPDATE SET trial_end = EXCLUDED.trial_end, status = EXCLUDED.status, messages_sent = EXCLUDED.messages_sent, "
+                       # 2 Nov 2026: keep the org code an /org grant writes (a null never wipes a stored one)
+                       "user_info = COALESCE(user_trials.user_info, '{}'::jsonb) || jsonb_strip_nulls(EXCLUDED.user_info)"),
                     ("tg:" + str(user_id), data["trial_start"], data["trial_end"], data.get("status", "active"),
                      data.get("messages_sent", 0), json.dumps({"platform": "telegram", "org_code": data.get("org_code")})))
             return
@@ -468,6 +470,59 @@ class TelegramPayPalSystem:
         logging.info(f"✅ Started {trial_days}-day trial for user {user_id}")
         return trial_data
     
+    def _is_paying(self, user_id: str) -> bool:
+        """Paid right now by any door the gate (is_user_allowed) honours: payment truth, PayPal JSON, PágueloFácil."""
+        try:
+            import espaluz_payment_truth
+            mapped = self._load_json(self.mapping_file).get(str(user_id)) or {}
+            truth = espaluz_payment_truth.access(emails=[mapped.get("email", "")] if isinstance(mapped, dict) else [],
+                                                 telegram_id=str(user_id))
+            if truth and truth.get("paid"):
+                return True
+            if truth and truth.get("paid_until") is not None:
+                paypal_active = False  # the truth says the paid time ended; the old JSON flag no longer counts
+            else:
+                paypal_active = self._check_paypal_subscription(str(user_id)).get("is_active")
+        except Exception as e:
+            logging.warning(f"org code: payment truth unavailable: {e}")
+            paypal_active = self._check_paypal_subscription(str(user_id)).get("is_active")
+        if paypal_active:
+            return True
+        try:
+            from espaluz_paguelofacil import has_active_access
+            return bool(has_active_access(str(user_id)))
+        except ImportError:
+            return False
+
+    def apply_org_code(self, user_id: str, org_code: str, org_days: int) -> Dict[str, Any]:
+        """2 Nov 2026: /org CODE used to only log the code and say "extended access". This grants it in the table the
+        gate reads (user_trials via _save_trial): free access runs until now + org_days (never shortened). One org code
+        per person, and none for someone already paying (nothing to extend). Returns ok/reason/days/trial_end."""
+        user_id_str = str(user_id)
+        trial = self._load_trials().get(user_id_str)
+        if trial and trial.get("org_code"):
+            return {"ok": False, "reason": "already_used", "org_code": trial["org_code"]}
+        if self._is_paying(user_id_str):
+            return {"ok": False, "reason": "paying"}
+        now = datetime.now()
+        target_end = now + timedelta(days=int(org_days))
+        if trial:
+            current_end = datetime.fromisoformat(trial["trial_end"])
+            if current_end.tzinfo is not None:
+                current_end = current_end.astimezone().replace(tzinfo=None)
+            new_end = max(current_end, target_end)
+            data = dict(trial)
+            data.update({"trial_end": new_end.isoformat(), "status": "active", "org_code": org_code})
+        else:
+            new_end = target_end
+            data = {"user_id": user_id_str, "trial_start": now.isoformat(), "trial_end": new_end.isoformat(),
+                    "status": "active", "messages_sent": 0, "org_code": org_code, "created_at": now.isoformat()}
+        self._save_trial(user_id_str, data)
+        self._clear_trial_reminders(user_id_str)
+        days = int(org_days) if new_end == target_end else max(0, (new_end - now).days)
+        logging.info(f"✅ Org code {org_code}: free access {days} days for {user_id_str}")
+        return {"ok": True, "days": days, "trial_end": new_end.isoformat(), "org_code": org_code}
+
     def get_trial_status(self, user_id: str) -> Dict[str, Any]:
         """Get trial status for a user"""
         trials = self._load_trials()

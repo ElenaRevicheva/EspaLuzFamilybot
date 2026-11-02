@@ -26,6 +26,50 @@ PAGUELOFACIL_SANDBOX = os.getenv("PAGUELOFACIL_SANDBOX", "false").lower() in ("1
 PAGUELOFACIL_AMOUNT = os.getenv("PAGUELOFACIL_AMOUNT", "11.00").strip()
 PAGUELOFACIL_AMOUNT_WA = os.getenv("PAGUELOFACIL_AMOUNT_WA", PAGUELOFACIL_AMOUNT).strip()
 PAGUELOFACIL_ACCESS_DAYS = int(os.getenv("PAGUELOFACIL_ACCESS_DAYS", "30"))
+
+# Season passes (2 Nov 2026) - THE one place prices and days live: months -> (price USD, days).
+# The 1-month price stays PAGUELOFACIL_AMOUNT (WhatsApp: PAGUELOFACIL_AMOUNT_WA) so the live $11 link is unchanged.
+# Days are granted from the amount PágueloFácil reports as PAID (totalPay), never from what the user typed.
+PASS_TABLE: Dict[int, Tuple[str, int]] = {
+    1: (PAGUELOFACIL_AMOUNT, PAGUELOFACIL_ACCESS_DAYS),
+    3: ("30.00", 90),
+    6: ("60.00", 180),
+    12: ("120.00", 365),
+}
+PASS_AMOUNT_TOLERANCE = 0.05  # a processor fee may shave a few cents/percent off totalPay
+
+
+def pass_for_months(months: int, platform: str = "telegram") -> Optional[Dict[str, Any]]:
+    """The pass for 1/3/6/12 months, or None. WhatsApp's 1-month price follows PAGUELOFACIL_AMOUNT_WA."""
+    if months not in PASS_TABLE:
+        return None
+    price, days = PASS_TABLE[months]
+    if months == 1 and platform == "whatsapp":
+        price = PAGUELOFACIL_AMOUNT_WA
+    return {"months": months, "amount": price, "days": days}
+
+
+def days_for_amount(amount: Any, platform: str = "telegram") -> int:
+    """Days of access for an amount actually paid: the largest pass whose price the payment covers (5% tolerance).
+    A payment below the cheapest pass keeps the old behaviour (PAGUELOFACIL_ACCESS_DAYS) and is logged."""
+    try:
+        paid = float(str(amount).replace(",", "."))
+    except (TypeError, ValueError):
+        logging.warning("PagueloFacil: unreadable amount %r - default %s days", amount, PAGUELOFACIL_ACCESS_DAYS)
+        return PAGUELOFACIL_ACCESS_DAYS
+    best = None
+    for months in PASS_TABLE:
+        p = pass_for_months(months, platform)
+        try:
+            price = float(p["amount"])
+        except (TypeError, ValueError):
+            continue
+        if paid >= price * (1 - PASS_AMOUNT_TOLERANCE) and (best is None or p["days"] > best["days"]):
+            best = p
+    if best is None:
+        logging.warning("PagueloFacil: amount %s below every pass - default %s days", paid, PAGUELOFACIL_ACCESS_DAYS)
+        return PAGUELOFACIL_ACCESS_DAYS
+    return best["days"]
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
 PAGUELOFACIL_WA_NOTIFY_URL = os.getenv(
     "PAGUELOFACIL_WA_NOTIFY_URL",
@@ -476,24 +520,29 @@ def grant_access(
     }
 
 
-def create_payment_link(user_id: str, platform: str = PLATFORM_TELEGRAM) -> Dict[str, Any]:
-    """Request a secure checkout URL from PagueloFacil LinkDeamon."""
+def create_payment_link(user_id: str, platform: str = PLATFORM_TELEGRAM, months: int = 1) -> Dict[str, Any]:
+    """Request a secure checkout URL from PagueloFacil LinkDeamon. `months` picks a pass from PASS_TABLE (default 1 =
+    the unchanged $11 / 30-day link). The webhook grants days from the amount actually paid, not from this argument."""
     if not is_configured():
         return {
             "success": False,
             "error": "PAGUELOFACIL_CCLW not configured — add merchant CCLW to .env on Oracle.",
         }
 
-    amount = PAGUELOFACIL_AMOUNT_WA if platform == PLATFORM_WHATSAPP else PAGUELOFACIL_AMOUNT
+    chosen = pass_for_months(int(months or 1), platform)
+    if not chosen:
+        return {"success": False, "error": f"Unknown pass: {months} months (choose {sorted(PASS_TABLE)})"}
+    amount = chosen["amount"]
+    period = "1 mes" if chosen["months"] == 1 else f"{chosen['months']} meses"
 
     if platform == PLATFORM_WHATSAPP:
         wa_id = normalize_whatsapp_id(user_id)
-        description = f"EspaLuz WhatsApp — WA:{wa_id} — 1 mes acceso"
+        description = f"EspaLuz WhatsApp — WA:{wa_id} — {period} acceso"
         parm1 = f"WA:{wa_id.lstrip('+')}"
         canonical_id = wa_id
     else:
         tg_id = str(user_id)
-        description = f"EspaLuz Telegram — TG:{tg_id} — 1 mes acceso"
+        description = f"EspaLuz Telegram — TG:{tg_id} — {period} acceso"
         parm1 = tg_id
         canonical_id = tg_id
 
@@ -539,6 +588,8 @@ def create_payment_link(user_id: str, platform: str = PLATFORM_TELEGRAM) -> Dict
             "platform": platform,
             "user_id": canonical_id,
             "amount": amount,
+            "pass_months": chosen["months"],
+            "pass_days": chosen["days"],
             "description": description,
             "created_at": datetime.now().isoformat(),
             "status": "pending",
@@ -551,7 +602,8 @@ def create_payment_link(user_id: str, platform: str = PLATFORM_TELEGRAM) -> Dict
         store["orders"][code] = order
         _save_store(store)
 
-    return {"success": True, "url": url, "code": code, "amount": amount, "platform": platform}
+    return {"success": True, "url": url, "code": code, "amount": amount, "platform": platform,
+            "months": chosen["months"], "days": chosen["days"]}
 
 
 def notify_whatsapp_user_paid(whatsapp_id: str, paid_until: Optional[str] = None) -> bool:
@@ -637,11 +689,14 @@ def process_webhook(payload: Dict[str, Any]) -> Dict[str, Any]:
     platform, user_id = parsed
     amount = str(payload.get("totalPay") or payload.get("requestPayAmount") or PAGUELOFACIL_AMOUNT)
     email = payload.get("email")
+    # Season passes (2 Nov 2026): the days follow what PágueloFácil says was PAID (totalPay), never user input.
+    days = days_for_amount(amount, platform)
     result = grant_access(
         user_id,
         cod_oper=cod_oper,
         amount=amount,
         email=email,
+        days=days,
         platform=platform,
     )
     # 1 Nov 2026: the same payment, counted once, in the one payment truth (espaluz_payment_truth.py).
