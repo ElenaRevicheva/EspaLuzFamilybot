@@ -3582,7 +3582,35 @@ def _report_mission(replies):
     return ""
 
 
-def kids_report_text(surface, start, end, answers, said, practice="", mission="", photos=(), together="", child=""):
+# 3 Nov 2026 (Batch C of docs/espaluz/COMPANION_PLAN_2026-11-03.md): the two loops competitors grow with, inside the
+# message parents already open after every lesson - a family streak (Duolingo Friend Streak; shown only when positive,
+# never "don't break it") and the existing /invite link (the only channel that ever brought EspaLuz users), at most
+# once a week so it never nags.
+def _kids_streak(p, end):
+    """Consecutive Panama days with a reported lesson, ending on this lesson's day; keeps the last 60 days in prefs."""
+    day = (end - timedelta(hours=5)).date()
+    days = set(p.get("kids_lesson_days") or []) | {day.isoformat()}
+    p["kids_lesson_days"] = sorted(days)[-60:]
+    n = 0
+    while (day - timedelta(days=n)).isoformat() in days:
+        n += 1
+    return n
+
+
+def _kids_invite_due(p, end):
+    """True at most once every 7 days per family (the invite line in the lesson report)."""
+    try:
+        last = datetime.fromisoformat(p["kids_invite_shown"]) if p.get("kids_invite_shown") else None
+    except (TypeError, ValueError):
+        last = None
+    if last and (end - last).days < 7:
+        return False
+    p["kids_invite_shown"] = end.isoformat()
+    return True
+
+
+def kids_report_text(surface, start, end, answers, said, practice="", mission="", photos=(), together="", child="",
+                     streak=0, invite=""):
     pa = lambda t: t - timedelta(hours=5)  # Panama is UTC-5 all year
     when = (f"{pa(end).day} {pa(end):%b}, "
             + (f"{pa(start):%H:%M}–{pa(end):%H:%M} ({max(1, round((end - start).total_seconds() / 60))} min)"
@@ -3592,13 +3620,18 @@ def kids_report_text(surface, start, end, answers, said, practice="", mission=""
     if said:
         lines += ["", f"🗣️ {child or 'Your child'} said (as the microphone heard it):"] + [f"• “{s}”" for s in said]
     if photos:
-        lines += ["", "📷 She showed: " + "; ".join(photos[:3])]
+        lines += ["", "📷 Shown in the lesson: " + "; ".join(photos[:3])]
     if practice:
         lines += ["", f"🔁 Practise tonight: “{practice}”"]
     if mission:
         lines += [f"🎯 Mission: {mission}"]
     if together:  # the Leaply-style game for parent + child (kids-memory TOGETHER, the same on every channel)
         lines += ["", f"🧠 Tomorrow, 2 minutes together: {together}"]
+    if streak >= 2:
+        lines += ["", f"🔥 {streak} días seguidos con Pere y Titi / {streak} days in a row with Pere and Titi"]
+    if invite:
+        lines += ["", "💌 ¿Una familia que acaba de llegar? Regálele 14 días gratis / Know a family that just arrived? "
+                      f"Give them 14 days free:\n{invite}"]
     return "\n".join(lines + ["", "— Pere 🦥 y Titi 🐒 · EspaLuz"])
 
 
@@ -3652,7 +3685,9 @@ def kids_report_web():
             text = kids_report_text(surface, start, end, len(mine),
                                     _report_said([(t["said"], _first_line(t["reply"])) for t in mine]),
                                     _report_practice(replies), _report_mission(replies), photos,
-                                    j.get("together_tomorrow") or "", child=_child_name(p))
+                                    j.get("together_tomorrow") or "", child=_child_name(p),
+                                    streak=_kids_streak(p, end),
+                                    invite=invite_link(uid) if _kids_invite_due(p, end) else "")
             bot.send_message(int(uid), text)
             print(f"📒 parent report sent ({surface} lesson {start:%H:%M}-{end:%H:%M} UTC, {len(mine)} answers)")
         # 1 Nov 2026 (Leaply Kids, the daily ritual): once a day from 17:00 Panama, a family that had a lesson in the
@@ -3686,9 +3721,11 @@ def kids_report_telegram():
         if len(pairs) < 2:
             continue
         mission = p.get("kids_mission") if p.get("kids_mission_lesson") == lesson else ""
-        bot.send_message(int(uid), kids_report_text("Telegram", None, datetime.utcfromtimestamp(float(p["kids_last"])),
+        _end = datetime.utcfromtimestamp(float(p["kids_last"]))
+        bot.send_message(int(uid), kids_report_text("Telegram", None, _end,
                                                     len(pairs), _report_said(pairs), mission=mission or "",
-                                                    child=_child_name(p)))
+                                                    child=_child_name(p), streak=_kids_streak(p, _end),
+                                                    invite=invite_link(uid) if _kids_invite_due(p, _end) else ""))
         print(f"📒 parent report sent (Telegram lesson {lesson}, {len(pairs)} answers)")
     if changed:
         save_persistent_sessions()
