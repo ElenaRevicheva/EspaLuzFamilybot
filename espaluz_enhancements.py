@@ -838,3 +838,35 @@ say "ask at the school / office how much it is" instead.
 PRACTICAL HELP: you can explain a photographed document, draft a message to a landlord, school or doctor's office, or
 write a short phone script in Spanish - offer it when it fits. If you are not sure about a local fact (office hours, a
 fee, a rule), say so plainly and say where to confirm it. Never make it up."""
+
+
+# 3 Nov 2026 (approved by Elena): a money-amount safeguard. Tested on the free chain: an instruction alone did not stop
+# invented prices ("B/. 30" for a residence card, "$5-20" for a school fee, neither in our country data). If a reply names
+# an amount whose number is not in the instructions it was given (country data, memory), one honest line is added.
+# EspaLuz's own prices are known and never trigger it.
+import re as _re_money
+_MONEY = _re_money.compile(
+    r"(?:B/\.?\s?|US\$\s?|\$\s?|USD\s?|€\s?)\d[\d.,]*"
+    r"|\b\d[\d.,]*\s?(?:balboas?|d[oó]lares|dollars|usd|pesos|soles|euros?|quetzales|colones|lempiras|córdobas|bolivianos)\b",
+    _re_money.I)
+_ESPALUZ_PRICES = {"11", "30", "60", "120", "7"}  # EspaLuz passes: $11 / $30 / $60 / $120 (and the old $7.77)
+MONEY_CAVEAT_LINE = ("💡 Los precios y requisitos cambian: confírmalo en la ventanilla o por teléfono antes de ir. / "
+                     "Prices and requirements change: confirm at the window or by phone before you go.")
+
+
+def money_caveat(reply, known=""):
+    """Add one honest line when the reply names a price that is not in `known` (the instructions it was given)."""
+    if not reply:
+        return reply
+    main, sep, video = reply.partition("[VIDEO SCRIPT START]")
+    amounts = [m.group(0) for m in _MONEY.finditer(main)]
+    if not amounts or MONEY_CAVEAT_LINE[:20] in main:
+        return reply
+    known_numbers = set(_re_money.findall(r"\d+", str(known or "")))
+    if _re_money.search(r"espaluz|pase|pass|suscrip|subscri", main, _re_money.I):
+        known_numbers |= _ESPALUZ_PRICES  # only when the reply is about EspaLuz itself ("B/. 30" at Migración is not)
+    unknown = [a for a in amounts if (_re_money.search(r"\d+", a.replace(",", "")) or [None])[0] not in known_numbers]
+    if not unknown:
+        return reply
+    print(f"💡 money caveat added (amount not in our data: {', '.join(unknown[:3])})", flush=True)
+    return main.rstrip() + "\n\n" + MONEY_CAVEAT_LINE + ("\n\n" + sep + video if sep else "")

@@ -143,9 +143,11 @@ except ImportError as e:
 
 # 3 Nov 2026: one companion text for every grown-up reply (espaluz_enhancements.ESPALUZ_COMPANION_RULES)
 try:
-    from espaluz_enhancements import ESPALUZ_COMPANION_RULES
+    from espaluz_enhancements import ESPALUZ_COMPANION_RULES, money_caveat
 except Exception:  # noqa: BLE001
     ESPALUZ_COMPANION_RULES = ""
+    def money_caveat(reply, known=""):  # noqa: E306 - safe no-op if the module is older
+        return reply
 
 # =============================================================================
 # ONBOARDING SYSTEM (NEW - Jan 2026)
@@ -2754,7 +2756,7 @@ def ask_claude_with_mcp(session, translated_input):
                 "timestamp": datetime.now().isoformat()
             })
 
-        full_reply = result["content"][0]["text"]
+        full_reply = money_caveat(result["content"][0]["text"], mcp_request.get("system", ""))  # 3 Nov 2026
         short_text = extract_video_script(full_reply)
 
         return full_reply.strip(), short_text.strip(), thinking_process
@@ -2768,6 +2770,7 @@ def ask_claude_with_mcp(session, translated_input):
         try:
             fallback_text = _telegram_llm_fallback_reply(mcp_request, content_input)
             if fallback_text:
+                fallback_text = money_caveat(fallback_text, mcp_request.get("system", ""))  # 3 Nov 2026
                 short_text = extract_video_script(fallback_text)
                 return fallback_text.strip(), short_text.strip(), ""
         except Exception as fallback_error:
@@ -3609,14 +3612,39 @@ def _kids_invite_due(p, end):
     return True
 
 
+# 3 Nov 2026 (Elena: "make the learning visible - Pere and Titi are a school program, not just fun"): the report names
+# the class unit and skills practised (espaluz-chat saves class_label with each class turn; kids-memory passes it as
+# turn["unit"]). A lesson with no class turn gets a short tip - class first, painting as the reward - at most every 3 days.
+_KIDS_CLASS_TIP = {
+    "web": "📘 Mañana: primero «Clase» (el programa escolar en español e inglés) y después pintar como premio / "
+           "Tomorrow: «Class» first (the school program in Spanish and English), then painting as the reward.",
+    "telegram": "📘 Mañana: primero /clase (el programa escolar en español e inglés) y después a jugar como premio / "
+                "Tomorrow: /clase first (the school program in Spanish and English), then play as the reward.",
+}
+
+
+def _kids_class_tip_due(p, end):
+    """True at most once every 3 days per family."""
+    try:
+        last = datetime.fromisoformat(p["kids_class_tip_shown"]) if p.get("kids_class_tip_shown") else None
+    except (TypeError, ValueError):
+        last = None
+    if last and (end - last).days < 3:
+        return False
+    p["kids_class_tip_shown"] = end.isoformat()
+    return True
+
+
 def kids_report_text(surface, start, end, answers, said, practice="", mission="", photos=(), together="", child="",
-                     streak=0, invite=""):
+                     streak=0, invite="", learned="", class_tip=""):
     pa = lambda t: t - timedelta(hours=5)  # Panama is UTC-5 all year
     when = (f"{pa(end).day} {pa(end):%b}, "
             + (f"{pa(start):%H:%M}–{pa(end):%H:%M} ({max(1, round((end - start).total_seconds() / 60))} min)"
                if start else f"ended {pa(end):%H:%M}"))
     title = f"{child}'s lesson" if child else "Your child's lesson with Pere & Titi"
     lines = [f"📒 {title} · {surface} · {when}", f"⭐ {answers} answers"]
+    if learned:
+        lines += ["", f"📘 Practised today (school program): {learned}"]
     if said:
         lines += ["", f"🗣️ {child or 'Your child'} said (as the microphone heard it):"] + [f"• “{s}”" for s in said]
     if photos:
@@ -3627,6 +3655,8 @@ def kids_report_text(surface, start, end, answers, said, practice="", mission=""
         lines += [f"🎯 Mission: {mission}"]
     if together:  # the Leaply-style game for parent + child (kids-memory TOGETHER, the same on every channel)
         lines += ["", f"🧠 Tomorrow, 2 minutes together: {together}"]
+    if class_tip:
+        lines += ["", class_tip]
     if streak >= 2:
         lines += ["", f"🔥 {streak} días seguidos con Pere y Titi / {streak} days in a row with Pere and Titi"]
     if invite:
@@ -3682,12 +3712,16 @@ def kids_report_web():
             photos = [re.sub(r"^📷 \(foto: |\)$", "", t["said"])[:100] for t in mine if t["said"].startswith("📷 (foto:")]
             # 1 Nov 2026: linked Telegram lessons are saved by the kids brain too, so each lesson says where it was.
             surface = "Telegram" if all(t.get("src") == "telegram" for t in lesson) else "web classroom"
+            learned = next((t.get("unit") for t in reversed(lesson) if t.get("unit")), "")
+            tip = (_KIDS_CLASS_TIP["telegram" if surface == "Telegram" else "web"]
+                   if not learned and _kids_class_tip_due(p, end) else "")
             text = kids_report_text(surface, start, end, len(mine),
                                     _report_said([(t["said"], _first_line(t["reply"])) for t in mine]),
                                     _report_practice(replies), _report_mission(replies), photos,
                                     j.get("together_tomorrow") or "", child=_child_name(p),
                                     streak=_kids_streak(p, end),
-                                    invite=invite_link(uid) if _kids_invite_due(p, end) else "")
+                                    invite=invite_link(uid) if _kids_invite_due(p, end) else "",
+                                    learned=learned, class_tip=tip)
             bot.send_message(int(uid), text)
             print(f"📒 parent report sent ({surface} lesson {start:%H:%M}-{end:%H:%M} UTC, {len(mine)} answers)")
         # 1 Nov 2026 (Leaply Kids, the daily ritual): once a day from 17:00 Panama, a family that had a lesson in the
@@ -3725,7 +3759,10 @@ def kids_report_telegram():
         bot.send_message(int(uid), kids_report_text("Telegram", None, _end,
                                                     len(pairs), _report_said(pairs), mission=mission or "",
                                                     child=_child_name(p), streak=_kids_streak(p, _end),
-                                                    invite=invite_link(uid) if _kids_invite_due(p, _end) else ""))
+                                                    invite=invite_link(uid) if _kids_invite_due(p, _end) else "",
+                                                    class_tip=(_KIDS_CLASS_TIP["telegram"]
+                                                               if p.get("kids_mode") != "class" and _kids_class_tip_due(p, _end)
+                                                               else "")))
         print(f"📒 parent report sent (Telegram lesson {lesson}, {len(pairs)} answers)")
     if changed:
         save_persistent_sessions()
