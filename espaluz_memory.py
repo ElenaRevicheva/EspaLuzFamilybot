@@ -240,9 +240,11 @@ class EspaLuzMemory:
         if not self._user or len(text) < 15 or text.startswith("/"):
             return 0
         try:
-            from llm_chain import complete, PROFILE_FALLBACK
+            # The order is named here, not imported: WhatsApp's llm_chain has no PROFILE_FALLBACK, and that ImportError
+            # (caught below) silently skipped every WhatsApp fact on 3 Nov until the A/B test exposed it.
+            from llm_chain import complete
             out, _errors = complete(self._FACTS_SYSTEM, f"USER MESSAGE:\n{text[:1200]}", max_tokens=200,
-                                    order=PROFILE_FALLBACK)
+                                    order=("gemini", "groq", "grok", "openai"))
             if not out or out.strip().upper().startswith("NONE"):
                 return 0
             known = [str(m.get("content", "")).lower() for m in self.get_user_memories(self._user.id, limit=60)]
