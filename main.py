@@ -1785,9 +1785,11 @@ THIS IS MANDATORY. NO ASTERISKS ALLOWED.
                         memory_block += f"\n{_profile_ctx}"
 
                     # Layer 1b: Last 5 turns from LangChain (real UUID session_id)
+                    _recent = []
                     if _mem.chat_history:
                         try:
                             _msgs = _mem.chat_history.messages[-5:]
+                            _recent = [str(m.content) for m in _msgs]
                             if _msgs:
                                 turns = "\n".join(
                                     f"{'User' if 'Human' in type(m).__name__ else 'EspaLuz'}: {str(m.content)[:200]}"
@@ -1803,9 +1805,10 @@ THIS IS MANDATORY. NO ASTERISKS ALLOWED.
                             raise LookupError("kids mode: no adult RAG")
                         from espaluz_rag import retrieve_context, get_session_id_for_user
                         _session_id = get_session_id_for_user('telegram', _mem.user_id)
-                        _rag_ctx = retrieve_context(_session_id, new_message, top_k=3)
+                        _rag_ctx = retrieve_context(_session_id, new_message, top_k=3, exclude=_recent)
                         if _rag_ctx:
                             memory_block += f"\n\n{_rag_ctx}"
+                            print(f"🔍 RAG recalled {_rag_ctx.count(chr(10))} earlier turn(s)")
                     except LookupError:
                         pass
                     except Exception as _e:

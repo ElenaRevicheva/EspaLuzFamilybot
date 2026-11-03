@@ -36,7 +36,10 @@ DB_URL = os.getenv('DATABASE_URL_UNIFIED')  # set in .env; this module is import
 EMBED_MODEL = os.getenv('RAG_EMBED_MODEL', 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')
 EMBED_DIM = 384
 # Cosine similarity of this model for "the same topic" sits lower than OpenAI's (0.75 was tuned for OpenAI).
-MIN_SIMILARITY = float(os.getenv('RAG_MIN_SIMILARITY', '0.55'))
+# 3 Nov 2026, measured on Oracle with a probe family: "today was my son's first day of school" scored 0.397 against
+# "Mateo starts at Colegio Balboa on Monday" and unrelated turns 0.26-0.37, so 0.55 dropped every real recall - RAG
+# had been silently empty. 0.38 keeps the related turn and drops the unrelated ones (carnet 0.72, outlet 0.49).
+MIN_SIMILARITY = float(os.getenv('RAG_MIN_SIMILARITY', '0.38'))
 # One download shared by both bots.
 _CACHE_DIR = os.getenv('RAG_MODEL_CACHE', '/home/ubuntu/.cache/espaluz-fastembed')
 
@@ -133,11 +136,14 @@ def save_turn(session_id: str, role: str, content: str) -> bool:
         return False
 
 
-def retrieve_context(session_id: str, query: str, top_k: int = 3) -> str:
+def retrieve_context(session_id: str, query: str, top_k: int = 3, roles=('user',), exclude=()) -> str:
     """
     Embed query, search espaluz_embeddings for semantically similar past turns.
     Returns formatted string ready to inject into system prompt.
     Empty string if nothing found or any error.
+
+    3 Nov 2026: recall what the PERSON said (roles=('user',)): short bot replies ("¡Con gusto!") scored as high as real
+    content and crowded it out. `exclude` = texts already in the LangChain window, so the same turn is not sent twice.
     """
     if not query or not session_id:
         return ''
@@ -154,21 +160,24 @@ def retrieve_context(session_id: str, query: str, top_k: int = 3) -> str:
                            1 - (embedding_local <=> %s::vector) AS similarity
                     FROM espaluz_embeddings
                     WHERE session_id = %s
+                      AND role = ANY(%s)
                       AND model = %s
                       AND embedding_local IS NOT NULL
                       AND 1 - (embedding_local <=> %s::vector) > %s
                     ORDER BY embedding_local <=> %s::vector
                     LIMIT %s
                     """,
-                    (json.dumps(vec), session_id, EMBED_MODEL, json.dumps(vec), MIN_SIMILARITY,
-                     json.dumps(vec), top_k)
+                    (json.dumps(vec), session_id, list(roles), EMBED_MODEL, json.dumps(vec), MIN_SIMILARITY,
+                     json.dumps(vec), top_k + len(exclude))
                 )
                 rows = cur.fetchall()
 
+        seen = {str(x).strip()[:200] for x in exclude if x}
+        rows = [r for r in rows if r['content'].strip()[:200] not in seen][:top_k]
         if not rows:
             return ''
 
-        lines = ['Semantically relevant past interactions:']
+        lines = ['Earlier, this person told you (bring it up naturally when it fits):']
         for r in rows:
             role_label = 'User' if r['role'] == 'user' else 'EspaLuz'
             sim = round(r['similarity'] * 100)

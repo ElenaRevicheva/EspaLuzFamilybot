@@ -228,8 +228,10 @@ class EspaLuzMemory:
         "members, pets, their city or neighbourhood, a child's school or grade, their job, an upcoming appointment, "
         "move or event (with its date if given), plans, likes and dislikes, worries. Third person, English, under 15 "
         "words each, one per line starting with '- '. Skip greetings, lesson answers, single words and anything about "
-        "today only. NEVER write passwords, ID, passport or cédula numbers, phone numbers, emails, street addresses, "
-        "card or bank details, or health details beyond 'has a doctor's appointment'. If nothing lasting: reply NONE."
+        "today only. Appointments and errands ARE worth keeping (Migración, carnet or visa paperwork, school "
+        "enrolment, doctor), with the day as said ('on Thursday'). NEVER write the NUMBERS themselves: passwords, ID, "
+        "passport or cédula numbers, phone numbers, emails, street addresses, card or bank details; and no health "
+        "details beyond 'has a doctor's appointment'. If nothing lasting: reply NONE."
     )
 
     def remember_facts(self, user_text: str) -> int:
