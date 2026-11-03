@@ -686,7 +686,7 @@ def get_memory_context(memory_instance) -> str:
 🧠 KEY MEMORIES ABOUT THIS USER:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 """
-        for mem in memories[:5]:
+        for mem in memories[:10]:
             context += f"- [{mem['memory_type']}] {mem['content']}\n"
         
         context += """

@@ -217,6 +217,53 @@ class EspaLuzMemory:
         if self._user:
             self.store_user_memory(self._user.id, memory_type, content, importance)
     
+    # 3 Nov 2026 (Elena: "why does EspaLuz still forget people?"): the READ path was wired (build_enhanced_context ->
+    # get_memory_context puts up to 10 user_memories into every reply), but the only WRITER was family onboarding, so
+    # user_memories held 13 rows (7 of them tests) after a year. This is the missing writer: after a grown-up message,
+    # the free chain (Claude excluded) notes 0-3 lasting facts the family said about their life, so next week the reply
+    # can ask about the new school or the doctor's visit. Runs in a background thread, never blocks or breaks a reply.
+    _FACTS_SYSTEM = (
+        "You keep a small private notebook about a family for their friendly assistant EspaLuz. From the USER MESSAGE "
+        "ONLY, write 0 to 3 LASTING facts about their life worth remembering next week: names and ages of family "
+        "members, pets, their city or neighbourhood, a child's school or grade, their job, an upcoming appointment, "
+        "move or event (with its date if given), plans, likes and dislikes, worries. Third person, English, under 15 "
+        "words each, one per line starting with '- '. Skip greetings, lesson answers, single words and anything about "
+        "today only. NEVER write passwords, ID, passport or cédula numbers, phone numbers, emails, street addresses, "
+        "card or bank details, or health details beyond 'has a doctor's appointment'. If nothing lasting: reply NONE."
+    )
+
+    def remember_facts(self, user_text: str) -> int:
+        """Note 0-3 lasting facts from what the user just wrote; returns how many new ones were saved."""
+        text = (user_text or "").strip()
+        if not self._user or len(text) < 15 or text.startswith("/"):
+            return 0
+        try:
+            from llm_chain import complete, PROFILE_FALLBACK
+            out, _errors = complete(self._FACTS_SYSTEM, f"USER MESSAGE:\n{text[:1200]}", max_tokens=200,
+                                    order=PROFILE_FALLBACK)
+            if not out or out.strip().upper().startswith("NONE"):
+                return 0
+            known = [str(m.get("content", "")).lower() for m in self.get_user_memories(self._user.id, limit=60)]
+            saved = 0
+            for line in out.splitlines():
+                fact = line.strip().lstrip("-•* ").strip()
+                if not (8 <= len(fact) <= 160) or fact.upper().startswith("NONE"):
+                    continue
+                key = fact.lower().rstrip(".")
+                if any(key in k or k.rstrip(".") in key for k in known if k):
+                    continue
+                self.store_user_memory(self._user.id, "fact", fact, importance=6, category="conversation")
+                known.append(key)
+                saved += 1
+                if saved == 3:
+                    break
+            if saved:
+                print(f"🧠 remembered {saved} new fact(s) for user {self._user.id}", flush=True)
+            return saved
+        except Exception as e:  # noqa: BLE001 - a notebook failure must never touch the reply
+            logger.warning(f"remember_facts non-fatal: {str(e)[:160]}")
+            return 0
+
     def track_emotion(self, emotion: str, trigger: str = None, intensity: float = 0.5):
         """Track emotional state for current user"""
         if self._user:

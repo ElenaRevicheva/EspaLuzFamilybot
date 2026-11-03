@@ -3448,6 +3448,22 @@ def _kid_prefs(session):
     return session.setdefault("context", {}).setdefault("user", {}).setdefault("preferences", {})
 
 
+# 3 Nov 2026: the parent report, the daily ritual, the stars video and the hello said "Alisa" to EVERY family. The
+# child's name now comes from the family's own onboarding (preferences.family_members.children). Onboarding sometimes
+# stored the role instead of the name (Elena's record said "Daughter"), so role words never count as a name; with no
+# real name the lines speak of "your child" instead.
+_NOT_A_NAME = {"daughter", "son", "child", "kid", "kids", "baby", "girl", "boy", "hija", "hijo", "nina", "niña", "nino",
+               "niño", "bebe", "bebé", "peque", "дочь", "сын", "ребенок", "ребёнок"}
+
+
+def _child_name(prefs):
+    for c in (prefs.get("family_members") or {}).get("children") or []:
+        n = str(c.get("name", "") if isinstance(c, dict) else c).strip()
+        if 2 <= len(n) <= 24 and n.lower() not in _NOT_A_NAME and not any(ch.isdigit() for ch in n):
+            return n
+    return ""
+
+
 def kids_brain_reply(session, image_b64=None):
     """One lesson turn from the kids brain - the SaaS espaluz-chat function, the same Pere and Titi as the web classroom
     and EspaLuz WhatsApp - called with the bot's shared secret and the Telegram user id. A family linked with /connect
@@ -3585,14 +3601,15 @@ def _report_mission(replies):
     return ""
 
 
-def kids_report_text(surface, start, end, answers, said, practice="", mission="", photos=(), together=""):
+def kids_report_text(surface, start, end, answers, said, practice="", mission="", photos=(), together="", child=""):
     pa = lambda t: t - timedelta(hours=5)  # Panama is UTC-5 all year
     when = (f"{pa(end).day} {pa(end):%b}, "
             + (f"{pa(start):%H:%M}–{pa(end):%H:%M} ({max(1, round((end - start).total_seconds() / 60))} min)"
                if start else f"ended {pa(end):%H:%M}"))
-    lines = [f"📒 Alisa's lesson · {surface} · {when}", f"⭐ {answers} answers"]
+    title = f"{child}'s lesson" if child else "Your child's lesson with Pere & Titi"
+    lines = [f"📒 {title} · {surface} · {when}", f"⭐ {answers} answers"]
     if said:
-        lines += ["", "🗣️ She said (as the microphone heard it):"] + [f"• “{s}”" for s in said]
+        lines += ["", f"🗣️ {child or 'Your child'} said (as the microphone heard it):"] + [f"• “{s}”" for s in said]
     if photos:
         lines += ["", "📷 She showed: " + "; ".join(photos[:3])]
     if practice:
@@ -3654,7 +3671,7 @@ def kids_report_web():
             text = kids_report_text(surface, start, end, len(mine),
                                     _report_said([(t["said"], _first_line(t["reply"])) for t in mine]),
                                     _report_practice(replies), _report_mission(replies), photos,
-                                    j.get("together_tomorrow") or "")
+                                    j.get("together_tomorrow") or "", child=_child_name(p))
             bot.send_message(int(uid), text)
             print(f"📒 parent report sent ({surface} lesson {start:%H:%M}-{end:%H:%M} UTC, {len(mine)} answers)")
         # 1 Nov 2026 (Leaply Kids, the daily ritual): once a day from 17:00 Panama, a family that had a lesson in the
@@ -3662,7 +3679,9 @@ def kids_report_web():
         day = now - timedelta(hours=5)
         if j.get("together_today") and day.hour >= 17 and p.get("kids_ritual_day") != day.strftime("%Y-%m-%d"):
             p["kids_ritual_day"] = day.strftime("%Y-%m-%d")
-            bot.send_message(int(uid), "🧠 Hoy, 5 minutos con Alisa / 5 minutes with Alisa today\n\n"
+            _c = _child_name(p)
+            bot.send_message(int(uid), (f"🧠 Hoy, 5 minutos con {_c} / 5 minutes with {_c} today\n\n" if _c else
+                                        "🧠 Hoy, 5 minutos juntos / 5 minutes together today\n\n") +
                                        f"🤸 {j['together_today']}\n\nLuego Pere y Titi / Then Pere and Titi: /kids")
             print("🧠 kids daily ritual sent (Telegram)")
         save_persistent_sessions()
@@ -3687,7 +3706,8 @@ def kids_report_telegram():
             continue
         mission = p.get("kids_mission") if p.get("kids_mission_lesson") == lesson else ""
         bot.send_message(int(uid), kids_report_text("Telegram", None, datetime.utcfromtimestamp(float(p["kids_last"])),
-                                                    len(pairs), _report_said(pairs), mission=mission or ""))
+                                                    len(pairs), _report_said(pairs), mission=mission or "",
+                                                    child=_child_name(p)))
         print(f"📒 parent report sent (Telegram lesson {lesson}, {len(pairs)} answers)")
     if changed:
         save_persistent_sessions()
@@ -3893,7 +3913,8 @@ def kids_after_reply(session, chat_id, full_reply, media_thread=None):
         clip = os.path.join(HERO_DIR, "titi-dance.mp4")
         try:
             with open(clip, "rb") as f:
-                bot.send_video(chat_id, f, caption=f"🌟 ¡{stars} estrellas! Titi baila para ti, Alisa. / {stars} stars! Titi dances for you, Alisa! 🐒💃")
+                _to = f", {_child_name(p)}" if _child_name(p) else ""
+                bot.send_video(chat_id, f, caption=f"🌟 ¡{stars} estrellas! Titi baila para ti{_to}. / {stars} stars! Titi dances for you{_to}! 🐒💃")
             print(f"⭐ kids stars {stars} -> titi-dance unlocked")
         except Exception as e:
             print(f"⚠️ star dance not sent: {e}")
@@ -4458,6 +4479,8 @@ def process_message_with_tracking(user_input, chat_id, user_id, message_obj):
             emotion = session.get("context", {}).get("emotional_state", {}).get("current_emotion")
             if emotion:
                 memory.track_emotion(emotion, user_input[:100])
+            # 3 Nov 2026: note lasting facts (memory.remember_facts) in the background - never blocks the reply
+            threading.Thread(target=memory.remember_facts, args=(user_input,), daemon=True).start()
             print(f"✅ Unified memory updated for {user_id}")
         except Exception as e:
             print(f"⚠️ Unified memory error (non-fatal): {e}")
@@ -4639,8 +4662,9 @@ def handle_kids(message):
     if any(p.get(k) for k in ("kids_introduced", "kids_lesson", "kids_said", "kids_turn", "kids_last", "kids_stars")):
         p["kids_introduced"] = True
         save_persistent_sessions()
-        bot.send_message(message.chat.id, "🦥 Pere y 🐒 Titi: ¡Hola de nuevo, Alisa! Te estábamos esperando.\n"
-                                          "Hello again, Alisa! We were waiting for you.\n\n"
+        _to = f", {_child_name(p)}" if _child_name(p) else ""
+        bot.send_message(message.chat.id, f"🦥 Pere y 🐒 Titi: ¡Hola de nuevo{_to}! Te estábamos esperando.\n"
+                                          f"Hello again{_to}! We were waiting for you.\n\n"
                                           "¿Qué nos cuentas hoy? / What will you tell us today?\n"
                                           "(Mamá / papá: /mama para volver · to go back)")
         return
@@ -6408,7 +6432,8 @@ def handle_voice(message):
         # === NORMAL TUTOR MODE ===
         _kid = (user_sessions.get(str(user_id), {}).get("context", {}).get("user", {})
                 .get("preferences", {}).get("family_role") == "alisa")
-        bot.send_message(message.chat.id, f"🎤 Alisa dijo / Alisa said:\n{transcription}" if _kid
+        _c = _child_name(user_sessions.get(str(user_id), {}).get("context", {}).get("user", {}).get("preferences", {}))
+        bot.send_message(message.chat.id, f"🎤 {_c or 'Tu peque'} dijo / {_c or 'Your child'} said:\n{transcription}" if _kid
                          else f"🗣️ Transcripción:\n{transcription}")
 
         process_message_with_tracking(transcription, message.chat.id, str(message.from_user.id), message)
