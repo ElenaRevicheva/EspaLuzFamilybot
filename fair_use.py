@@ -22,13 +22,57 @@ FREE_REASONS = {"trial", "new_trial", "existing_user_grace"}
 _FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fair_use_counts.json")
 _LOCK = threading.Lock()
 
-RESTING = ("Estoy descansando un ratito 😴 Tu mensaje y tu historial están guardados; escríbeme de nuevo en un rato.\n\n"
-           "I'm resting for a little while. Your message and history are saved; write to me again soon.")
-RESTING_SHORT = "Estoy descansando un ratito. Escríbeme de nuevo en un rato."
+# When every provider is out, the family is told WHEN to come back (Elena, 4 Nov 2026: "en un rato" is not an answer).
+# The free daily quotas the chain lives on reset at 00:00 UTC = 7:00 pm Panama, so that is the promised time, with the
+# date. The trial counter resets at Panama midnight. These names are computed on every read (module __getattr__ below),
+# so callers keep writing fair_use.RESTING and always get today's date.
+_DIAS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+_MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre",
+          "noviembre", "diciembre"]
+_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October",
+           "November", "December"]
+_PANAMA = 5 * 3600  # UTC-5, no DST
 
-LIMIT_REACHED = ("🌙 Por hoy ya usamos todas las respuestas gratis. ¡Mañana seguimos! Con la suscripción no hay límite "
-                 "diario.\n\nThat's all the free replies for today. We continue tomorrow! With a subscription there is "
-                 "no daily limit.")
+
+def _day_words(t: float):
+    """(es, en) words for the Panama calendar day of UTC epoch t: 'jueves 5 de noviembre' / 'Thursday 5 November'."""
+    d = time.gmtime(t - _PANAMA)
+    return (f"{_DIAS[d.tm_wday]} {d.tm_mday} de {_MESES[d.tm_mon - 1]}",
+            f"{_DAYS[d.tm_wday]} {d.tm_mday} {_MONTHS[d.tm_mon - 1]}")
+
+
+def back_at(now=None):
+    """(es, en) 'when to try again': the next 00:00 UTC, said as 7:00 pm Panama today or tomorrow, with the date."""
+    now = time.time() if now is None else now
+    reset = (int(now) // 86400 + 1) * 86400
+    es_day, en_day = _day_words(reset)
+    today = time.gmtime(now - _PANAMA).tm_yday == time.gmtime(reset - _PANAMA).tm_yday
+    return ((f"{'hoy' if today else 'mañana'}, {es_day}, a partir de las 7:00 p. m. (hora de Panamá)"),
+            (f"{'today' if today else 'tomorrow'}, {en_day}, from 7:00 pm Panama time"))
+
+
+def _texts(now=None):
+    now = time.time() if now is None else now
+    es_at, en_at = back_at(now)
+    es_tom, en_tom = _day_words(now + 86400)
+    return {
+        "RESTING": (f"Estoy descansando un ratito 😴 Tu mensaje y tu historial están guardados. Escríbeme de nuevo "
+                    f"{es_at}.\n\nI'm resting for a while. Your message and history are saved. Write to me again "
+                    f"{en_at}."),
+        "RESTING_SHORT": f"Estoy descansando. Escríbeme de nuevo {es_at}.",
+        "LIMIT_REACHED": (f"🌙 Por hoy ya usamos todas las respuestas gratis. Seguimos mañana, {es_tom}, desde las "
+                          f"12:00 a. m. (hora de Panamá). Con la suscripción no hay límite diario.\n\nThat's all the "
+                          f"free replies for today. We continue tomorrow, {en_tom}, from midnight Panama time. With a "
+                          f"subscription there is no daily limit."),
+    }
+
+
+def __getattr__(name):  # PEP 562: fair_use.RESTING etc. are built fresh, with the current date
+    texts = _texts()
+    if name in texts:
+        return texts[name]
+    raise AttributeError(name)
 
 
 def _limit() -> int:
@@ -39,7 +83,7 @@ def _limit() -> int:
 
 
 def _panama_day() -> str:
-    return time.strftime("%Y-%m-%d", time.gmtime(time.time() - 5 * 3600))  # UTC-5, no DST
+    return time.strftime("%Y-%m-%d", time.gmtime(time.time() - _PANAMA))
 
 
 def over_daily_limit(user_id, reason) -> bool:
