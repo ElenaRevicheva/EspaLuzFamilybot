@@ -143,10 +143,45 @@ def call_provider(provider: str, system: Optional[str], user: str, max_tokens: i
     if provider == "groq":
         # Cloudflare fronts api.groq.com and 403s the default urllib User-Agent.
         headers["User-Agent"] = "EspaLuz/1.0 (+https://aideazz.xyz)"
+        return _call_groq_models(headers, messages, max_tokens)
     data = _post(_URLS[provider], headers,
                  {"model": model, "messages": messages,
                   "max_tokens": max_tokens, "temperature": 0.7})
     return data["choices"][0]["message"]["content"] or ""
+
+
+def _groq_models() -> List[str]:
+    """3 Nov 2026: Groq's free limits are PER MODEL (measured: gpt-oss-120b hit 'TPD Limit 200000, Used 198949' by
+    evening). The web (SaaS espaluz-chat) already walks 3 Groq models; the bots walked 1 and left the other free
+    allowances unused. Same env var and same default list as the web, so one setting moves all three channels."""
+    web_default = "openai/gpt-oss-120b,openai/gpt-oss-20b,qwen/qwen3.8-27b"
+    explicit = os.environ.get("GROQ_MODELS", "").strip()
+    # GROQ_MODELS (the web's var) decides when set; otherwise the bot's own GROQ_MODEL goes first, then the web list.
+    raw = explicit or ",".join(m for m in (os.environ.get("GROQ_MODEL", "").strip(), web_default) if m)
+    out: List[str] = []
+    for m in (x.strip() for x in raw.split(",")):
+        if m and m not in out:
+            out.append(m)
+    return out
+
+
+def _call_groq_models(headers: dict, messages: list, max_tokens: int) -> str:
+    """Try each Groq model in turn (same per-model settings as the web's groqParams). Raises the last error."""
+    last: Optional[Exception] = None
+    for model in _groq_models():
+        body = {"model": model, "messages": messages, "temperature": 0.7, "max_tokens": max_tokens}
+        if model.startswith("openai/gpt-oss"):
+            body.update(max_tokens=max(max_tokens, 2000), reasoning_effort="low")
+        elif model.startswith("qwen/"):
+            body.update(max_tokens=max(max_tokens, 1000), reasoning_format="hidden")
+        try:
+            text = _post(_URLS["groq"], headers, body)["choices"][0]["message"]["content"] or ""
+            if text.strip():
+                return text
+            last = RuntimeError(f"groq {model}: empty")
+        except Exception as e:  # noqa: BLE001 - 429 on one model = try the next model's own allowance
+            last = RuntimeError(f"groq {model}: {str(e)[:80]}")
+    raise last or RuntimeError("groq: no models configured")
 
 
 def free_tier() -> bool:
