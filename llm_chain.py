@@ -84,6 +84,23 @@ def _model(provider: str) -> str:
     }[provider]
 
 
+# 4 Nov 2026 — METER (Phase 0 of docs/espaluz/MODEL_COST_STRATEGY in cto-aipa). Every provider answer already carries
+# its token counts; they were thrown away, so "how much does a family cost" was a guess. One line per answered call,
+# into the service journal: grep '[meter]'. Never raises — metering must not be able to break a reply.
+METER_CHANNEL = "tg"
+
+
+def _meter(provider: str, model: str, data: dict) -> None:
+    try:
+        u = data.get("usage") or {}
+        g = data.get("usageMetadata") or {}
+        tin = u.get("prompt_tokens", u.get("input_tokens", g.get("promptTokenCount", 0))) or 0
+        tout = u.get("completion_tokens", u.get("output_tokens", g.get("candidatesTokenCount", 0))) or 0
+        print(f"[meter] ch={METER_CHANNEL} p={provider} m={model} in={int(tin)} out={int(tout)}", flush=True)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _post(url: str, headers: dict, body: dict, timeout: int = 60) -> dict:
     req = urllib.request.Request(
         url, data=json.dumps(body).encode(), method="POST",
@@ -105,6 +122,7 @@ def call_provider(provider: str, system: Optional[str], user: str, max_tokens: i
         if system:
             body["system"] = system[:14000]
         data = _post(_URLS["claude"], {"x-api-key": key, "anthropic-version": "2023-06-01"}, body)
+        _meter("claude", model, data)
         return "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text")
 
     if provider == "gemini":
@@ -125,6 +143,7 @@ def call_provider(provider: str, system: Optional[str], user: str, max_tokens: i
             url = (f"https://generativelanguage.googleapis.com/v1beta/models/{model}"
                    f":generateContent?key={key}")
             data = _post(url, {}, body)
+            _meter("gemini", model, data)
             cands = data.get("candidates") or [{}]
             parts = (cands[0].get("content") or {}).get("parts") or [{}]
             return parts[0].get("text") or ""
@@ -147,6 +166,7 @@ def call_provider(provider: str, system: Optional[str], user: str, max_tokens: i
     data = _post(_URLS[provider], headers,
                  {"model": model, "messages": messages,
                   "max_tokens": max_tokens, "temperature": 0.7})
+    _meter(provider, model, data)
     return data["choices"][0]["message"]["content"] or ""
 
 
@@ -175,7 +195,9 @@ def _call_groq_models(headers: dict, messages: list, max_tokens: int) -> str:
         elif model.startswith("qwen/"):
             body.update(max_tokens=max(max_tokens, 1000), reasoning_format="hidden")
         try:
-            text = _post(_URLS["groq"], headers, body)["choices"][0]["message"]["content"] or ""
+            data = _post(_URLS["groq"], headers, body)
+            _meter("groq", model, data)
+            text = data["choices"][0]["message"]["content"] or ""
             if text.strip():
                 return text
             last = RuntimeError(f"groq {model}: empty")
