@@ -925,6 +925,16 @@ def enforce_learning_access(message, user_id: str) -> bool:
         _reply_markdown_or_plain(message, result["message"])
         return False
 
+    # 4 Nov 2026 (fair_use.py): a trial user gets FREE_DAILY_REPLIES replies a day so free capacity is left for the
+    # paying families; payers are never counted. Fails open - a counter error never costs a reply.
+    try:
+        import fair_use
+        if fair_use.over_daily_limit(user_id, result.get("reason")):
+            bot.reply_to(message, fair_use.LIMIT_REACHED)
+            return False
+    except Exception as fu_err:  # noqa: BLE001
+        print(f"⚠️ fair use check: {fu_err}")
+
     reminder = paypal_system.get_payment_reminder_message(user_id, result)
     if reminder:
         _reply_markdown_or_plain(message, reminder)
@@ -2775,6 +2785,15 @@ def ask_claude_with_mcp(session, translated_input):
                 return fallback_text.strip(), short_text.strip(), ""
         except Exception as fallback_error:
             print(f"❌ LLM fallback chain failed: {fallback_error}")
+
+        # 4 Nov 2026: every provider failed - a kind resting message (was "the AI engine is limited (API credits)"),
+        # and one line for the alert watcher (cto-aipa scripts/espaluz-chain-alert.py).
+        try:
+            import fair_use
+            fair_use.chain_out("tg")
+            return fair_use.RESTING, fair_use.RESTING_SHORT, ""
+        except Exception:  # noqa: BLE001
+            pass
 
         honest = (
             "⚠️ Disculpa — el motor de IA está temporalmente limitado (créditos/límites de API). "
