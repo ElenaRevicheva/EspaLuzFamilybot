@@ -4572,6 +4572,11 @@ def process_message_with_tracking(user_input, chat_id, user_id, message_obj):
                 memory.track_emotion(emotion, user_input[:100])
             # 3 Nov 2026: note lasting facts (memory.remember_facts) in the background - never blocks the reply
             threading.Thread(target=memory.remember_facts, args=(user_input,), daemon=True).start()
+            # 6 Nov 2026: once, when a parent mentions a child or school, the one-tap classroom link.
+            import espaluz_talking
+            if espaluz_talking.CHILD_TALK.search(user_input or "") and paypal_system:
+                espaluz_talking.send_class_link("telegram", user_id, paypal_system.get_trial_status(str(user_id)),
+                                                lambda t: bot.send_message(user_id, t), offer=True)
             print(f"✅ Unified memory updated for {user_id}")
         except Exception as e:
             print(f"⚠️ Unified memory error (non-fatal): {e}")
@@ -6571,6 +6576,10 @@ def handle_text(message):
             with open(path, "rb") as clip:
                 bot.send_video(message.chat.id, clip, timeout=180)
         espaluz_talking.on_ask("telegram", message.chat.id, _send_asked, lambda t: bot.send_message(message.chat.id, t))
+        return
+    if espaluz_talking.is_class_ask(text):
+        espaluz_talking.send_class_link("telegram", message.chat.id, paypal_system.get_trial_status(user_id) if paypal_system else None,
+                                        lambda t: bot.send_message(message.chat.id, t))
         return
 
     if not enforce_learning_access(message, user_id):

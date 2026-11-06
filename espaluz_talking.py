@@ -9,6 +9,7 @@ Every failure is silent: the person already has the text and the voice.
 """
 import asyncio
 import base64
+import hashlib
 import logging
 import os
 import re
@@ -240,4 +241,59 @@ def on_ask(platform, who, send_file, send_text):
             _clip_and_send(platform, who, words, "asked", send_file)
         except Exception as e:  # noqa: BLE001
             logging.warning(f"talking: ask non-fatal: {str(e)[:160]}")
+    threading.Thread(target=work, daemon=True).start()
+
+
+# ---------- One tap into the classroom (6 Nov 2026) ----------
+# Elena's policy is unchanged: 14 free days, no sign-up, then subscribe. The classroom sits inside the same 14 days.
+CLASS_WORDS = {"clase", "la clase", "class", "classroom", "pere y titi", "pere and titi"}
+CHILD_TALK = re.compile(r"\b(mi hij[oa]|mis hij[oa]s|mi peque|my (daughter|son|kid|child)|my kids|mi ni[nñ][oa]|escuela|colegio|school)\b", re.I)
+
+
+def is_class_ask(text):
+    return (text or "").strip().lower().rstrip("!.?") in CLASS_WORDS
+
+
+def _class_link(platform, who, trial_status):
+    """A signed-in link, or None when this person has no paid time and no running trial."""
+    paid = _is_paying(platform, who)
+    until = None
+    status = trial_status or {}
+    if status.get("is_active") and status.get("trial_end"):
+        until = str(status["trial_end"])
+        if "+" not in until and not until.endswith("Z"):
+            until += "Z"
+    if not paid and not until:
+        return None
+    ident = {"telegram_user_id": who} if platform == "telegram" else {"whatsapp_user_id": "wa_" + hashlib.sha256(
+        ("espaluz-wa:" + re.sub(r"\D", "", who)).encode()).hexdigest()[:32]}
+    r = requests.post(DOOR.replace("generate-video", "kids-memory"), timeout=20,
+                      json={"mode": "classroom_link", "trial_until": until, "paid": paid, **ident},
+                      headers={"x-espaluz-bot-secret": os.getenv("ESPALUZ_BOT_SECRET", ""), "Content-Type": "application/json",
+                               "Authorization": f"Bearer {os.getenv('SUPABASE_ANON_KEY', '')}"})
+    got = r.json() if r.status_code == 200 else {}
+    return got.get("url")
+
+
+def send_class_link(platform, who, trial_status, send_text, offer=False):
+    """Asked for class, or (offer=True) the person just mentioned a child or school: once only, and never blocks a reply."""
+    who = str(who)
+
+    def work():
+        try:
+            if offer and _count(platform, who, "classroom_offer", "'2000-01-01'::timestamp") > 0:
+                return
+            url = _class_link(platform, who, trial_status)
+            if not url:
+                if not offer:
+                    send_text("Las clases de Pere y Titi siguen con una suscripción. / Pere and Titi's classes continue with a subscription.")
+                return
+            lead = ("Por cierto, Pere y Titi pueden darle una clasecita a tu peque: diez minutos en español e inglés. / By the way, Pere and Titi "
+                    "can give your child a little class: ten minutes in Spanish and English.\n" if offer else "")
+            send_text(lead + f"Un toque y entras, sin contraseña. / One tap and you're in, no password.\n{url}\n"
+                             "Si el enlace caduca, escribe «clase». / If the link expires, type \"class\".")
+            _note(platform, who, "classroom_offer", "offer" if offer else "asked")
+            print(f"🏫 classroom link sent channel={platform} offer={offer}", flush=True)
+        except Exception as e:  # noqa: BLE001
+            logging.warning(f"classroom link non-fatal: {str(e)[:160]}")
     threading.Thread(target=work, daemon=True).start()
