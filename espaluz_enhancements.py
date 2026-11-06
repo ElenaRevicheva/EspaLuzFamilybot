@@ -831,7 +831,7 @@ HOW YOU TALK:
   its English meaning, a simple pronunciation in brackets and a few words on when or why to use it, woven in, no heading. Explain
   the practical or cultural point behind it. When it fits, end with one small thing to try saying. Even a greeting gets one useful phrase
   for today. Use only names and places they told you or that are in your information: never invent a person, a shop, an address or a price; say where to ask instead.
-- At most 3 emojis, only where they add warmth. No section headers, no bullet lists for a simple answer.
+- 2 to 4 emojis in a reply, where they fit, never zero and never a flood: a chat should feel alive. No section headers, no bullet lists for a simple answer.
 - Never open with "Entiendo que..." or "Estoy aquí para...". Name a feeling only when they showed it.
 - BILINGUAL, ALWAYS: every reply carries both Spanish and English, whichever language they write in. Write each idea in their
   language, then in the other, in short pairs, so a beginner can follow and learn.
@@ -897,3 +897,54 @@ def money_caveat(reply, known=""):
         return reply
     print(f"💡 money caveat added (amount not in our data: {', '.join(unknown[:3])})", flush=True)
     return main.rstrip() + "\n\n" + MONEY_CAVEAT_LINE + ("\n\n" + sep + video if sep else "")
+
+
+# ---------- Every grown-up reply: bilingual, alive (6 Nov 2026) ----------
+# Measured from stored replies: 26-28 Oct 14 of 14 had both languages and 12 of 14 had an emoji; 6 Nov 1 of 12 and 3 of 12.
+# A rule in the middle of a long prompt does not bind the small fallback model, so the rule also goes LAST, and the finished
+# reply is checked. A failed check gets one rewrite through the same chain; if that fails too, the original goes out.
+import re as _re_polish
+
+BILINGUAL_LAST = """LAST AND MOST IMPORTANT - THE FORM OF THIS REPLY:
+- Both languages, always, even if everything above is in Spanish: each idea in Spanish, and right after it the same idea in English, in short pairs.
+- 2 to 4 emojis across the reply where they fit: the opening, a phrase to learn, the closing. Never zero, never one on every line."""
+_EN_WORDS = set("the and you your with for this that what can how is are to of in it when say try means".split())
+_ES_WORDS = set("el la los las y que de en para con tu una un es por como cuando puedes hoy".split())
+_EMOJI = _re_polish.compile("[\U0001F300-\U0001FAFF\u2600-\u27BF]")
+_SCRIPT = _re_polish.compile(r"\[VIDEO SCRIPT START\].*?(\[VIDEO SCRIPT END\]|$)", _re_polish.S)
+
+
+def display_reply(text):
+    """What a person reads: never the video script block or a leftover separator."""
+    shown = _SCRIPT.sub("", text or "")
+    return _re_polish.sub(r"(\s*(---+|___+)\s*)+$", "", shown).strip()
+
+
+def has_both_languages(text):
+    words = _re_polish.findall(r"[a-záéíóúñü]+", (text or "").lower())
+    if len(words) < 8:
+        return True
+    return sum(w in _EN_WORDS for w in words) / len(words) >= 0.08 and sum(w in _ES_WORDS for w in words) / len(words) >= 0.08
+
+
+def polish_reply(full_reply):
+    """Keeps the video script block as it is. Never blocks or loses a reply."""
+    try:
+        main = display_reply(full_reply)
+        both, alive = has_both_languages(main), bool(_EMOJI.search(main))
+        if both and alive:
+            return full_reply
+        from llm_chain import complete
+        new, _ = complete("You rewrite a chat message from EspaLuz, a warm friend helping a family live in Spanish. Keep every fact, name and "
+                          "phrase; add nothing new. Output only the rewritten message, with no asterisks and no headings.\n\n" + BILINGUAL_LAST,
+                          main, max_tokens=1200)
+        new = display_reply(new)
+        good = bool(new) and has_both_languages(new) and len(new) > len(main) * 0.8
+        print(f"🌐 reply polish both={both} emoji={alive} rewrite_ok={good} after_emoji={bool(_EMOJI.search(new or ''))}", flush=True)
+        if not good:
+            return full_reply
+        found = _SCRIPT.search(full_reply or "")
+        return new + ("\n\n" + found.group(0) if found else "")
+    except Exception as e:  # noqa: BLE001
+        print(f"🌐 reply polish non-fatal: {str(e)[:120]}", flush=True)
+        return full_reply

@@ -143,9 +143,12 @@ except ImportError as e:
 
 # 3 Nov 2026: one companion text for every grown-up reply (espaluz_enhancements.ESPALUZ_COMPANION_RULES)
 try:
-    from espaluz_enhancements import ESPALUZ_COMPANION_RULES, money_caveat
+    from espaluz_enhancements import ESPALUZ_COMPANION_RULES, money_caveat, BILINGUAL_LAST, polish_reply, display_reply
 except Exception:  # noqa: BLE001
     ESPALUZ_COMPANION_RULES = ""
+    BILINGUAL_LAST = ""
+    polish_reply = lambda text: text
+    display_reply = lambda text: text
     def money_caveat(reply, known=""):  # noqa: E306 - safe no-op if the module is older
         return reply
 
@@ -2216,7 +2219,7 @@ I'll adjust my tone to be: {emotional_calibration.get('response_tone', 'supporti
     """
 
     # Today's date for context
-    system_content += f"\n\nToday is {datetime.now().strftime('%Y-%m-%d')}."
+    system_content += f"\n\nToday is {datetime.now().strftime('%Y-%m-%d')}.\n\n{BILINGUAL_LAST}"
 
     # Prepare messages without system prompt
     messages = session["messages"][-MAX_HISTORY_MESSAGES:]
@@ -2765,7 +2768,7 @@ def ask_claude_with_mcp(session, translated_input):
                 "timestamp": datetime.now().isoformat()
             })
 
-        full_reply = money_caveat(result["content"][0]["text"], mcp_request.get("system", ""))  # 3 Nov 2026
+        full_reply = polish_reply(money_caveat(result["content"][0]["text"], mcp_request.get("system", "")))  # 3 Nov 2026; 6 Nov polish
         short_text = extract_video_script(full_reply)
 
         return full_reply.strip(), short_text.strip(), thinking_process
@@ -2779,7 +2782,7 @@ def ask_claude_with_mcp(session, translated_input):
         try:
             fallback_text = _telegram_llm_fallback_reply(mcp_request, content_input)
             if fallback_text:
-                fallback_text = money_caveat(fallback_text, mcp_request.get("system", ""))  # 3 Nov 2026
+                fallback_text = polish_reply(money_caveat(fallback_text, mcp_request.get("system", "")))  # 3 Nov 2026; 6 Nov polish
                 short_text = extract_video_script(fallback_text)
                 return fallback_text.strip(), short_text.strip(), ""
         except Exception as fallback_error:
@@ -4357,7 +4360,7 @@ def process_message(user_input, chat_id, user_id, message_obj):
         shown = re.sub(r"\[VIDEO SCRIPT START\].*?\[VIDEO SCRIPT END\]", "", shown, flags=re.DOTALL).strip() or shown
         bot.send_message(chat_id, kids_tidy(strip_markdown_formatting(shown)))
     else:
-        bot.send_message(chat_id, f"🤖 Espaluz:\n{strip_markdown_formatting(shown)}")
+        bot.send_message(chat_id, f"🤖 Espaluz:\n{strip_markdown_formatting(display_reply(shown))}")
     print("Main text response sent")
 
     # Wiring: emit lesson event to CTO AIPA
@@ -4480,7 +4483,7 @@ def process_message_with_tracking(user_input, chat_id, user_id, message_obj):
         shown = re.sub(r"\[VIDEO SCRIPT START\].*?\[VIDEO SCRIPT END\]", "", shown, flags=re.DOTALL).strip() or shown
         bot.send_message(chat_id, kids_tidy(strip_markdown_formatting(shown)))
     else:
-        bot.send_message(chat_id, f"🤖 Espaluz:\n{strip_markdown_formatting(shown)}")
+        bot.send_message(chat_id, f"🤖 Espaluz:\n{strip_markdown_formatting(display_reply(shown))}")
     print("Main text response sent")
 
     # Wiring: emit lesson event to CTO AIPA
