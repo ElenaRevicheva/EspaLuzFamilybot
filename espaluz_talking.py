@@ -159,6 +159,8 @@ def special_line(platform, who, reason, reply):
     prompt = f"TODAY: {time.strftime('%A %Y-%m-%d')}\nTALKING TO: {talking_to}\nNOTES:\n" + ("\n".join(f"- {n}" for n in notes) or "none") + f"\nREPLY THEY JUST READ:\n{(reply or '')[:1200]}"
     line, _err = complete(LINE_RULES + LINE_MOMENT.get(reason, LINE_MOMENT["asked"]), prompt, max_tokens=220, order=("gemini", "groq", "grok", "openai"))
     line = re.sub(r"\s+", " ", (line or "").replace("*", "")).strip().strip('"')
+    if reason == "asked":  # typing "video" always gets a clip: the phrase comes from the reply, so overlap is expected
+        return line if line and not line.upper().startswith("NONE") else (reply or "")[:300]
     if not line or line.upper().startswith("NONE") or _repeats(line, reply):
         print(f"🎬 [talking] nothing special to say reason={reason}", flush=True)
         return ""
