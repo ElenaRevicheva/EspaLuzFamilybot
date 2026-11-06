@@ -348,7 +348,7 @@ class EspaLuzMemory:
                     break
             if saved:
                 print(f"🧠 remembered {saved} new fact(s) for user {self._user.id}", flush=True)
-                self._family_call("facts_add", facts=fresh)
+                self._family_call("facts_add", facts=fresh if "members" in notes else [f["fact"] for f in fresh])  # an older door takes plain text only
             return saved
         except Exception as e:  # noqa: BLE001 - a notebook failure must never touch the reply
             logger.warning(f"remember_facts non-fatal: {str(e)[:160]}")
