@@ -1315,8 +1315,7 @@ def detect_family_member(user_info, message_text=""):
         return "elena"
     elif any(word in message_lower for word in ["бабушка", "abuela", "grandmother"]):
         return "marina"
-    elif any(word in message_lower for word in ["дочь", "hija", "daughter"]) or len(message_lower.split()) < 3:
-        return "alisa"
+    # 6 Nov 2026: a short message or the word "hija" is a parent talking as often as a child; a child comes in by /kids or "soy Alisa".
 
     # Default to elena if we can't determine
     return "elena"
@@ -4002,6 +4001,12 @@ def apply_kids_switch(user_id, text=None, force=None):
     if prefs is None:
         return None
     t = (text or "").lower()
+    # 6 Nov 2026 (a grown-up got "Pere: Hola Alisa"): lesson mode stayed on for good until someone said "soy mamá". After
+    # 3 quiet hours, the same gap that starts a new lesson, the account is the grown-up's again; /kids or "soy Alisa" reopens it.
+    if (force != "on" and not any(k in t for k in KIDS_ON) and prefs.get("family_role") == "alisa"
+            and prefs.get("kids_last") and time.time() - prefs["kids_last"] > KIDS_NEW_LESSON_AFTER):
+        prefs["family_role"] = prefs.pop("kids_saved_role", None) or "parent"
+        return None
     if (force == "on" or any(k in t for k in KIDS_ON)) and prefs.get("family_role") != "alisa":
         prefs["kids_saved_role"] = prefs.get("family_role")
         prefs["family_role"] = "alisa"
@@ -4045,7 +4050,7 @@ def bulletproof_video_generator(chat_id, full_reply_text):
             with open(path, "rb") as clip:
                 bot.send_video(chat_id, clip, timeout=180)
         import espaluz_talking
-        espaluz_talking.on_reply("telegram", chat_id, clean_text_for_speech(short_reply),
+        espaluz_talking.on_reply("telegram", chat_id, re.sub(r"\[VIDEO SCRIPT START\].*?\[VIDEO SCRIPT END\]", "", full_reply_text, flags=re.S).strip(),
                                  user_sessions.get(str(chat_id), {}).get("context", {}).get("emotional_state", {}).get("current_emotion"),
                                  _send_clip)
         return True

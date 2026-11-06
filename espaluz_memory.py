@@ -232,6 +232,7 @@ class EspaLuzMemory:
         "enrolment, doctor), with the day as said ('on Thursday'). NEVER write the NUMBERS themselves: passwords, ID, "
         "passport or cédula numbers, phone numbers, emails, street addresses, card or bank details; and no health "
         "details beyond 'has a doctor's appointment'. If nothing lasting: reply NONE."
+        " Use the exact spellings in FAMILY NAMES: if a name sounds like one of them (Elisa for Alisa), write the family spelling. Write the SPEAKER's name, never 'the user'. If a fact has a natural end (this week's holiday, Monday's appointment), end its line with [until YYYY-MM-DD], working from TODAY. Start the line with [private] for any worry, money or health matter. If the message corrects a KNOWN FACT, write instead: REPLACES: <the known fact, exactly> => <the corrected fact>."
     )
 
     # 6 Nov 2026 (Elena: "firstly it is about memory, because it will follow the long road"): a family linked to the web
@@ -255,9 +256,34 @@ class EspaLuzMemory:
             logger.warning(f"family memory non-fatal: {str(e)[:120]}")
             return {}
 
+    def family_notes(self) -> dict:
+        """facts, members, speaker and recent lessons of a linked family; {} if not linked."""
+        got = self._family_call("facts_get")
+        return got if got.get("linked") else {}
+
     def shared_family_facts(self) -> list:
         """What the family told EspaLuz on another channel; empty if not linked."""
-        return [str(f) for f in self._family_call("facts_get").get("facts", []) if f]
+        return [str(f) for f in self.family_notes().get("facts", []) if f]
+
+    def _recognize(self, notes: dict, text: str = "") -> str:
+        """Who is on this number: a saved answer, their own display name matching the family, or what they just said."""
+        speaker = notes.get("speaker") or ""
+        if speaker or not notes:
+            return speaker
+        import re
+        adults = [m["name"] for m in notes.get("members", []) if m.get("role") != "child" and m.get("name")]
+        said = re.search(r"\b(?:soy|i'?m|i am|habla|this is|me llamo|my name is)\s+(?:la |el )?([^\W\d_]{2,})", text or "", re.I)
+        name = None
+        if said:
+            name = next((a for a in adults if a.lower() == said.group(1).lower()), None)
+        if not name and self._user and self._user.display_name:
+            first = str(self._user.display_name).split()[0].lower()
+            name = next((a for a in adults if a.lower() == first), None)
+        if name:
+            self._family_call("who_set", speaker=name)
+            print(f"👪 number recognized as a family member on {self.platform}", flush=True)
+            return name
+        return ""
 
     def remember_facts(self, user_text: str) -> int:
         """Note 0-3 lasting facts from what the user just wrote; returns how many new ones were saved."""
@@ -268,24 +294,56 @@ class EspaLuzMemory:
             # The order is named here, not imported: WhatsApp's llm_chain has no PROFILE_FALLBACK, and that ImportError
             # (caught below) silently skipped every WhatsApp fact on 3 Nov until the A/B test exposed it.
             from llm_chain import complete
-            out, _errors = complete(self._FACTS_SYSTEM, f"USER MESSAGE:\n{text[:1200]}", max_tokens=200,
+            import re
+            notes = self.family_notes()
+            speaker = self._recognize(notes, text)
+            names = ", ".join(m["name"] for m in notes.get("members", []) if m.get("name")) or "unknown"
+            own = [str(m.get("content", "")) for m in self.get_user_memories(self._user.id, limit=60)]
+            shared = [str(f) for f in notes.get("facts", [])]
+            listing = "\n".join(f"- {f}" for f in (shared + own)[:20]) or "none"
+            prompt = (f"TODAY: {datetime.now().date().isoformat()}\nSPEAKER: {speaker or (self._user.display_name or 'unknown')}\n"
+                      f"FAMILY NAMES: {names}\nKNOWN FACTS:\n{listing}\nUSER MESSAGE:\n{text[:1200]}")
+            out, _errors = complete(self._FACTS_SYSTEM, prompt, max_tokens=220,
                                     order=("gemini", "groq", "grok", "openai"))
             if not out or out.strip().upper().startswith("NONE"):
                 return 0
-            known = [str(m.get("content", "")).lower() for m in self.get_user_memories(self._user.id, limit=60)]
+            known = [k.lower() for k in own + shared]
             saved = 0
             fresh = []
             for line in out.splitlines():
                 fact = line.strip().lstrip("-•* ").strip()
+                replaces = None
+                fixed = re.match(r"REPLACES:\s*(.+?)\s*=>\s*(.+)$", fact, re.I)
+                if fixed:
+                    replaces, fact = fixed.group(1).strip("\"“” "), fixed.group(2).strip()
+                private = bool(re.match(r"\[private\]", fact, re.I))
+                fact = re.sub(r"^\[private\]\s*", "", fact, flags=re.I)
+                ended = re.search(r"\[until (\d{4}-\d{2}-\d{2})\]\s*$", fact, re.I)
+                until = ended.group(1) if ended else None
+                fact = re.sub(r"\s*\[until \d{4}-\d{2}-\d{2}\]\s*$", "", fact, flags=re.I).strip()
                 if not (8 <= len(fact) <= 160) or fact.upper().startswith("NONE"):
                     continue
                 key = fact.lower().rstrip(".")
-                if any(key in k or k.rstrip(".") in key for k in known if k):
+                words = set(re.findall(r"[a-z0-9]+", key))
+                def _same(k):
+                    other = set(re.findall(r"[a-z0-9]+", k))
+                    return bool(words and other) and len(words & other) / min(len(words), len(other)) >= 0.75
+                if not replaces and any(_same(k) for k in known if k):
                     continue
-                self.store_user_memory(self._user.id, "fact", fact, importance=6, category="conversation")
+                days = None
+                if until:
+                    try:
+                        days = max(1, (datetime.fromisoformat(until).date() - datetime.now().date()).days + 1)
+                    except ValueError:
+                        until = None
+                if replaces:
+                    with self._get_connection() as conn, conn.cursor() as cur:
+                        cur.execute("UPDATE user_memories SET is_active = FALSE WHERE user_id = %s AND lower(content) = lower(%s)",
+                                    (self._user.id, replaces))
+                self.store_user_memory(self._user.id, "fact", fact, importance=6, category="conversation", expires_days=days)
                 known.append(key)
                 saved += 1
-                fresh.append(fact)
+                fresh.append({"fact": fact, "private": private, "until": until, "replaces": replaces})
                 if saved == 3:
                     break
             if saved:

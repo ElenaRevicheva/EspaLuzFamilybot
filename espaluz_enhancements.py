@@ -680,15 +680,25 @@ def get_memory_context(memory_instance) -> str:
             return ""
         memories = list(memory_instance.get_user_memories(uid, limit=10) or [])
         # 6 Nov 2026: a linked family's notes from the web and the other bot come here too (espaluz_memory._family_call).
+        family_block = ""
         try:
+            notes = memory_instance.family_notes()
             mine = {str(m.get("content", "")).lower().rstrip(".") for m in memories}
-            shared = [f for f in memory_instance.shared_family_facts() if f.lower().rstrip(".") not in mine]
+            shared = [str(f) for f in notes.get("facts", []) if str(f).lower().rstrip(".") not in mine]
             if shared:
                 print(f"🔗 family memory: {len(shared)} fact(s) from other channels", flush=True)
             memories = [{"memory_type": "family", "content": f} for f in shared[:8]] + memories
+            if notes.get("members"):
+                speaker = memory_instance._recognize(notes)
+                family_block = "\nTHIS FAMILY: " + "; ".join(
+                    f"{m['name']} ({m.get('role')}" + (f", {m['age']}" if m.get("age") else "") + ")" for m in notes["members"]) + ". Use these exact name spellings.\n"
+                family_block += (f"You are talking with {speaker}.\n" if speaker else
+                                 "You do not yet know which family member is on this number: after helping, ask once, lightly, who you are talking with.\n")
+                if notes.get("lessons"):
+                    family_block += "Recent classroom lessons with the child: " + " | ".join(notes["lessons"]) + ". If asked, say what was covered; a child's own words stay with the parent report.\n"
         except Exception:  # noqa: BLE001 - never lose a reply over this
             pass
-        if not memories:
+        if not memories and not family_block:
             return ""
         
         context = """
@@ -697,6 +707,7 @@ def get_memory_context(memory_instance) -> str:
 """
         for mem in memories[:10]:
             context += f"- [{mem['memory_type']}] {mem['content']}\n"
+        context += family_block
         
         context += """
 ⚠️ USE THESE MEMORIES:
@@ -813,15 +824,17 @@ Not a textbook and not a salesperson. You have opinions and a light sense of hum
 never pressure anyone to practise or to stay.
 
 HOW YOU TALK:
-- Answer what they actually said FIRST, at THEIR length: a short message gets 1-4 short lines; a real question gets a
-  clear, practical answer (rarely more than 700 characters). Go long only when they ask for detail.
+- Answer what they actually said FIRST, then teach. A short message gets a short answer plus its teaching; a real question
+  gets a clear, practical answer with the reasons (rarely more than 900 characters). Go long only when they ask for detail.
 - Greet only when a new day's conversation starts; never open twice with "¡Hola <name>!". Vary your first words.
-- At most ONE small learning moment per reply (a phrase they can use today, with its meaning), woven in, and only when it
-  fits. Sometimes none at all - just help, or just chat.
+- YOU TEACH IN EVERY REPLY (Elena, 6 Nov 2026): 1-3 Spanish phrases they can really use in what they just told you, each with
+  its English meaning, a simple pronunciation in brackets and a few words on when or why to use it, woven in, no heading. Explain
+  the practical or cultural point behind it. When it fits, end with one small thing to try saying. Even a greeting gets one useful phrase
+  for today. Use only names and places they told you or that are in your information: never invent a person, a shop, an address or a price; say where to ask instead.
 - At most 3 emojis, only where they add warmth. No section headers, no bullet lists for a simple answer.
 - Never open with "Entiendo que..." or "Estoy aquí para...". Name a feeling only when they showed it.
-- Mirror their language: mostly Spanish if they write Spanish, mostly English if they write English, the other language
-  as a helper.
+- BILINGUAL, ALWAYS: every reply carries both Spanish and English, whichever language they write in. Write each idea in their
+  language, then in the other, in short pairs, so a beginner can follow and learn.
 
 YOU REMEMBER (the memory sections in these instructions are real - use them like a friend):
 - When something you know fits, bring up ONE thing naturally ("¿Cómo le fue a Mateo su primera semana en el colegio?").

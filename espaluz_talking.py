@@ -109,9 +109,50 @@ def make_clip(text, reason, platform):
     return None
 
 
+LINE_RULES = ("You write what EspaLuz, a warm friend of this family, says aloud in a short personal video. Spanish first, then the same in "
+              "English, under 45 words in all, plain speech, no emojis, no labels, no quotes. NEVER repeat the reply they just read: bring something it does "
+              "not contain. Never invent anything: use only the NOTES and the REPLY. Never state a price, a date or a name that is not there. ")
+LINE_MOMENT = {
+    "first_today": "Moment: first talk of the day. Ask warmly about ONE thing from the NOTES, like a friend who remembered.",
+    "low_mood": "Moment: they sound low. One calm, personal line that uses ONE thing from the NOTES, then one kind thought. No advice list.",
+    "asked": "Moment: they asked to see you. Take the single most useful Spanish phrase from the REPLY. Say it slowly, say it again, then what it means in English and when to use it.",
+}
+
+
+def _words(text):
+    import unicodedata
+    plain = "".join(c for c in unicodedata.normalize("NFD", (text or "").lower()) if unicodedata.category(c) != "Mn")
+    return set(re.findall(r"[a-zñ]{3,}", plain))
+
+
+def _repeats(line, reply):
+    mine, other = _words(line), _words(reply)
+    return not mine or len(mine & other) / len(mine) > 0.7
+
+
+def special_line(platform, who, reason, reply):
+    """A clip brings something the message did not (Elena, 6 Nov 2026). No true note, or only a repeat: no clip."""
+    from espaluz_memory import EspaLuzMemory
+    from llm_chain import complete
+    mem = EspaLuzMemory(platform=platform, platform_user_id=who)
+    notes = [str(f) for f in mem.family_notes().get("facts", [])]
+    own = [str(m.get("content", "")) for m in mem.get_user_memories(mem.user_id, limit=12)] if mem.user_id else []
+    notes = list(dict.fromkeys(notes + own))[:12]
+    if reason != "asked" and not notes:
+        return ""
+    prompt = "NOTES:\n" + ("\n".join(f"- {n}" for n in notes) or "none") + f"\nREPLY THEY JUST READ:\n{(reply or '')[:1200]}"
+    line, _err = complete(LINE_RULES + LINE_MOMENT.get(reason, LINE_MOMENT["asked"]), prompt, max_tokens=220, order=("gemini", "groq", "grok", "openai"))
+    line = re.sub(r"\s+", " ", (line or "").replace("*", "")).strip().strip('"')
+    if not line or _repeats(line, reply):
+        print(f"🎬 [talking] nothing special to say reason={reason}", flush=True)
+        return ""
+    return line
+
+
 def _clip_and_send(platform, who, text, reason, send_file):
     try:
-        path = make_clip(text, reason, platform)
+        line = special_line(platform, who, reason, text)
+        path = make_clip(line, reason, platform) if line else None
         if not path:
             return
         ok = send_file(path)
