@@ -64,7 +64,13 @@ def _is_paying(platform, who):
             sys.path.insert(0, fb)
         import espaluz_payment_truth as truth
         row = truth.access(telegram_id=who) if platform == "telegram" else truth.access(whatsapp_id=who)
-        return bool(row and row.get("paid"))
+        if row and row.get("paid"):
+            return True
+        # A family linked to the web that pays on another channel is paying here too.
+        from espaluz_memory import EspaLuzMemory
+        probe = EspaLuzMemory.__new__(EspaLuzMemory)
+        probe.platform, probe.platform_user_id = platform, who
+        return bool(probe._family_call("facts_get").get("family_paying"))
     except Exception as e:  # noqa: BLE001 - unknown means no spend
         logging.warning(f"talking: payment check failed: {str(e)[:120]}")
         return False
