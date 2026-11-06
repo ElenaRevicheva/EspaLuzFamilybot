@@ -121,7 +121,7 @@ def make_clip(text, reason, platform):
 LINE_RULES = ("You write what EspaLuz, a warm friend of this family, says aloud in a short personal video. Spanish first, then the same in "
               "English, under 45 words in all, plain speech, no emojis, no labels, no quotes. NEVER repeat the reply they just read: bring something it does "
               "not contain. Never invent anything: use only the NOTES and the REPLY. Never state a price, a date or a name that is not there. Never mention marital status, money, health or hardship. "
-              "Speak to this one grown-up, warm and personal, like a friend who knows their life. Bring ONE concrete, practically useful thing tied to a NOTE: what to say, what to bring, who to ask, or the exact Spanish phrase for what is coming up, and why it helps. Never ask how they feel, never offer psychological support or encouragement, never describe their feelings, never praise. Use only facts in the NOTES, no guessed details. Write normal words, never spaced-out letters. If you cannot be really useful, reply exactly NONE. ")
+              "Speak to this one grown-up, warm and personal, like a friend who knows their life. Bring ONE concrete, practically useful thing tied to a NOTE: what to say, what to bring, who to ask, or the exact Spanish phrase for what is coming up, and why it helps. Never ask how they feel, never offer psychological support or encouragement, never describe their feelings, never praise. Use only facts in the NOTES, no guessed details. You speak to the grown-up named in TALKING TO, by name at most once. Talk ABOUT a child, never TO a child. Never state a rule, a policy or what a school or office will do. Write normal words, never spaced-out letters. If you cannot be really useful, reply exactly NONE. ")
 LINE_MOMENT = {
     "remembered": "Moment: a surprise visit. Only if a NOTE names something coming up or just past, give the one thing that will help them with it. Otherwise reply NONE.",
     "low_mood": "Moment: they are having a hard moment. Do not talk about it. Take one practical thing off their plate, tied to a NOTE: a ready sentence or the next small step.",
@@ -146,14 +146,17 @@ def special_line(platform, who, reason, reply):
     from espaluz_memory import EspaLuzMemory
     from llm_chain import complete
     mem = EspaLuzMemory(platform=platform, platform_user_id=who)
-    notes = [str(f) for f in mem.family_notes().get("facts", [])]
+    family = mem.family_notes()
+    talking_to = mem._recognize(family) if family else ""
+    talking_to = talking_to or (str(mem.user.display_name).split()[0] if mem.user and mem.user.display_name else "the parent")
+    notes = [str(f) for f in family.get("facts", [])]
     own = [str(m.get("content", "")) for m in mem.get_user_memories(mem.user_id, limit=12)] if mem.user_id else []
     notes = [n for n in dict.fromkeys(notes + own) if not re.search(r"spouse|single parent|divorc|widow|money|debt|\[object", n, re.I)][:12]
     if reason != "asked" and not notes:
         return ""
     if reason == "long_road" and len(notes) < 5:
         return ""
-    prompt = f"TODAY: {time.strftime('%A %Y-%m-%d')}\nNOTES:\n" + ("\n".join(f"- {n}" for n in notes) or "none") + f"\nREPLY THEY JUST READ:\n{(reply or '')[:1200]}"
+    prompt = f"TODAY: {time.strftime('%A %Y-%m-%d')}\nTALKING TO: {talking_to}\nNOTES:\n" + ("\n".join(f"- {n}" for n in notes) or "none") + f"\nREPLY THEY JUST READ:\n{(reply or '')[:1200]}"
     line, _err = complete(LINE_RULES + LINE_MOMENT.get(reason, LINE_MOMENT["asked"]), prompt, max_tokens=220, order=("gemini", "groq", "grok", "openai"))
     line = re.sub(r"\s+", " ", (line or "").replace("*", "")).strip().strip('"')
     if not line or line.upper().startswith("NONE") or _repeats(line, reply):
