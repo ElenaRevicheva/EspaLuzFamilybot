@@ -1,9 +1,9 @@
 """The real talking EspaLuz on Telegram and WhatsApp. Identical file in both bots.
 
 6 Nov 2026 (Elena: the old loop after every reply is "the past season"; "not noisy"). Text and voice go on every reply as
-before. Her clip is a rare surprise (Elena: "something truly unique... warm... confidential... a true companion", never
-"useless information"): at most one a week, only when she has something personal to say from what she remembers, and she
-stays silent otherwise. Or when the person asks by typing "video". Paying families only, up to 30 a month; everyone else gets
+before. Her clip is a rare surprise (Elena: "something truly useful, practically useful for a user, as well as warm and personal",
+never "how do you feel today"): only when what she remembers lets her bring something practical, at most one in 3 days,
+and she stays silent otherwise. Or when the person asks by typing "video". Paying families only, up to 30 a month; everyone else gets
 the pre-made hello once, which costs nothing. The clip is made by the same door as the web chat (generate-video), with the free Emma voice made here.
 Every failure is silent: the person already has the text and the voice.
 """
@@ -23,7 +23,7 @@ import requests
 DOOR = "https://euyidvolwqmzijkfrplh.supabase.co/functions/v1/generate-video"
 VOICE = "en-US-EmmaMultilingualNeural"
 MONTHLY_CAP = 30
-SURPRISE_EVERY_DAYS = 7  # Elena, 6 Nov 2026: a surprise that belongs to the person, never a routine
+SURPRISE_EVERY_DAYS = 3  # Elena, 6 Nov 2026: usefulness decides; this only stops a run of visits
 MAX_CHARS = 450
 ASK_WORDS = {"video", "ver video", "ver a espaluz", "see espaluz", "video please", "video por favor"}
 LOW_MOODS = {"sad", "frustrated", "confused", "nervous", "homesick", "overwhelmed", "anxious", "worried", "stressed", "lonely", "tired"}
@@ -121,12 +121,12 @@ def make_clip(text, reason, platform):
 LINE_RULES = ("You write what EspaLuz, a warm friend of this family, says aloud in a short personal video. Spanish first, then the same in "
               "English, under 45 words in all, plain speech, no emojis, no labels, no quotes. NEVER repeat the reply they just read: bring something it does "
               "not contain. Never invent anything: use only the NOTES and the REPLY. Never state a price, a date or a name that is not there. Never mention marital status, money, health or hardship. "
-              "Speak to this one person, warm and confidential, like a private note from a friend who knows them. One thing only, and it must belong to them. No teaching, no tips, no general encouragement. If you have nothing truly personal and worth a surprise, reply exactly NONE. ")
+              "Speak to this one grown-up, warm and personal, like a friend who knows their life. Bring ONE concrete, practically useful thing tied to a NOTE: what to say, what to bring, who to ask, or the exact Spanish phrase for what is coming up, and why it helps. Never ask how they feel, never offer psychological support or encouragement, never describe their feelings, never praise. Use only facts in the NOTES, no guessed details. Write normal words, never spaced-out letters. If you cannot be really useful, reply exactly NONE. ")
 LINE_MOMENT = {
-    "remembered": "Moment: a surprise visit. Only if a note names something happening today, tomorrow or just past, or a step they are proud of, ask or say something about that ONE thing. Otherwise reply NONE.",
-    "low_mood": "Moment: they sound low. One calm, personal line about ONE thing from the NOTES that shows how far they have come or who is beside them, then one kind thought. No advice.",
-    "long_road": "Moment: the long road. From the NOTES, one or two true things that show how far this family has come. Quiet and proud, never dramatic.",
-    "asked": "Moment: they asked to see you. Take the single most useful Spanish phrase from the REPLY. Say it slowly, say it again, then what it means in English and when to use it.",
+    "remembered": "Moment: a surprise visit. Only if a NOTE names something coming up or just past, give the one thing that will help them with it. Otherwise reply NONE.",
+    "low_mood": "Moment: they are having a hard moment. Do not talk about it. Take one practical thing off their plate, tied to a NOTE: a ready sentence or the next small step.",
+    "long_road": "Moment: the long road. From the NOTES, the next practical step or Spanish phrase this family is ready for now, and why now.",
+    "asked": "Moment: they asked to see you. Take the single most useful Spanish phrase from the REPLY. Say it once with commas between small groups of words so it sounds slow, say it again normally, then what it means in English and when to use it.",
 }
 
 
