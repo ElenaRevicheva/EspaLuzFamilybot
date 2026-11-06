@@ -317,18 +317,18 @@ def send_class_link(platform, who, trial_status, send_text, offer=False):
 VIDEO_LABEL = "🎬 Ver a EspaLuz"
 CLASS_LABEL = "🏫 Kids Classroom"  # Elena: "Class" alone reads as a class for the grown-up
 BUTTON_TEXT = "Cuando quieras, toca aquí. / Whenever you like, tap here."
-BUTTONS_EVENT = "buttons_shown_v2"  # new name so people who saw the old label get the new one once
-WA_BUTTON_EVERY_HOURS = 6  # each WhatsApp message costs a little, and a button after every reply would be noise
+BUTTONS_EVENT = "buttons_shown_v3"  # 6 Nov: every 6 hours on both channels (Elena); new name so each person sees them on the next reply
+BUTTON_EVERY_HOURS = 6  # both channels: always within reach, never noise
 _wa_content_sid = None
 
 
 def telegram_buttons(bot, chat_id):
-    """A keyboard that stays under the chat: always tappable, sent once per person."""
+    """A keyboard under the chat, sent again every 6 hours so a device that lost it gets it back."""
     who = str(chat_id)
 
     def work():
         try:
-            if _count("telegram", who, BUTTONS_EVENT, "'2000-01-01'::timestamp") > 0:
+            if _count("telegram", who, BUTTONS_EVENT, f"NOW() - INTERVAL '{BUTTON_EVERY_HOURS} hours'") > 0:
                 return
             from telebot import types
             keys = types.ReplyKeyboardMarkup(resize_keyboard=True)
@@ -369,7 +369,7 @@ def whatsapp_buttons(user_id, sender):
         try:
             with _db() as c, c.cursor() as cur:
                 cur.execute("SELECT count(*) FROM event_log WHERE event_type=%s AND platform='whatsapp' AND event_data->>'who'=%s "
-                            "AND created_at >= NOW() - (%s * INTERVAL '1 hour')", (BUTTONS_EVENT, who, WA_BUTTON_EVERY_HOURS))
+                            "AND created_at >= NOW() - (%s * INTERVAL '1 hour')", (BUTTONS_EVENT, who, BUTTON_EVERY_HOURS))
                 if cur.fetchone()[0] > 0:
                     return
             sid, token = os.getenv("TWILIO_ACCOUNT_SID", ""), os.getenv("TWILIO_AUTH_TOKEN", "")
