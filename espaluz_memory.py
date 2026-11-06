@@ -234,6 +234,31 @@ class EspaLuzMemory:
         "details beyond 'has a doctor's appointment'. If nothing lasting: reply NONE."
     )
 
+    # 6 Nov 2026 (Elena: "firstly it is about memory, because it will follow the long road"): a family linked to the web
+    # has ONE notebook on web, Telegram and WhatsApp, kept by the SaaS function kids-memory. A family that never linked
+    # keeps its notes here. Short timeout: a slow network never holds a reply back.
+    def _family_call(self, mode: str, **extra) -> dict:
+        secret = os.getenv("ESPALUZ_BOT_SECRET")
+        pid = str(self.platform_user_id or "")
+        if not secret or not pid:
+            return {}
+        try:
+            import re, requests
+            who = {"telegram_user_id": pid} if self.platform == "telegram" else {"whatsapp_user_id": "wa_" + hashlib.sha256(
+                ("espaluz-wa:" + re.sub(r"\D", "", pid)).encode()).hexdigest()[:32]}
+            r = requests.post("https://euyidvolwqmzijkfrplh.supabase.co/functions/v1/kids-memory", timeout=4,
+                              json={"mode": mode, **who, **extra},
+                              headers={"x-espaluz-bot-secret": secret, "Content-Type": "application/json",
+                                       "Authorization": f"Bearer {os.getenv('SUPABASE_ANON_KEY', '')}"})
+            return r.json() if r.status_code == 200 else {}
+        except Exception as e:  # noqa: BLE001 - shared memory is a bonus, never a failure
+            logger.warning(f"family memory non-fatal: {str(e)[:120]}")
+            return {}
+
+    def shared_family_facts(self) -> list:
+        """What the family told EspaLuz on another channel; empty if not linked."""
+        return [str(f) for f in self._family_call("facts_get").get("facts", []) if f]
+
     def remember_facts(self, user_text: str) -> int:
         """Note 0-3 lasting facts from what the user just wrote; returns how many new ones were saved."""
         text = (user_text or "").strip()
@@ -249,6 +274,7 @@ class EspaLuzMemory:
                 return 0
             known = [str(m.get("content", "")).lower() for m in self.get_user_memories(self._user.id, limit=60)]
             saved = 0
+            fresh = []
             for line in out.splitlines():
                 fact = line.strip().lstrip("-•* ").strip()
                 if not (8 <= len(fact) <= 160) or fact.upper().startswith("NONE"):
@@ -259,10 +285,12 @@ class EspaLuzMemory:
                 self.store_user_memory(self._user.id, "fact", fact, importance=6, category="conversation")
                 known.append(key)
                 saved += 1
+                fresh.append(fact)
                 if saved == 3:
                     break
             if saved:
                 print(f"🧠 remembered {saved} new fact(s) for user {self._user.id}", flush=True)
+                self._family_call("facts_add", facts=fresh)
             return saved
         except Exception as e:  # noqa: BLE001 - a notebook failure must never touch the reply
             logger.warning(f"remember_facts non-fatal: {str(e)[:160]}")

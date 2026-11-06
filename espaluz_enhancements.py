@@ -678,7 +678,16 @@ def get_memory_context(memory_instance) -> str:
         uid = getattr(memory_instance, "user_id", None)
         if not uid:
             return ""
-        memories = memory_instance.get_user_memories(uid, limit=10)
+        memories = list(memory_instance.get_user_memories(uid, limit=10) or [])
+        # 6 Nov 2026: a linked family's notes from the web and the other bot come here too (espaluz_memory._family_call).
+        try:
+            mine = {str(m.get("content", "")).lower().rstrip(".") for m in memories}
+            shared = [f for f in memory_instance.shared_family_facts() if f.lower().rstrip(".") not in mine]
+            if shared:
+                print(f"🔗 family memory: {len(shared)} fact(s) from other channels", flush=True)
+            memories = [{"memory_type": "family", "content": f} for f in shared[:8]] + memories
+        except Exception:  # noqa: BLE001 - never lose a reply over this
+            pass
         if not memories:
             return ""
         
