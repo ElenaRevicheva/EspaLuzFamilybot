@@ -4037,6 +4037,18 @@ def bulletproof_video_generator(chat_id, full_reply_text):
                     print(f"⚠️ hero video send failed, using the usual video: {hero_err}")
             else:
                 print("⚠️ hero voices unavailable, using the usual video")
+            return True  # 6 Nov 2026: a lesson never gets the grown-up clip; the voice note still goes
+
+        # 6 Nov 2026 (Elena: the loop after every reply is "the past season"): no video on every reply any more. Her real
+        # talking clip comes at a moment, in the background (espaluz_talking.py); the voice note follows at once.
+        def _send_clip(path):
+            with open(path, "rb") as clip:
+                bot.send_video(chat_id, clip, timeout=180)
+        import espaluz_talking
+        espaluz_talking.on_reply("telegram", chat_id, clean_text_for_speech(short_reply),
+                                 user_sessions.get(str(chat_id), {}).get("context", {}).get("emotional_state", {}).get("current_emotion"),
+                                 _send_clip)
+        return True
 
         # ENHANCEMENT: Clean text for speech
         short_reply_clean = clean_text_for_speech(short_reply)
@@ -6545,6 +6557,15 @@ def handle_text(message):
 
     # /feedback's answer (and its consent reply) is stored before the access gate: a lapsed family can still tell us
     if handle_pending_feedback(message, user_id, text):
+        return
+
+    # 6 Nov 2026: "video" = her real talking clip of the last reply (paying families; espaluz_talking.py says so otherwise).
+    import espaluz_talking
+    if espaluz_talking.is_ask(text):
+        def _send_asked(path):
+            with open(path, "rb") as clip:
+                bot.send_video(message.chat.id, clip, timeout=180)
+        espaluz_talking.on_ask("telegram", message.chat.id, _send_asked, lambda t: bot.send_message(message.chat.id, t))
         return
 
     if not enforce_learning_access(message, user_id):
