@@ -111,7 +111,7 @@ def make_clip(text, reason, platform):
 
 LINE_RULES = ("You write what EspaLuz, a warm friend of this family, says aloud in a short personal video. Spanish first, then the same in "
               "English, under 45 words in all, plain speech, no emojis, no labels, no quotes. NEVER repeat the reply they just read: bring something it does "
-              "not contain. Never invent anything: use only the NOTES and the REPLY. Never state a price, a date or a name that is not there. ")
+              "not contain. Never invent anything: use only the NOTES and the REPLY. Never state a price, a date or a name that is not there. Warm and light. Never mention marital status, money, health or hardship. ")
 LINE_MOMENT = {
     "first_today": "Moment: first talk of the day. Ask warmly about ONE thing from the NOTES, like a friend who remembered.",
     "low_mood": "Moment: they sound low. One calm, personal line that uses ONE thing from the NOTES, then one kind thought. No advice list.",
@@ -137,7 +137,7 @@ def special_line(platform, who, reason, reply):
     mem = EspaLuzMemory(platform=platform, platform_user_id=who)
     notes = [str(f) for f in mem.family_notes().get("facts", [])]
     own = [str(m.get("content", "")) for m in mem.get_user_memories(mem.user_id, limit=12)] if mem.user_id else []
-    notes = list(dict.fromkeys(notes + own))[:12]
+    notes = [n for n in dict.fromkeys(notes + own) if not re.search(r"spouse|single parent|divorc|widow|money|debt|\[object", n, re.I)][:12]
     if reason != "asked" and not notes:
         return ""
     prompt = "NOTES:\n" + ("\n".join(f"- {n}" for n in notes) or "none") + f"\nREPLY THEY JUST READ:\n{(reply or '')[:1200]}"
