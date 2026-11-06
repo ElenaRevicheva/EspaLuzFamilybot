@@ -222,8 +222,12 @@ def on_reply(platform, who, text, mood, send_file):
     threading.Thread(target=_decide, args=(platform, who, text, mood, send_file), daemon=True).start()
 
 
+def _plain(text):
+    return re.sub(r"\s+", " ", re.sub(r"[^\w\s]", " ", (text or "").lower())).strip()
+
+
 def is_ask(text):
-    return (text or "").strip().lower().rstrip("!.") in ASK_WORDS
+    return _plain(text) in ASK_WORDS
 
 
 def on_ask(platform, who, send_file, send_text):
@@ -233,8 +237,11 @@ def on_ask(platform, who, send_file, send_text):
     def work():
         try:
             if not _is_paying(platform, who):
-                send_text("Mi video con cada respuesta es para familias suscritas. Aquí sigo contigo por texto y voz. / "
-                          "Video replies are for subscribed families. I'm still here by text and voice.")
+                # A tap always delivers something: the pre-made hello costs nothing.
+                hello = os.path.join(HERE, f"hello-chat-{'es' if platform == 'whatsapp' else 'en'}.mp4")
+                if os.path.exists(hello):
+                    send_file(hello)
+                    print(f"🎬 [talking] pre-made hello on tap channel={platform}", flush=True)
                 return
             if _count(platform, who, "talking_video", "date_trunc('month', NOW())") >= MONTHLY_CAP:
                 send_text("Ya usamos los videos de este mes. Aquí sigo por texto y voz. / This month's videos are used up. I'm still here by text and voice.")
@@ -252,12 +259,12 @@ def on_ask(platform, who, send_file, send_text):
 
 # ---------- One tap into the classroom (6 Nov 2026) ----------
 # Elena's policy is unchanged: 14 free days, no sign-up, then subscribe. The classroom sits inside the same 14 days.
-CLASS_WORDS = {"clase", "la clase", "class", "classroom", "pere y titi", "pere and titi"}
+CLASS_WORDS = {"clase", "la clase", "class", "classroom", "pere y titi", "pere and titi", "clase class"}
 CHILD_TALK = re.compile(r"\b(mi hij[oa]|mis hij[oa]s|mi peque|my (daughter|son|kid|child)|my kids|mi ni[nñ][oa]|escuela|colegio|school)\b", re.I)
 
 
 def is_class_ask(text):
-    return (text or "").strip().lower().rstrip("!.?") in CLASS_WORDS
+    return _plain(text) in CLASS_WORDS
 
 
 def _class_link(platform, who, trial_status):
@@ -302,4 +309,77 @@ def send_class_link(platform, who, trial_status, send_text, offer=False):
             print(f"🏫 classroom link sent channel={platform} offer={offer}", flush=True)
         except Exception as e:  # noqa: BLE001
             logging.warning(f"classroom link non-fatal: {str(e)[:160]}")
+    threading.Thread(target=work, daemon=True).start()
+
+
+# ---------- Buttons (6 Nov 2026, Elena: "nobody will type video") ----------
+# Both labels come back as plain message text, so is_ask and is_class_ask handle a tap exactly like typing.
+VIDEO_LABEL = "🎬 Ver a EspaLuz"
+CLASS_LABEL = "🏫 Clase / Class"
+BUTTON_TEXT = "Cuando quieras, toca aquí. / Whenever you like, tap here."
+WA_BUTTON_EVERY_HOURS = 6  # each WhatsApp message costs a little, and a button after every reply would be noise
+_wa_content_sid = None
+
+
+def telegram_buttons(bot, chat_id):
+    """A keyboard that stays under the chat: always tappable, sent once per person."""
+    who = str(chat_id)
+
+    def work():
+        try:
+            if _count("telegram", who, "buttons_shown", "'2000-01-01'::timestamp") > 0:
+                return
+            from telebot import types
+            keys = types.ReplyKeyboardMarkup(resize_keyboard=True)
+            keys.is_persistent = True
+            keys.add(types.KeyboardButton(VIDEO_LABEL), types.KeyboardButton(CLASS_LABEL))
+            bot.send_message(chat_id, BUTTON_TEXT, reply_markup=keys)
+            _note("telegram", who, "buttons_shown", "keyboard")
+            print("🔘 buttons shown channel=telegram", flush=True)
+        except Exception as e:  # noqa: BLE001
+            logging.warning(f"telegram buttons non-fatal: {str(e)[:160]}")
+    threading.Thread(target=work, daemon=True).start()
+
+
+def _wa_template(sid, token):
+    """The quick-reply template, made once. Within a 24-hour conversation it needs no Meta approval."""
+    global _wa_content_sid
+    if _wa_content_sid:
+        return _wa_content_sid
+    path = os.path.join(HERE, ".wa_buttons_content_sid")
+    if os.path.exists(path):
+        _wa_content_sid = open(path).read().strip()
+        return _wa_content_sid
+    r = requests.post("https://content.twilio.com/v1/Content", auth=(sid, token), timeout=20, json={
+        "friendly_name": "espaluz_buttons", "language": "es", "types": {"twilio/quick-reply": {"body": BUTTON_TEXT, "actions": [
+            {"title": VIDEO_LABEL, "id": "video"}, {"title": CLASS_LABEL, "id": "clase"}]}, "twilio/text": {"body": BUTTON_TEXT}}})
+    r.raise_for_status()
+    _wa_content_sid = r.json()["sid"]
+    with open(path, "w") as f:
+        f.write(_wa_content_sid)
+    return _wa_content_sid
+
+
+def whatsapp_buttons(user_id, sender):
+    """Quick-reply buttons after a reply, at most once in 6 hours per person."""
+    who = str(user_id)
+
+    def work():
+        try:
+            with _db() as c, c.cursor() as cur:
+                cur.execute("SELECT count(*) FROM event_log WHERE event_type='buttons_shown' AND platform='whatsapp' AND event_data->>'who'=%s "
+                            "AND created_at >= NOW() - (%s * INTERVAL '1 hour')", (who, WA_BUTTON_EVERY_HOURS))
+                if cur.fetchone()[0] > 0:
+                    return
+            sid, token = os.getenv("TWILIO_ACCOUNT_SID", ""), os.getenv("TWILIO_AUTH_TOKEN", "")
+            to = who if who.startswith("+") else f"+{who}"
+            r = requests.post(f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Messages.json", auth=(sid, token), timeout=20,
+                              data={"From": sender, "To": f"whatsapp:{to}", "ContentSid": _wa_template(sid, token)})
+            if r.status_code == 201:
+                _note("whatsapp", who, "buttons_shown", "quick_reply")
+                print("🔘 buttons shown channel=whatsapp", flush=True)
+            else:
+                logging.warning(f"whatsapp buttons refused: {r.status_code} {r.text[:200]}")
+        except Exception as e:  # noqa: BLE001
+            logging.warning(f"whatsapp buttons non-fatal: {str(e)[:160]}")
     threading.Thread(target=work, daemon=True).start()

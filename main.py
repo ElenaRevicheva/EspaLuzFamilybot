@@ -4053,6 +4053,7 @@ def bulletproof_video_generator(chat_id, full_reply_text):
         espaluz_talking.on_reply("telegram", chat_id, re.sub(r"\[VIDEO SCRIPT START\].*?\[VIDEO SCRIPT END\]", "", full_reply_text, flags=re.S).strip(),
                                  user_sessions.get(str(chat_id), {}).get("context", {}).get("emotional_state", {}).get("current_emotion"),
                                  _send_clip)
+        espaluz_talking.telegram_buttons(bot, chat_id)
         return True
 
         # ENHANCEMENT: Clean text for speech
