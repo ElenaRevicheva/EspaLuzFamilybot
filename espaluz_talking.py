@@ -384,3 +384,19 @@ def whatsapp_buttons(user_id, sender):
         except Exception as e:  # noqa: BLE001
             logging.warning(f"whatsapp buttons non-fatal: {str(e)[:160]}")
     threading.Thread(target=work, daemon=True).start()
+
+
+# ---------- Which film brought this person (6 Nov 2026, Elena: track who clicks) ----------
+PROMO_REF = re.compile(r"\b(f\d{8}[0-9a-f]{4})[-_](fb|ig|yt)\b")
+
+
+def note_promo_arrival(platform, who, text):
+    """A Telegram start argument or a WhatsApp pre-filled first message names the film. Never blocks a reply."""
+    found = PROMO_REF.search(text or "")
+    if not found:
+        return
+    try:
+        _note(platform, str(who), "promo_arrival", f"{found.group(1)}-{found.group(2)}")
+        print(f"📣 promo arrival {found.group(1)}-{found.group(2)} channel={platform}", flush=True)
+    except Exception as e:  # noqa: BLE001
+        logging.warning(f"promo arrival non-fatal: {str(e)[:160]}")

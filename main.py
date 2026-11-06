@@ -4592,6 +4592,11 @@ def handle_start(message):
     
     # Atlas micro-test: t.me/EspaLuzFamily_bot?start=expat_language_2026-06-28
     start_arg = (message.text or "").split(maxsplit=1)[1].strip() if len((message.text or "").split()) > 1 else ""
+    try:
+        import espaluz_talking
+        espaluz_talking.note_promo_arrival("telegram", user_id, start_arg)
+    except Exception as promo_err:  # 6 Nov 2026: never blocks /start
+        print(f"promo arrival non-fatal: {promo_err}")
     is_ref = start_arg.lower().startswith("ref_")
     is_org = start_arg.lower().startswith("org_")
     atlas_concept_id = (start_arg if start_arg and "_" in start_arg and len(start_arg) <= 64
