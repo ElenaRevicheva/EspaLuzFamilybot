@@ -259,7 +259,7 @@ def on_ask(platform, who, send_file, send_text):
 
 # ---------- One tap into the classroom (6 Nov 2026) ----------
 # Elena's policy is unchanged: 14 free days, no sign-up, then subscribe. The classroom sits inside the same 14 days.
-CLASS_WORDS = {"clase", "la clase", "class", "classroom", "pere y titi", "pere and titi", "clase class"}
+CLASS_WORDS = {"clase", "la clase", "class", "classroom", "pere y titi", "pere and titi", "clase class", "kids classroom", "kids class"}
 CHILD_TALK = re.compile(r"\b(mi hij[oa]|mis hij[oa]s|mi peque|my (daughter|son|kid|child)|my kids|mi ni[nñ][oa]|escuela|colegio|school)\b", re.I)
 
 
@@ -315,8 +315,9 @@ def send_class_link(platform, who, trial_status, send_text, offer=False):
 # ---------- Buttons (6 Nov 2026, Elena: "nobody will type video") ----------
 # Both labels come back as plain message text, so is_ask and is_class_ask handle a tap exactly like typing.
 VIDEO_LABEL = "🎬 Ver a EspaLuz"
-CLASS_LABEL = "🏫 Clase / Class"
+CLASS_LABEL = "🏫 Kids Classroom"  # Elena: "Class" alone reads as a class for the grown-up
 BUTTON_TEXT = "Cuando quieras, toca aquí. / Whenever you like, tap here."
+BUTTONS_EVENT = "buttons_shown_v2"  # new name so people who saw the old label get the new one once
 WA_BUTTON_EVERY_HOURS = 6  # each WhatsApp message costs a little, and a button after every reply would be noise
 _wa_content_sid = None
 
@@ -327,14 +328,14 @@ def telegram_buttons(bot, chat_id):
 
     def work():
         try:
-            if _count("telegram", who, "buttons_shown", "'2000-01-01'::timestamp") > 0:
+            if _count("telegram", who, BUTTONS_EVENT, "'2000-01-01'::timestamp") > 0:
                 return
             from telebot import types
             keys = types.ReplyKeyboardMarkup(resize_keyboard=True)
             keys.is_persistent = True
             keys.add(types.KeyboardButton(VIDEO_LABEL), types.KeyboardButton(CLASS_LABEL))
             bot.send_message(chat_id, BUTTON_TEXT, reply_markup=keys)
-            _note("telegram", who, "buttons_shown", "keyboard")
+            _note("telegram", who, BUTTONS_EVENT, "keyboard")
             print("🔘 buttons shown channel=telegram", flush=True)
         except Exception as e:  # noqa: BLE001
             logging.warning(f"telegram buttons non-fatal: {str(e)[:160]}")
@@ -346,12 +347,12 @@ def _wa_template(sid, token):
     global _wa_content_sid
     if _wa_content_sid:
         return _wa_content_sid
-    path = os.path.join(HERE, ".wa_buttons_content_sid")
+    path = os.path.join(HERE, ".wa_buttons_content_sid_v2")
     if os.path.exists(path):
         _wa_content_sid = open(path).read().strip()
         return _wa_content_sid
     r = requests.post("https://content.twilio.com/v1/Content", auth=(sid, token), timeout=20, json={
-        "friendly_name": "espaluz_buttons", "language": "es", "types": {"twilio/quick-reply": {"body": BUTTON_TEXT, "actions": [
+        "friendly_name": "espaluz_buttons_v2", "language": "es", "types": {"twilio/quick-reply": {"body": BUTTON_TEXT, "actions": [
             {"title": VIDEO_LABEL, "id": "video"}, {"title": CLASS_LABEL, "id": "clase"}]}, "twilio/text": {"body": BUTTON_TEXT}}})
     r.raise_for_status()
     _wa_content_sid = r.json()["sid"]
@@ -367,8 +368,8 @@ def whatsapp_buttons(user_id, sender):
     def work():
         try:
             with _db() as c, c.cursor() as cur:
-                cur.execute("SELECT count(*) FROM event_log WHERE event_type='buttons_shown' AND platform='whatsapp' AND event_data->>'who'=%s "
-                            "AND created_at >= NOW() - (%s * INTERVAL '1 hour')", (who, WA_BUTTON_EVERY_HOURS))
+                cur.execute("SELECT count(*) FROM event_log WHERE event_type=%s AND platform='whatsapp' AND event_data->>'who'=%s "
+                            "AND created_at >= NOW() - (%s * INTERVAL '1 hour')", (BUTTONS_EVENT, who, WA_BUTTON_EVERY_HOURS))
                 if cur.fetchone()[0] > 0:
                     return
             sid, token = os.getenv("TWILIO_ACCOUNT_SID", ""), os.getenv("TWILIO_AUTH_TOKEN", "")
@@ -376,7 +377,7 @@ def whatsapp_buttons(user_id, sender):
             r = requests.post(f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Messages.json", auth=(sid, token), timeout=20,
                               data={"From": sender, "To": f"whatsapp:{to}", "ContentSid": _wa_template(sid, token)})
             if r.status_code == 201:
-                _note("whatsapp", who, "buttons_shown", "quick_reply")
+                _note("whatsapp", who, BUTTONS_EVENT, "quick_reply")
                 print("🔘 buttons shown channel=whatsapp", flush=True)
             else:
                 logging.warning(f"whatsapp buttons refused: {r.status_code} {r.text[:200]}")
