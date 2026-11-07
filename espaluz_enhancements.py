@@ -975,3 +975,46 @@ def polish_reply(full_reply, user_text=""):
     except Exception as e:  # noqa: BLE001
         print(f"🌐 reply polish non-fatal: {str(e)[:120]}", flush=True)
         return full_reply
+
+
+# 7 Nov 2026 (Elena: "again the name of my daughter is not correct"). The memory had Alisa; the speech-to-text heard
+# "Lisa" in a voice note, and the bot copied "Lisa" into the translation and the reply. Whisper is now told the
+# family's names before it listens, and a near-miss of a known name is corrected after.
+import difflib as _difflib_names
+
+
+def family_names(platform: str, user_id) -> list:
+    """The names this family gave EspaLuz (any channel); [] when unknown or on any error."""
+    try:
+        from espaluz_memory import EspaLuzMemory
+        notes = EspaLuzMemory(platform=platform, platform_user_id=str(user_id)).family_notes()
+        return [m["name"] for m in notes.get("members", []) if m.get("name") and len(m["name"]) >= 3]
+    except Exception as e:  # noqa: BLE001
+        print(f"🎙️ family names non-fatal: {str(e)[:100]}", flush=True)
+        return []
+
+
+def names_hint(names: list) -> str:
+    return f"Names in this family: {', '.join(names)}. " if names else ""
+
+
+def fix_heard_names(text: str, names: list) -> str:
+    """A capitalised word one or two letters away from a family name becomes that name ("Lisa" -> "Alisa")."""
+    if not text or not names:
+        return text
+    fixed = []
+
+    def swap(m):
+        word = m.group(0)
+        if not word[0].isupper() or any(word.lower() == n.lower() for n in names):
+            return word
+        for n in names:
+            if abs(len(word) - len(n)) <= 2 and _difflib_names.SequenceMatcher(None, word.lower(), n.lower()).ratio() > 0.85:
+                fixed.append(f"{word}->{n}")
+                return n
+        return word
+
+    out = _re_polish.sub(r"\b[^\W\d_]{3,}\b", swap, text)
+    if fixed:
+        print(f"🎙️ heard names fixed: {', '.join(fixed)}", flush=True)
+    return out

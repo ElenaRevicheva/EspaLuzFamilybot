@@ -144,7 +144,11 @@ except ImportError as e:
 # 3 Nov 2026: one companion text for every grown-up reply (espaluz_enhancements.ESPALUZ_COMPANION_RULES)
 try:
     from espaluz_enhancements import ESPALUZ_COMPANION_RULES, money_caveat, BILINGUAL_LAST, polish_reply, display_reply
+    from espaluz_enhancements import family_names, names_hint, fix_heard_names
 except Exception:  # noqa: BLE001
+    family_names = lambda platform, user_id: []
+    names_hint = lambda names: ""
+    fix_heard_names = lambda text, names: text
     ESPALUZ_COMPANION_RULES = ""
     BILINGUAL_LAST = ""
     polish_reply = lambda text, user_text="": text
@@ -5544,13 +5548,15 @@ _PHANTOMS = {"thank you", "you", "thanks for watching", "thank you for watching"
              "subtitulos realizados por la comunidad de amara org", ""}
 
 
-def transcribe_audio(audio_path: str, hint: str = "Spanish and English, sometimes Russian. ") -> str:
+def transcribe_audio(audio_path: str, hint: str = "Spanish and English, sometimes Russian. ", names=None) -> str:
     """Transcribe a voice note: Groq Whisper first, OpenAI Whisper as the backup (23 Oct 2026).
 
     It was OpenAI only. When OpenAI ran out of credits on 23 Oct (429 insufficient_quota) every voice note got
     "No pude transcribir este mensaje de voz", while the Groq key in .env worked. Same order as OpenClaw's audio
     chain (groq whisper-large-v3-turbo → openai). Returns None only when every provider failed.
     """
+    # 7 Nov 2026: the family's names go in as a hint and a near-miss is corrected after ("Lisa" was heard for Alisa).
+    hint = names_hint(names or []) + hint
     providers = [
         ("groq", "https://api.groq.com/openai/v1/audio/transcriptions", os.getenv("GROQ_API_KEY"), "whisper-large-v3-turbo"),
         ("openai", "https://api.openai.com/v1/audio/transcriptions", os.getenv("OPENAI_API_KEY"), "whisper-1"),
@@ -5574,7 +5580,7 @@ def transcribe_audio(audio_path: str, hint: str = "Spanish and English, sometime
                     print(f"🎙️ silence phantom or hint echo -> treated as silence: {res.text.strip()[:120]}")
                     return None
                 print(f"🎙️ hint: {hint[:120]}")
-                return res.text.strip()
+                return fix_heard_names(res.text.strip(), names or [])
             print(f"❌ Transcription error ({name}): {res.status_code} {res.text[:160]}")
         except Exception as e:
             print(f"❌ Transcription error ({name}): {e}")
@@ -5831,7 +5837,7 @@ def handle_conversation_voice(message):
                       capture_output=True, check=True)
         
         # 2. Transcribe with Whisper
-        transcription = transcribe_audio(temp_mp3)
+        transcription = transcribe_audio(temp_mp3, names=family_names("telegram", user_id))
         if not transcription:
             bot.reply_to(message, "❌ Couldn't hear that. Try again?")
             return
@@ -6524,7 +6530,7 @@ def handle_voice(message):
 
         subprocess.run(["ffmpeg", "-i", temp_ogg_path, temp_mp3_path], check=True)
 
-        transcription = transcribe_audio(temp_mp3_path, whisper_hint(user_sessions.get(str(user_id))))
+        transcription = transcribe_audio(temp_mp3_path, whisper_hint(user_sessions.get(str(user_id))), family_names("telegram", user_id))
 
         if not transcription:
             bot.reply_to(message, "❌ No pude transcribir este mensaje de voz. / I couldn't transcribe this voice message.")
