@@ -147,7 +147,7 @@ try:
 except Exception:  # noqa: BLE001
     ESPALUZ_COMPANION_RULES = ""
     BILINGUAL_LAST = ""
-    polish_reply = lambda text: text
+    polish_reply = lambda text, user_text="": text
     display_reply = lambda text: text
     def money_caveat(reply, known=""):  # noqa: E306 - safe no-op if the module is older
         return reply
@@ -2768,7 +2768,7 @@ def ask_claude_with_mcp(session, translated_input):
                 "timestamp": datetime.now().isoformat()
             })
 
-        full_reply = polish_reply(money_caveat(result["content"][0]["text"], mcp_request.get("system", "")))  # 3 Nov 2026; 6 Nov polish
+        full_reply = polish_reply(money_caveat(result["content"][0]["text"], mcp_request.get("system", "")), user_message)  # 3 Nov 2026; 6 Nov polish
         short_text = extract_video_script(full_reply)
 
         return full_reply.strip(), short_text.strip(), thinking_process
@@ -2782,7 +2782,7 @@ def ask_claude_with_mcp(session, translated_input):
         try:
             fallback_text = _telegram_llm_fallback_reply(mcp_request, content_input)
             if fallback_text:
-                fallback_text = polish_reply(money_caveat(fallback_text, mcp_request.get("system", "")))  # 3 Nov 2026; 6 Nov polish
+                fallback_text = polish_reply(money_caveat(fallback_text, mcp_request.get("system", "")), content_input)  # 3 Nov 2026; 6 Nov polish
                 short_text = extract_video_script(fallback_text)
                 return fallback_text.strip(), short_text.strip(), ""
         except Exception as fallback_error:

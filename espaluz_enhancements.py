@@ -907,7 +907,9 @@ import re as _re_polish
 
 BILINGUAL_LAST = """LAST AND MOST IMPORTANT - THE FORM OF THIS REPLY:
 - Both languages, always, even if everything above is in Spanish: each idea in Spanish, and right after it the same idea in English, in short pairs.
-- 2 to 4 emojis across the reply where they fit: the opening, a phrase to learn, the closing. Never zero, never one on every line."""
+- 2 to 4 emojis across the reply where they fit: the opening, a phrase to learn, the closing. Never zero, never one on every line.
+- Start with your answer. Never repeat or translate their message back to them.
+- A phrase line that already shows the Spanish and its English meaning is one pair: write it once, never again reversed."""
 _EN_WORDS = set("the and you your with for this that what can how is are to of in it when say try means".split())
 _ES_WORDS = set("el la los las y que de en para con tu una un es por como cuando puedes hoy".split())
 _EMOJI = _re_polish.compile("[\U0001F300-\U0001FAFF\u2600-\u27BF]")
@@ -927,18 +929,43 @@ def has_both_languages(text):
     return sum(w in _EN_WORDS for w in words) / len(words) >= 0.08 and sum(w in _ES_WORDS for w in words) / len(words) >= 0.08
 
 
-def polish_reply(full_reply):
+def _words(text):
+    return set(_re_polish.findall(r"[a-záéíóúñü]{3,}", (text or "").lower()))
+
+
+def _tidy(text, user_text=""):
+    """6 Nov 2026, seen on Elena's screens: a phrase line written twice (Spanish first, then English first) and a reply
+    that opened by repeating her own message. Both are removed without a model, so nothing new can be invented."""
+    lines, seen, out = (text or "").split("\n"), set(), []
+    said = _words(user_text)
+    for i, line in enumerate(lines):
+        quoted = frozenset(q.strip().lower() for q in _re_polish.findall(r"[\"\u201c\u00ab]([^\"\u201d\u00bb]{2,80})[\"\u201d\u00bb]", line))
+        if len(quoted) >= 2:
+            if quoted in seen:
+                continue
+            seen.add(quoted)
+        if said and len(out) < 4 and line.strip():
+            mine = _words(line)
+            if len(mine) >= 4 and len(mine & said) / len(mine) >= 0.7:
+                continue
+        out.append(line)
+    return _re_polish.sub(r"^\s+", "", "\n".join(out))
+
+
+def polish_reply(full_reply, user_text=""):
     """Keeps the video script block as it is. Never blocks or loses a reply."""
     try:
+        full_reply = _tidy(full_reply, user_text) if user_text else full_reply
         main = display_reply(full_reply)
         both, alive = has_both_languages(main), bool(_EMOJI.search(main))
         if both and alive:
             return full_reply
         from llm_chain import complete
         new, _ = complete("You rewrite a chat message from EspaLuz, a warm friend helping a family live in Spanish. Keep every fact, name and "
-                          "phrase; add nothing new. Output only the rewritten message, with no asterisks and no headings.\n\n" + BILINGUAL_LAST,
+                          "phrase; add nothing new. A line that already has both languages stays as it is, once. "
+                          "Output only the rewritten message, with no asterisks and no headings.\n\n" + BILINGUAL_LAST,
                           main, max_tokens=1200)
-        new = display_reply(new)
+        new = _tidy(display_reply(new), user_text)
         good = bool(new) and has_both_languages(new) and len(new) > len(main) * 0.8
         print(f"🌐 reply polish both={both} emoji={alive} rewrite_ok={good} after_emoji={bool(_EMOJI.search(new or ''))}", flush=True)
         if not good:
