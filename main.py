@@ -1003,7 +1003,7 @@ def detect_emotion(text):
 
 def enhanced_emotion_detection(text, session):
     """Advanced emotion detection with learning capabilities - NOW WITH ENHANCED BRAIN!"""
-    user_id = str(session.get("user_id", "unknown"))
+    user_id = _session_uid(session) or "unknown"
     
     # Start with the current keyword-based approach
     base_emotion, emotion_data = detect_emotion(text)
@@ -1439,6 +1439,12 @@ def enhance_language_learning_detection(text, family_member, session):
     return basic_items
 
 # === MCP CONTEXT STRUCTURE ===
+def _session_uid(session) -> str:
+    """7 Nov 2026: sessions keep the Telegram id at context.user.id; session["user_id"] never existed, so the memory
+    block (profile, last 5 LangChain turns, RAG recall) was skipped on every grown-up message while saving still ran."""
+    return str(session.get("user_id") or (session.get("context") or {}).get("user", {}).get("id") or "")
+
+
 def create_initial_session(user_id, user_info, chat_info, message_text=""):
     """Create a rich context for Claude's MCP with emotional intelligence features"""
     
@@ -1775,7 +1781,7 @@ def format_mcp_request(session, new_message, translated_input=None, use_extended
     # Both non-fatal: Claude gets normal prompt if anything fails
     if UNIFIED_MEMORY_AVAILABLE:
         try:
-            _uid = str(session.get("user_id", ""))
+            _uid = _session_uid(session)
             if _uid:
                 _mem = EspaLuzMemory(platform='telegram', platform_user_id=_uid)
                 if _mem.user_id:
@@ -1821,6 +1827,11 @@ def format_mcp_request(session, new_message, translated_input=None, use_extended
 
                     if memory_block != "\n\n--- PERSISTENT MEMORY ---":
                         system_content += memory_block + "\n--- END MEMORY ---\n"
+                    # 7 Nov 2026: one proof line per grown-up turn (WhatsApp has its own).
+                    print(f"📚 memory used: profile={'yes' if _profile_ctx else 'no'} langchain={len(_recent)} turn(s) "
+                          f"rag={'yes' if locals().get('_rag_ctx') else 'no'}", flush=True)
+            else:
+                print("📚 memory skipped: no user id in session", flush=True)
         except Exception as e:
             print(f"⚠️ Memory retrieval non-fatal: {e}")
 
@@ -1883,7 +1894,7 @@ Provide nuanced language assistance focused on natural conversation, idioms, and
                 # Take the id from the session, as the rest of this function does.
                 memory = EspaLuzMemory(
                     platform='telegram',
-                    platform_user_id=str(session.get("user_id", "")),
+                    platform_user_id=_session_uid(session),
                 )
                 
                 user_country = session["context"]["user"]["preferences"].get("country", "panama")
