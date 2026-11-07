@@ -4056,7 +4056,6 @@ def bulletproof_video_generator(chat_id, full_reply_text):
         espaluz_talking.on_reply("telegram", chat_id, re.sub(r"\[VIDEO SCRIPT START\].*?\[VIDEO SCRIPT END\]", "", full_reply_text, flags=re.S).strip(),
                                  user_sessions.get(str(chat_id), {}).get("context", {}).get("emotional_state", {}).get("current_emotion"),
                                  _send_clip)
-        espaluz_talking.telegram_buttons(bot, chat_id)
         return True
 
         # ENHANCEMENT: Clean text for speech
@@ -4294,6 +4293,14 @@ def ultimate_multimedia_generator(chat_id, full_reply, short_reply):
         # answering "did the user get their voice note?"
         # The heroes' video already speaks in their own voices; a gTTS voice note on top is the EspaLuz voice Alisa should not hear.
         voice_success = True if video_success == "hero" else send_full_voice_message(chat_id, full_reply)
+        # 7 Nov 2026 (Elena's screenshot): the buttons came before the voice note, which then sat between them and the
+        # keyboard. They go last now, for grown-ups only.
+        if video_success != "hero":
+            try:
+                import espaluz_talking
+                espaluz_talking.telegram_buttons(bot, chat_id)
+            except Exception as button_err:  # noqa: BLE001
+                print(f"buttons non-fatal: {button_err}")
 
         print(
             f"✅ Multimedia generation complete - "

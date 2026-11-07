@@ -317,7 +317,10 @@ def send_class_link(platform, who, trial_status, send_text, offer=False):
 VIDEO_LABEL = "🎬 Ver a EspaLuz"
 CLASS_LABEL = "🏫 Kids Classroom"  # Elena: "Class" alone reads as a class for the grown-up
 BUTTON_TEXT = "Cuando quieras, toca aquí. / Whenever you like, tap here."
-BUTTONS_EVENT = "buttons_shown_v3"  # 6 Nov: every 6 hours on both channels (Elena); new name so each person sees them on the next reply
+# 7 Nov 2026 (Elena's Telegram screenshot): the keyboard sits under the message box, so the line says where and what.
+TELEGRAM_BUTTON_TEXT = ("👇 Abajo: 🎬 un mensaje de EspaLuz en video · 🏫 la clase de Pere y Titi para tu peque.\n"
+                        "Below: 🎬 a video message from EspaLuz · 🏫 Pere and Titi's class for your child.")
+BUTTONS_EVENT = "buttons_shown_v4"  # 6 Nov: every 6 hours on both channels (Elena); new name so each person sees them on the next reply
 BUTTON_EVERY_HOURS = 6  # both channels: always within reach, never noise
 _wa_content_sid = None
 
@@ -334,7 +337,7 @@ def telegram_buttons(bot, chat_id):
             keys = types.ReplyKeyboardMarkup(resize_keyboard=True)
             keys.is_persistent = True
             keys.add(types.KeyboardButton(VIDEO_LABEL), types.KeyboardButton(CLASS_LABEL))
-            bot.send_message(chat_id, BUTTON_TEXT, reply_markup=keys)
+            bot.send_message(chat_id, TELEGRAM_BUTTON_TEXT, reply_markup=keys)
             _note("telegram", who, BUTTONS_EVENT, "keyboard")
             print("🔘 buttons shown channel=telegram", flush=True)
         except Exception as e:  # noqa: BLE001
