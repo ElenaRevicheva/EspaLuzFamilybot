@@ -146,8 +146,11 @@ try:
     from espaluz_enhancements import ESPALUZ_COMPANION_RULES, money_caveat, BILINGUAL_LAST, polish_reply, display_reply
     from espaluz_enhancements import family_names, names_hint, fix_heard_names
     from espaluz_enhancements import belonging_block  # 8 Nov 2026: LIFE IN <family's country>
+    from espaluz_enhancements import profile_country, profile_fill  # 8 Nov 2026: "About your new life"
 except Exception:  # noqa: BLE001
     belonging_block = lambda country="panama": ""
+    profile_country = lambda platform, uid: ""
+    profile_fill = lambda platform, uid, **fields: None
     family_names = lambda platform, user_id: []
     names_hint = lambda names: ""
     fix_heard_names = lambda text, names: text
@@ -266,6 +269,10 @@ def finish_onboarding(user_id, message, onboarding):
     prefs["country"] = onboarding.get("country", "panama")
     prefs["user_name"] = onboarding.get("name", "Friend")
     prefs["family_role"] = onboarding.get("role", "learner")
+    # 8 Nov 2026: the first-day answers join the family profile (only fields still empty - the web answers win)
+    _household = "Single parent with children" if str(onboarding.get("spouse") or "").lower() == "single parent" else (
+        "Two parents with children" if onboarding.get("spouse") and onboarding.get("children") else "")
+    profile_fill("telegram", user_id, country_now=onboarding.get("country"), household=_household)
     
     # Store family members
     family_members = {}
@@ -1605,7 +1612,8 @@ def is_complex_language_topic(message):
 def add_country_cultural_context(prompt, session):
     """Add country-specific cultural context based on user's onboarding - NOT hardcoded!"""
     # Get user's actual country from onboarding
-    user_country = session["context"]["user"]["preferences"].get("country", "panama")
+    # 8 Nov 2026 (Elena): the family's own answer ("About your new life", web or any bot) wins over the old preference.
+    user_country = profile_country("telegram", _session_uid(session)) or session["context"]["user"]["preferences"].get("country", "panama")
     family_role = session["context"]["user"]["preferences"].get("family_role", "parent")
     user_name = session["context"]["user"]["preferences"].get("user_name")
     family_members = session["context"]["user"]["preferences"].get("family_members", {})

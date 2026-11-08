@@ -702,6 +702,9 @@ def get_memory_context(memory_instance) -> str:
                                  "You do not yet know which family member is on this number: after helping, ask once, lightly, who you are talking with.\n")
                 if notes.get("lessons"):
                     family_block += "Recent classroom lessons with the child: " + " | ".join(notes["lessons"]) + ". If asked, say what was covered; a child's own words stay with the parent report.\n"
+            # 8 Nov 2026: "About your new life" - the family's own answers (twin of profileLine in espaluz-chat)
+            if notes.get("linked"):
+                family_block += profile_line(notes.get("profile") or {})
         except Exception:  # noqa: BLE001 - never lose a reply over this
             pass
         if not memories and not family_block:
@@ -898,6 +901,7 @@ def belonging_block(country="panama"):
     lines = [f"- {i['text']}" for sec in pack.get("sections", {}).values() for i in sec if i.get("status") == "checked"]
     if not lines:
         return ""
+    print(f"🌎 belonging pack={country} lines={len(lines)}", flush=True)
     return (f"\nLIFE IN {pack['name'].upper()} - checked facts for helping this family belong here, not only get "
             "errands done. Use one when it fits, the way a friend who lives here would: woven into your answer, never as a list or a "
             "lecture. A date that moves every year (Carnival, Holy Week, the school calendar): give the month and say to confirm this "
@@ -917,6 +921,82 @@ def belonging_country(country):
     raw = str(getattr(country, "value", country) or "panama")
     key = _ud_bel.normalize("NFD", raw).encode("ascii", "ignore").decode().strip().lower().replace(" ", "_").replace("-", "_")
     return _BELONGING_ALIASES.get(key, key) or "panama"
+
+
+# 8 Nov 2026 (Elena approved 9 questions, "About your new life"): the family's own answers live in the family notebook
+# (kids-memory, event family_profile) - the web questionnaire writes them, the bots' first-day questions fill what is
+# still empty (profile_fill), and all three channels read the same note. TWIN of profileLine() in espaluz-chat.
+_PROFILE_ASK = [("country_from", "which country their story began in"), ("native_language", "which language their heart speaks"),
+                ("moved_when", "how long they have been here"), ("household", "who is on this adventure with them"),
+                ("spanish_feel", "how Spanish feels for them today"), ("focus", "what would make the biggest difference this month"),
+                ("miss_most", "what they miss most from home")]
+
+
+def profile_line(profile):
+    p = profile or {}
+
+    def has(k):
+        v = p.get(k)
+        return len(v) > 0 if isinstance(v, list) else bool(v)
+    now = ""
+    if p.get("country_now"):
+        try:
+            import json as _json_pl
+            path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "belonging", f"{belonging_country(p['country_now'])}.json")
+            with open(path, encoding="utf-8") as fh:
+                now = _json_pl.load(fh)["name"]
+        except Exception:  # noqa: BLE001
+            now = str(p["country_now"])
+    focus = p.get("focus") if isinstance(p.get("focus"), list) else [str(p.get("focus") or "")]
+    known = [x for x in [
+        now and f"they live in {now}", has("country_from") and f"their story began in {p.get('country_from')}",
+        has("native_language") and f"their native language is {p.get('native_language')}", has("moved_when") and f"they moved: {p.get('moved_when')}",
+        has("household") and f"household: {p.get('household')}", has("spanish_feel") and f"Spanish today: {p.get('spanish_feel')}",
+        has("focus") and "what matters most now: " + ", ".join(focus), has("miss_most") and f"they miss most from home: {p.get('miss_most')}"] if x]
+    missing = [q for k, q in _PROFILE_ASK if not has(k)]
+    out = ""
+    if known:
+        out += ("\nTHIS FAMILY'S NEW LIFE (their own answers): " + "; ".join(known) + ". Let it shape what you bring up: build bridges between "
+                "where they come from and life here, start from what matters most to them now, and when Spanish gets hard you may explain a word "
+                "in their native language.")
+    if missing:
+        out += ("\nNot known yet: " + "; ".join(missing[:4]) + ". Only when it truly fits - never as a form, at most ONE such question in a "
+                "conversation - you may ask one of these lightly, like a friend getting to know them.\n")
+    return out or "\n"
+
+
+_PROFILE_CACHE = {}
+
+
+def profile_country(platform, platform_user_id):
+    """The country the family chose in its profile ("" if not linked / not answered). Cached 10 minutes."""
+    import time as _time_pc
+    key = (platform, str(platform_user_id))
+    hit = _PROFILE_CACHE.get(key)
+    if hit and _time_pc.time() - hit[0] < 600:
+        return hit[1]
+    country = ""
+    try:
+        from espaluz_memory import EspaLuzMemory
+        prof = (EspaLuzMemory(platform=platform, platform_user_id=str(platform_user_id)).family_notes() or {}).get("profile") or {}
+        country = belonging_country(prof["country_now"]) if prof.get("country_now") else ""
+    except Exception:  # noqa: BLE001 - the profile is a bonus, never a failure
+        country = ""
+    _PROFILE_CACHE[key] = (_time_pc.time(), country)
+    return country
+
+
+def profile_fill(platform, platform_user_id, **fields):
+    """A bot's first-day answer joins the family profile - kids-memory keeps only fields that are still empty."""
+    try:
+        from espaluz_memory import EspaLuzMemory
+        got = EspaLuzMemory(platform=platform, platform_user_id=str(platform_user_id))._family_call(
+            "profile_fill", profile={k: str(v) for k, v in fields.items() if v})
+        if got.get("filled"):
+            print(f"🧭 family profile: {got['filled']} answer(s) from {platform} first-day questions", flush=True)
+            _PROFILE_CACHE.pop((platform, str(platform_user_id)), None)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 # 3 Nov 2026 (approved by Elena): a money-amount safeguard. Tested on the free chain: an instruction alone did not stop
