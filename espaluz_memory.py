@@ -29,6 +29,49 @@ import psycopg2
 from psycopg2.extras import RealDictCursor, Json
 from contextlib import contextmanager
 
+
+# 8 Nov 2026 (Elena's family test, test account linked to her own phones): she ASKED "Who is my family?" and two new notes
+# landed in the family notebook - "Elena is a single parent" and "Alisa Marshall, daughter" (two people merged into one).
+# Nothing in the message said either: the note-taker restated this phone's older notes. Two guards, twins of the web's
+# hasStatement / namesGrounded in espaluz-chat: a message with no statement gives no notes, and a note may name only
+# people the message itself names, the family list names, or the speaker.
+import re as _re
+import unicodedata as _ud
+
+_CYR = dict(zip("абвгдеёжзийклмнопрстуфхцчшщъыьэюя",
+                ["a", "b", "v", "g", "d", "e", "e", "zh", "z", "i", "i", "k", "l", "m", "n", "o", "p", "r", "s", "t", "u",
+                 "f", "kh", "ts", "ch", "sh", "shch", "", "y", "", "e", "yu", "ya"]))
+_PLAIN_WORDS = {"the", "a", "an", "her", "his", "their", "she", "he", "they", "i", "family", "daughter", "son", "mother",
+                "father", "mom", "dad", "wife", "husband", "child", "children", "kids", "baby", "grandmother", "grandfather",
+                "grandma", "grandpa", "dog", "cat", "pet", "school", "next", "on", "in", "every", "both", "spanish", "english",
+                "russian", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "january",
+                "february", "march", "april", "may", "june", "july", "august", "september", "october", "november",
+                "december", "migracion", "christmas", "easter"}
+
+
+def _fold(text: str) -> str:
+    t = _ud.normalize("NFD", str(text or "").lower())
+    t = "".join(c for c in t if not _ud.combining(c))
+    return "".join(_CYR.get(c, c) for c in t)
+
+
+def has_statement(text: str) -> bool:
+    """True when the message tells something; False when it only asks ("Who is my family?", "¿Quién está…?")."""
+    parts = [p.strip() for p in _re.findall(r"[^.!?\n]+[.!?]?", str(text or "")) if p.strip()]
+    return any(not p.endswith("?") and len(p.split()) >= 2 for p in parts)
+
+
+def names_grounded(fact: str, text: str, allowed) -> bool:
+    """Every capitalised word of a note is said in the message, is a family/speaker name, or is a plain word."""
+    said = set(_re.findall(r"[a-z0-9]+", _fold(text)))
+    ok = {_fold(a) for a in allowed if a}
+    for tok in _re.findall(r"\b[A-ZÁÉÍÓÚÑ][A-Za-zÁÉÍÓÚÑáéíóúñü'-]+", str(fact or "")):
+        w = _fold(tok).split("'")[0]
+        if w in said or w in ok or w in _PLAIN_WORDS:
+            continue
+        return False
+    return True
+
 # Configure logging first
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -233,6 +276,8 @@ class EspaLuzMemory:
         "passport or cédula numbers, phone numbers, emails, street addresses, card or bank details; and no health "
         "details beyond 'has a doctor's appointment'. If nothing lasting: reply NONE."
         " Use the exact spellings in FAMILY NAMES: if a name sounds like one of them (Elisa for Alisa), write the family spelling. Write the SPEAKER's name, never 'the user'. If a fact has a natural end (this week's holiday, Monday's appointment), end its line with [until YYYY-MM-DD], working from TODAY. Start the line with [private] for any worry, money or health matter. If the message corrects a KNOWN FACT, write instead: REPLACES: <the known fact, exactly> => <the corrected fact>."
+        " A question is not a fact. Never restate, combine or guess from KNOWN FACTS: write only what THIS message newly"
+        " says, and never join two people into one name."
     )
 
     # 6 Nov 2026 (Elena: "firstly it is about memory, because it will follow the long road"): a family linked to the web
@@ -290,6 +335,8 @@ class EspaLuzMemory:
         text = (user_text or "").strip()
         if not self._user or len(text) < 15 or text.startswith("/"):
             return 0
+        if not has_statement(text):  # 8 Nov 2026: a question gives no notes (see has_statement)
+            return 0
         try:
             # The order is named here, not imported: WhatsApp's llm_chain has no PROFILE_FALLBACK, and that ImportError
             # (caught below) silently skipped every WhatsApp fact on 3 Nov until the A/B test exposed it.
@@ -322,6 +369,10 @@ class EspaLuzMemory:
                 until = ended.group(1) if ended else None
                 fact = re.sub(r"\s*\[until \d{4}-\d{2}-\d{2}\]\s*$", "", fact, flags=re.I).strip()
                 if not (8 <= len(fact) <= 160) or fact.upper().startswith("NONE"):
+                    continue
+                if not names_grounded(fact, text, [m.get("name") for m in notes.get("members", [])]
+                                      + [speaker, (self._user.display_name or "").split(" ")[0]]):
+                    print("🧠 note dropped: names someone the message did not", flush=True)
                     continue
                 key = fact.lower().rstrip(".")
                 words = set(re.findall(r"[a-z0-9]+", key))

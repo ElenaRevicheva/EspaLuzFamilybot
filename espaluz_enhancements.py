@@ -692,6 +692,12 @@ def get_memory_context(memory_instance) -> str:
                 speaker = memory_instance._recognize(notes)
                 family_block = "\nTHIS FAMILY: " + "; ".join(
                     f"{m['name']} ({m.get('role')}" + (f", {m['age']}" if m.get("age") else "") + ")" for m in notes["members"]) + ". Use these exact name spellings.\n"
+                # 8 Nov 2026 (Elena's test): WhatsApp turned "Who is in my family?" into an exercise and Telegram added
+                # "your spouse" - nobody's relative. Twin of the same lines in espaluz-chat (web).
+                family_block += ("These are ALL the members of this family's account. If asked who is in the family or about"
+                                 " a member, ANSWER from this list first (name, role, age), then teach. Never invent a relative,"
+                                 " spouse, surname or age and never merge two people; someone known only from older chats on"
+                                 " this number is not on the family list.\n")
                 family_block += (f"You are talking with {speaker}.\n" if speaker else
                                  "You do not yet know which family member is on this number: after helping, ask once, lightly, who you are talking with.\n")
                 if notes.get("lessons"):
