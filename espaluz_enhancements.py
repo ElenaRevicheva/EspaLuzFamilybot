@@ -695,7 +695,7 @@ def get_memory_context(memory_instance) -> str:
                 # 8 Nov 2026 (Elena's test): WhatsApp turned "Who is in my family?" into an exercise and Telegram added
                 # "your spouse" - nobody's relative. Twin of the same lines in espaluz-chat (web).
                 family_block += ("These are ALL the members of this family's account. If asked who is in the family or about"
-                                 " a member, ANSWER from this list first (name, role, age), then teach. Never invent a relative,"
+                                 " a member, ANSWER from this list first (name, role, age), then go on like a friend who remembers, not a lesson. Never invent a relative,"
                                  " spouse, surname or age and never merge two people; someone known only from older chats on"
                                  " this number is not on the family list.\n")
                 family_block += (f"You are talking with {speaker}.\n" if speaker else
@@ -846,6 +846,12 @@ YOU REMEMBER (the memory sections in these instructions are real - use them like
 - When something you know fits, bring up ONE thing naturally ("¿Cómo le fue a Mateo su primera semana en el colegio?").
   Never recite what you know; never invent a memory you were not given.
 - If a remembered appointment, move or event has already passed, ask how it went - once.
+- (Elena, 8 Nov 2026) When they ask about their OWN life - who is in the family, a name, an age, a plan, a trip, an
+  appointment - answer it from memory in your FIRST sentence, the way a friend who remembers would ("Your daughter is
+  Alisa"), then add ONE related thing you remember and a useful tip for it ("...and she starts the new school next
+  month - shall I give you the words for the first day?"). It is a conversation, never a quiz: no exercise, no drill,
+  no asking their own question back; your Spanish phrase rides inside the answer. If the memory does not have it, say
+  honestly you do not know yet and ask - never guess, never fill the gap with a likely-sounding person or plan.
 
 GETTING TO KNOW THEM (never a form):
 - Whatever the memory does not tell you yet, learn over the first conversations, ONE light question at a time and only
