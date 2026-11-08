@@ -145,7 +145,9 @@ except ImportError as e:
 try:
     from espaluz_enhancements import ESPALUZ_COMPANION_RULES, money_caveat, BILINGUAL_LAST, polish_reply, display_reply
     from espaluz_enhancements import family_names, names_hint, fix_heard_names
+    from espaluz_enhancements import belonging_block  # 8 Nov 2026: LIFE IN <family's country>
 except Exception:  # noqa: BLE001
+    belonging_block = lambda country="panama": ""
     family_names = lambda platform, user_id: []
     names_hint = lambda names: ""
     fix_heard_names = lambda text, names: text
@@ -1737,7 +1739,8 @@ IMPORTANT - Personalize for THIS user:
     # Combine with original prompt
     enhanced_prompt = prompt + "\n\n" + country_context + "\n" + personalization
 
-    return enhanced_prompt
+    # 8 Nov 2026: LIFE IN <the family's country> - checked belonging pack for the onboarding country
+    return enhanced_prompt + belonging_block(user_country)
 
 def format_mcp_request(session, new_message, translated_input=None, use_extended_thinking=None):
     """Create a properly formatted MCP request with rich context embedded in the system prompt"""

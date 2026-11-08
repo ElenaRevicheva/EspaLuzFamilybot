@@ -885,7 +885,10 @@ fee, a rule), say so plainly and say where to confirm it. Never make it up."""
 # in espaluz-chat. Every grown-up prompt already carries "Today is <date>", so the block itself needs no date.
 def belonging_block(country="panama"):
     import json as _json_bel
+    country = belonging_country(country)
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "belonging", f"{country}.json")
+    if not os.path.exists(path):  # a country we have no pack for (e.g. usa): no block, and no log line per message
+        return ""
     try:
         with open(path, encoding="utf-8") as fh:
             pack = _json_bel.load(fh)
@@ -902,7 +905,18 @@ def belonging_block(country="panama"):
             "you are not sure, say so and suggest asking a neighbour or the school.\n" + "\n".join(lines) + "\n")
 
 
-ESPALUZ_COMPANION_RULES = ESPALUZ_COMPANION_RULES + belonging_block()
+# 8 Nov 2026 (Elena: "the 20 other countries should go live"): the pack follows the family's country. Each bot already
+# knows it (WhatsApp: stored answer / phone prefix; Telegram: onboarding preference), so this only turns that country
+# into a pack name: "Costa Rica", "costa_rica", "República Dominicana" -> costa_rica / dominican_republic.
+_BELONGING_ALIASES = {"republica_dominicana": "dominican_republic", "espana": "spain", "mexico": "mexico",
+                      "peru": "peru", "panama": "panama", "guinea_ecuatorial": "equatorial_guinea"}
+
+
+def belonging_country(country):
+    import unicodedata as _ud_bel
+    raw = str(getattr(country, "value", country) or "panama")
+    key = _ud_bel.normalize("NFD", raw).encode("ascii", "ignore").decode().strip().lower().replace(" ", "_").replace("-", "_")
+    return _BELONGING_ALIASES.get(key, key) or "panama"
 
 
 # 3 Nov 2026 (approved by Elena): a money-amount safeguard. Tested on the free chain: an instruction alone did not stop
