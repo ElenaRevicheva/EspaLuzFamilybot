@@ -879,6 +879,32 @@ write a short phone script in Spanish - offer it when it fits. If you are not su
 fee, a rule), say so plainly and say where to confirm it. Never make it up."""
 
 
+# 8 Nov 2026 (Elena: "what lasts is your new life"): LIFE IN <country> - only the CHECKED lines of the belonging pack
+# (belonging/<country>.json, a byte-for-byte copy of ascent-saas-builder supabase/functions/_shared/belonging/), so EspaLuz
+# talks about customs, the year's rhythm and local words from sourced facts, never from guesses. TWIN of belongingBlock()
+# in espaluz-chat. Every grown-up prompt already carries "Today is <date>", so the block itself needs no date.
+def belonging_block(country="panama"):
+    import json as _json_bel
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "belonging", f"{country}.json")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            pack = _json_bel.load(fh)
+    except Exception as e:
+        logging.getLogger(__name__).warning(f"belonging pack {country} not loaded: {e}")
+        return ""
+    lines = [f"- {i['text']}" for sec in pack.get("sections", {}).values() for i in sec if i.get("status") == "checked"]
+    if not lines:
+        return ""
+    return (f"\nLIFE IN {pack['name'].upper()} - checked facts for helping this family belong here, not only get "
+            "errands done. Use one when it fits, the way a friend who lives here would: woven into your answer, never as a list or a "
+            "lecture. A date that moves every year (Carnival, Holy Week, the school calendar): give the month and say to confirm this "
+            "year's official calendar. About customs and local life, say nothing beyond these facts and what the family told you; if "
+            "you are not sure, say so and suggest asking a neighbour or the school.\n" + "\n".join(lines) + "\n")
+
+
+ESPALUZ_COMPANION_RULES = ESPALUZ_COMPANION_RULES + belonging_block()
+
+
 # 3 Nov 2026 (approved by Elena): a money-amount safeguard. Tested on the free chain: an instruction alone did not stop
 # invented prices ("B/. 30" for a residence card, "$5-20" for a school fee, neither in our country data). If a reply names
 # an amount whose number is not in the instructions it was given (country data, memory), one honest line is added.
