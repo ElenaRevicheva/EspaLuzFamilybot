@@ -135,6 +135,10 @@ Just send me any message! I understand:
 
 /connect CODE — Connect to web dashboard
   ↳ Sync your progress across devices
+  ↳ How: app.espaluz.lat → sign in → Connect Telegram or WhatsApp → press the purple Telegram button → Start
+  ↳ Or copy the 6-character code from the web and send it here (example: /connect 2FD3FE)
+  ↳ One family memory: family members you add on the web are known here, on WhatsApp and on the web
+  ↳ Cómo: app.espaluz.lat → inicia sesión → Connect → botón morado de Telegram → Start, o envía aquí el código
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🎙️ *CONVERSATION MODE (NEW!)*

@@ -4636,13 +4636,16 @@ def handle_start(message):
     except Exception as e:
         print(f"⚠️ start payload {start_arg[:4]}: {e}")
 
+    if looks_like_web_code(start_arg):
+        link_web_code(message, start_arg.upper())
+
     # Track activity if enhanced brain available
     if ENHANCED_BRAIN_AVAILABLE:
         try:
             track_activity(user_id)
         except:
             pass
-    
+
     # /start used to reset onboarding every time (31 Oct 2026): a returning user lost her country, name and role, and the
     # next message - even a web connect code - was read as "which country?". A finished profile is kept; /profile changes it.
     saved = get_user_onboarding(user_id)
@@ -4887,15 +4890,26 @@ def handle_family(message):
     )
     bot.reply_to(message, example_msg, parse_mode="Markdown")
 
+# 8 Nov 2026 (Elena's own test): the web "Connect Telegram" button opens t.me/EspaLuzFamily_bot?start=CODE, but only a
+# typed "/connect CODE" linked - a stranger pressed Start, got "Welcome", and stayed unlinked while the web said "sent".
+# The web makes codes as 6 upper-case hex characters (generate_connection_code), so Start CODE and a bare CODE link too.
+WEB_CODE_RE = re.compile(r"^[0-9A-F]{6}$")
+
+def looks_like_web_code(text, typed=False):
+    t = (text or "").strip()
+    # A typed message must be upper-case AND carry a digit, so words like "DECADE" or "facade" stay ordinary chat.
+    return bool(WEB_CODE_RE.match(t)) and (not typed or any(c.isdigit() for c in t))
+
 @bot.message_handler(commands=["connect"])
 def handle_connect(message):
-    try:
-        parts = message.text.strip().split(" ")
-        if len(parts) < 2:
-            bot.reply_to(message, "❗ Please provide your connection code. Example:\n/connect ABC123")
-            return
+    parts = message.text.strip().split(" ")
+    if len(parts) < 2:
+        bot.reply_to(message, "❗ Please provide your connection code. Example:\n/connect ABC123")
+        return
+    link_web_code(message, parts[1].strip())
 
-        code = parts[1].strip()
+def link_web_code(message, code):
+    try:
         if not code or len(code) < 3:
             bot.reply_to(message, "❌ Invalid code. Please try again.")
             return
@@ -6579,7 +6593,10 @@ def handle_text(message):
     print(f">>> HANDLE_TEXT ENTERED: {message.from_user.id} - {message.text[:30] if message.text else 'None'}", flush=True)
     user_id = str(message.from_user.id)
     text = message.text.strip()
-    
+    if looks_like_web_code(text, typed=True):  # 8 Nov 2026: the web code typed alone links, not chats (see WEB_CODE_RE)
+        link_web_code(message, text)
+        return
+
     # === DATABASE TRACKING (first thing!) ===
     if DATABASE_AVAILABLE and db:
         try:
