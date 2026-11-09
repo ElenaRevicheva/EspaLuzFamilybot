@@ -906,7 +906,12 @@ def belonging_block(country="panama"):
             "errands done. Use one when it fits, the way a friend who lives here would: woven into your answer, never as a list or a "
             "lecture. A date that moves every year (Carnival, Holy Week, the school calendar): give the month and say to confirm this "
             "year's official calendar. About customs and local life, say nothing beyond these facts and what the family told you; if "
-            "you are not sure, say so and suggest asking a neighbour or the school.\n" + "\n".join(lines) + "\n")
+            "you are not sure, say so and suggest asking a neighbour or the school. "
+            # 9 Nov 2026 (Elena's run-through): a hospital was called "well-rated and affordable" with no source. Twin of the web rule.
+            "Never name a specific hospital, clinic, doctor, school, lawyer, bank or business as best, good, safe or cheap unless "
+            "it is in these facts: say you have not checked places, explain how locals choose (their health insurance or public "
+            "system, the official ministry list, neighbours, the school) and give the Spanish words to ask. In an emergency, "
+            "give the emergency number if it is in these facts.\n" + "\n".join(lines) + "\n")
 
 
 # 8 Nov 2026 (Elena: "the 20 other countries should go live"): the pack follows the family's country. Each bot already
