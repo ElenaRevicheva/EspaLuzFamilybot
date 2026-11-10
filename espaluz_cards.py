@@ -252,15 +252,31 @@ def send_card(bot, chat_id, uid, kind, country=""):
 
 
 def refresh_road(uid):
-    """After a lesson: the family's newest road card updates in place (no new message). Silent if they have none."""
+    """After a lesson: the family's newest road card updates in place (no new message). A linked family without a card
+    gets its first one here, ONCE (10 Nov: the in-place update only helps a family that has a card); after that, never a
+    new message - only the same card changing."""
     mid = _roads().get(str(uid))
     if not mid:
+        state, f = road_state(uid)
+        if not f.get("linked"):
+            return False
+        j = _api("sendWidget", {"chat_id": int(uid), "html": ROAD_HTML, "chat_data": state,
+                                "caption": "🌴 Tu camino con EspaLuz · Your family's road. Se actualiza solo después de cada clase · "
+                                           "It updates itself after every class."})
+        if j.get("ok"):
+            _save_road(uid, j["result"]["message_id"])
+            print(f"🃏 card sent kind=road first=1 message_id={j['result']['message_id']}", flush=True)
+            return True
+        print(f"🃏 card first road failed: {j.get('description')}", flush=True)
         return False
     try:
         state, _ = road_state(uid)
         j = _api("editMessageWidgetData", {"chat_id": int(uid), "message_id": int(mid), "chat_data": state})
         if j.get("ok"):
             print(f"🃏 card updated kind=road message_id={mid}", flush=True)
+            return True
+        if "not modified" in str(j.get("description")):  # same numbers as on screen: nothing to change, not an error
+            print(f"🃏 card unchanged kind=road message_id={mid}", flush=True)
             return True
         print(f"🃏 card update failed kind=road: {j.get('description')}", flush=True)
     except Exception as e:  # noqa: BLE001

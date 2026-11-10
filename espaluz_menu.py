@@ -41,6 +41,14 @@ Welcome! I'm your emotionally intelligent language tutor for expat families, tra
 /mama — Back to adult mode
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🃏 *CARDS IN THE CHAT · TARJETAS*
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+/tarjetas — all cards (or the 🃏 button below the chat)
+/camino — 🌴 your family's road: stage, class turns, stars; updates itself after each lesson
+/vida — 🌎 life in your country: checked facts about greetings, time, school, food, holidays
+/palabras — 💬 local words: read the phrase, guess, tap Ver
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 💬 *HOW TO LEARN*
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Just send me any message! I understand:
