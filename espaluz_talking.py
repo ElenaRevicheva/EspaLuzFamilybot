@@ -319,8 +319,13 @@ CLASS_LABEL = "🏫 Kids Classroom"  # Elena: "Class" alone reads as a class for
 BUTTON_TEXT = "Cuando quieras, toca aquí. / Whenever you like, tap here."
 # 7 Nov 2026 (Elena's Telegram screenshot): the keyboard sits under the message box, so the line says where and what.
 TELEGRAM_BUTTON_TEXT = ("👇 Abajo: 🎬 un mensaje de EspaLuz en video · 🏫 la clase de Pere y Titi para tu peque.\n"
-                        "Below: 🎬 a video message from EspaLuz · 🏫 Pere and Titi's class for your child.")
+                        "Below: 🎬 a video message from EspaLuz · 🏫 Pere and Titi's class for your child.\n"
+                        "🃏 Tarjetas: tu camino, la vida local y palabras locales · Cards: your road, local life, local words.")
 BUTTONS_EVENT = "buttons_shown_v4"  # 6 Nov: every 6 hours on both channels (Elena); new name so each person sees them on the next reply
+# 10 Nov 2026: Telegram gets a third button, the live cards (espaluz_cards.py). Its own event name, so every Telegram
+# family sees the new keyboard on its next reply while WhatsApp (no widgets) keeps buttons_shown_v4.
+CARDS_LABEL = "🃏 Tarjetas · Cards"
+TG_BUTTONS_EVENT = "buttons_shown_tg_v5"
 BUTTON_EVERY_HOURS = 6  # both channels: always within reach, never noise
 _wa_content_sid = None
 
@@ -331,14 +336,15 @@ def telegram_buttons(bot, chat_id):
 
     def work():
         try:
-            if _count("telegram", who, BUTTONS_EVENT, f"NOW() - INTERVAL '{BUTTON_EVERY_HOURS} hours'") > 0:
+            if _count("telegram", who, TG_BUTTONS_EVENT, f"NOW() - INTERVAL '{BUTTON_EVERY_HOURS} hours'") > 0:
                 return
             from telebot import types
             keys = types.ReplyKeyboardMarkup(resize_keyboard=True)
             keys.is_persistent = True
             keys.add(types.KeyboardButton(VIDEO_LABEL), types.KeyboardButton(CLASS_LABEL))
+            keys.add(types.KeyboardButton(CARDS_LABEL))
             bot.send_message(chat_id, TELEGRAM_BUTTON_TEXT, reply_markup=keys)
-            _note("telegram", who, BUTTONS_EVENT, "keyboard")
+            _note("telegram", who, TG_BUTTONS_EVENT, "keyboard")
             print("🔘 buttons shown channel=telegram", flush=True)
         except Exception as e:  # noqa: BLE001
             logging.warning(f"telegram buttons non-fatal: {str(e)[:160]}")

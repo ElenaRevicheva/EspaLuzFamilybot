@@ -3771,6 +3771,7 @@ def kids_report_web():
                                     learned=learned, class_tip=tip)
             bot.send_message(int(uid), text)
             print(f"📒 parent report sent ({surface} lesson {start:%H:%M}-{end:%H:%M} UTC, {len(mine)} answers)")
+            _refresh_road_card(uid)
         # 1 Nov 2026 (Leaply Kids, the daily ritual): once a day from 17:00 Panama, a family that had a lesson in the
         # last two days gets today's 2-minute game to do together, then Pere and Titi. It stops by itself when lessons stop.
         day = now - timedelta(hours=5)
@@ -3811,6 +3812,7 @@ def kids_report_telegram():
                                                                if p.get("kids_mode") != "class" and _kids_class_tip_due(p, _end)
                                                                else "")))
         print(f"📒 parent report sent (Telegram lesson {lesson}, {len(pairs)} answers)")
+        _refresh_road_card(uid)
     if changed:
         save_persistent_sessions()
 
@@ -4847,6 +4849,54 @@ def handle_clase(message):
     save_persistent_sessions()
     process_message_with_tracking("¡Hola Pere y Titi! Quiero empezar la clase. / Hello Pere and Titi! I want to start the class.",
                                   message.chat.id, user_id, message)
+
+
+# === 10 Nov 2026 (Elena: "integrate as many cards as makes sense"): live cards in the chat (Telegram widgets, Bot API 10.4).
+# Built by code from the family notebook and the checked belonging pack - see espaluz_cards.py. Free for everyone.
+_CARD_CMDS = {"camino": "road", "road": "road", "vida": "life", "life": "life", "palabras": "words", "words": "words"}
+
+
+def _refresh_road_card(uid):
+    try:
+        import espaluz_cards
+        threading.Thread(target=espaluz_cards.refresh_road, args=(uid,), daemon=True).start()
+    except Exception as card_err:  # noqa: BLE001 - a card is a bonus
+        print(f"🃏 card refresh non-fatal: {card_err}")
+
+
+def _card_country(user_id):
+    prefs = (user_sessions.get(str(user_id)) or {}).get("context", {}).get("user", {}).get("preferences", {})
+    return profile_country("telegram", str(user_id)) or prefs.get("country") or "panama"
+
+
+def _send_card_async(chat_id, user_id, kind):
+    import espaluz_cards
+    threading.Thread(target=espaluz_cards.send_card, daemon=True,
+                     args=(bot, chat_id, str(user_id), kind, _card_country(user_id) if kind != "road" else "")).start()
+
+
+@bot.message_handler(commands=["tarjetas", "cards", "camino", "road", "vida", "life", "palabras", "words"])
+@bot.message_handler(func=lambda m: (m.text or "").strip() == "🃏 Tarjetas · Cards"
+                     or (m.text or "").strip().lower().strip("!.") in ("tarjetas", "cards", "mi camino", "my road"))
+def handle_cards(message):
+    import espaluz_cards
+    word = (message.text or "").strip().lstrip("/").split("@")[0].split(" ")[0].lower()
+    kind = _CARD_CMDS.get(word) or ("road" if word in ("mi", "my") else None)
+    if kind:
+        _send_card_async(message.chat.id, message.from_user.id, kind)
+    else:
+        bot.send_message(message.chat.id, espaluz_cards.MENU_TEXT, reply_markup=espaluz_cards.menu_markup())
+
+
+@bot.callback_query_handler(func=lambda c: (c.data or "").startswith("card:"))
+def handle_card_tap(call):
+    kind = call.data.split(":", 1)[1]
+    try:
+        bot.answer_callback_query(call.id)
+    except Exception:  # noqa: BLE001
+        pass
+    if kind in ("road", "life", "words"):
+        _send_card_async(call.message.chat.id, call.from_user.id, kind)
 
 
 @bot.message_handler(commands=["mama"])
@@ -7040,6 +7090,10 @@ custom_commands = [
     BotCommand("family", "Switch family member"),
     BotCommand("kids", "Kids 6-7: Pere and Titi teach Spanish + English"),
     BotCommand("mama", "Back to adult mode after /kids"),
+    BotCommand("tarjetas", "🃏 EspaLuz cards: your road, local life, local words"),
+    BotCommand("camino", "🌴 Your family's road card"),
+    BotCommand("vida", "🌎 Life in your country: checked facts"),
+    BotCommand("palabras", "💬 Local words, tap to reveal"),
 ]
 
 def register_commands_with_retry(max_retries=5, initial_delay=10):
