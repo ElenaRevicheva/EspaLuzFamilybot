@@ -78,10 +78,10 @@ W.onEvent("chatDataChanged",r);r();W.ready&&W.ready();
 DECK_HTML = _CSS + r"""<style>
 .t{font-size:.75em;color:var(--tg-theme-accent-text-color);font-weight:600;margin-top:8px}
 .es{font-size:1.15em;font-weight:600;margin:4px 0;user-select:text;-webkit-user-select:text}
-.tx{margin:4px 0;min-height:4.2em}.n{text-align:right}
+.tx{margin:4px 0;min-height:2.6em}.n{text-align:right}
 </style>
 <h3>TITLE</h3><div class="h">SUB</div><div id="c"></div>
-<div class="b"><button id="p">‹</button><button id="v">REVEAL</button><button id="n">›</button></div>
+<div class="b"><button id="p">◀ Atrás</button><button id="v">REVEAL</button><button id="n">Más ▶</button></div>
 <script>""" + _JS_COMMON + r"""
 const D=DATA,F=FLIP;let i=0,o=!F;
 function r(){const x=D[i];o=o||!F;
@@ -145,7 +145,7 @@ def life_card(country):
     sub = f"{len(rows)} checked facts · {n_src} sources · {pack.get('checked_on', '')}"
     html = _fit(lambda it: _deck_html(f"Vida en {pack['name']} · Life in {pack['name']}", sub, it, False, "·"), rows)
     caption = (f"🌎 Vida en {pack['name']} · Life in {pack['name']}: how people here greet, keep time, eat and celebrate. "
-               "Only checked facts. Swipe with ‹ ›.")
+               "Only checked facts. Tap Más ▶ for the next one.")
     return html, caption, pack["name"]
 
 
