@@ -358,8 +358,8 @@ ADMIN_TEMPLATE = '''
         <h2>🔗 Subscription Links</h2>
         <div class="alert alert-info">
             <strong>PayPal:</strong> 
-            <a href="https://www.paypal.com/webapps/billing/plans/subscribe?plan_id=P-6GR95409C95293139NFSBJJY" target="_blank">
-                https://www.paypal.com/webapps/billing/plans/subscribe?plan_id=P-6GR95409C95293139NFSBJJY
+            <a href="https://www.paypal.com/webapps/billing/plans/subscribe?plan_id=P-94X46784TP366873JNL2MWXA" target="_blank">
+                https://www.paypal.com/webapps/billing/plans/subscribe?plan_id=P-94X46784TP366873JNL2MWXA
             </a>
         </div>
 

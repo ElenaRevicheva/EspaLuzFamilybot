@@ -18,7 +18,7 @@ from typing import Dict, Any, Optional
 PAYPAL_CLIENT_ID = os.getenv("PAYPAL_CLIENT_ID", "")
 PAYPAL_CLIENT_SECRET = os.getenv("PAYPAL_CLIENT_SECRET", "")
 PAYPAL_BASE_URL = "https://api.paypal.com"
-ESPALUZ_PLAN_ID = "P-6GR95409C95293139NFSBJJY"
+ESPALUZ_PLAN_ID = "P-94X46784TP366873JNL2MWXA"  # 11 Nov 2026: $11/month, no PayPal trial (14 free days are in the app). Old P-6GR9 subscribers keep theirs.
 PAYPAL_SUBSCRIPTION_LINK = f"https://www.paypal.com/webapps/billing/plans/subscribe?plan_id={ESPALUZ_PLAN_ID}"
 
 # Trial Configuration
@@ -866,7 +866,7 @@ Para continuar con EspaLuz / To continue with EspaLuz:
 🇵🇦 **PagueloFacil** (pago único $11 → 30 días, auto-activación)
 👉 Envía /pagar
 
-💳 **PayPal** (recurring — 2 weeks FREE, then $11/month)
+💳 **PayPal** (recurring — $11/month, cancel any time)
 👉 {PAYPAL_SUBSCRIPTION_LINK}
 
 🔑 After PayPal: send your Subscription ID (I-XXXX) or email via /link.
