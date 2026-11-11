@@ -840,44 +840,6 @@ webhook_thread = threading.Thread(target=webhook_killer_thread, daemon=True)
 webhook_thread.start()
 print("🛡️ Webhook killer thread started in background")
 
-# === GUMROAD SYNC FUNCTION ===
-def poll_subscriptions():
-    """Poll Gumroad API and update local subscriber list"""
-    # DISABLED: Gumroad is suspended - Jan 2026
-    print("⏸️ Gumroad polling DISABLED (suspended)")
-    return
-    try:
-        GUMROAD_API_KEY = os.environ.get("GUMROAD_API_KEY")
-        GUMROAD_PRODUCT_ID = os.environ.get("GUMROAD_PRODUCT_ID")
-        url = f"https://api.gumroad.com/v2/subscriptions?product_id={GUMROAD_PRODUCT_ID}"
-        headers = {"Authorization": f"Bearer {GUMROAD_API_KEY}"}
-
-        res = requests.get(url, headers=headers)
-        if res.status_code != 200:
-            print(f"❌ Gumroad error {res.status_code}: {res.text}")
-            return
-
-        data = res.json()
-        if not data.get("success"):
-            print(f"❌ Gumroad failure: {data}")
-            return
-
-        updated = {}
-        for sub in data.get("subscriptions", []):
-            email = sub.get("email", "").lower()
-            status = "active" if sub.get("status") == "active" else "inactive"
-            updated[email] = {
-                "telegram_id": None,
-                "status": status
-            }
-
-        with open("subscribers.json", "w") as f:
-            json.dump(updated, f, indent=2)
-
-        print(f"✅ Subscription database updated. Total: {len(updated)}")
-
-    except Exception as e:
-        print(f"❌ Exception polling Gumroad: {e}")
 
 def is_subscribed(user_id):
     """
@@ -7229,19 +7191,6 @@ Keep your response concise and helpful."""
 
 print("✅ Espaluz is running THIS UPDATED VERSION: v4.0-paypal-demo-mode (Polling Mode)")
 
-# DISABLED: Gumroad subscription poller - using PayPal now
-# def run_subscription_poller():
-#     from poll_subscriptions import fetch_all_subscribers, update_subscriber_file
-#     while True:
-#         try:
-#             print(f"\n🔄 Polling Gumroad API inside bot runtime...")
-#             subscribers = fetch_all_subscribers()
-#             update_subscriber_file(subscribers)
-#         except Exception as e:
-#             print(f"❌ Subscription poller crashed: {e}")
-#         time.sleep(300)
-# threading.Thread(target=run_subscription_poller, daemon=True).start()
-print("📌 Gumroad poller disabled - using PayPal subscriptions")
 
 # === TEMP DEBUG: PRINT CURRENT SUBSCRIBERS TO LOGS ===
 try:
