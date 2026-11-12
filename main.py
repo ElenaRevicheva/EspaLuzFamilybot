@@ -336,11 +336,6 @@ def finish_onboarding(user_id, message, onboarding):
         family_line=family_line
     )
     bot.send_message(message.chat.id, msg)
-    try:  # 12 Nov 2026: the EspaLuz map once, right after onboarding
-        from espaluz_enhancements import espaluz_map_text
-        bot.send_message(message.chat.id, espaluz_map_text("telegram"), disable_web_page_preview=True)
-    except Exception as _map_e:  # noqa: BLE001 - never block onboarding
-        print(f"⚠️ map message non-fatal: {_map_e}")
 
 ONBOARDING_MESSAGES = {
     "country": """👋 Welcome to EspaLuz!
@@ -4657,6 +4652,11 @@ def handle_start(message):
     # Start onboarding - ask for country first
     welcome_msg = ONBOARDING_MESSAGES["country"]
 
+    try:  # 12 Nov 2026 (Elena): the EspaLuz map the moment a new person arrives, before the first question
+        from espaluz_enhancements import espaluz_map_text
+        bot.send_message(message.chat.id, espaluz_map_text("telegram"), disable_web_page_preview=True)
+    except Exception as _map_e:  # noqa: BLE001 - never block onboarding
+        print(f"⚠️ map message non-fatal: {_map_e}")
     bot.send_message(message.chat.id, welcome_msg)
 
     # Wiring: emit signup event to CTO AIPA

@@ -1158,7 +1158,8 @@ def fix_heard_names(text: str, names: list) -> str:
 
 
 # 12 Nov 2026 (Elena): the EspaLuz map - a stranger who got the number from a friend learns who EspaLuz is, where she
-# lives and how one family gets one memory. Sent once after onboarding and on "mapa"/"map" (Telegram also /mapa).
+# lives and how one family gets one memory. Sent the moment a new person arrives (before the first question) and on
+# "mapa"/"map" (Telegram also /mapa).
 # The menus are NOT changed. Only claims that are live today: no Android app (not public yet), no Russian classroom yet.
 ESPALUZ_WHATSAPP_URL = "https://wa.me/50766623757"
 ESPALUZ_TELEGRAM_URL = "https://t.me/EspaLuzFamily_bot"
@@ -1183,6 +1184,8 @@ def espaluz_map_text(platform: str) -> str:
         "Create your family at app.espaluz.lat → Connect → send me the code. Then the web, WhatsApp and Telegram all "
         "know your family.",
         "",
-        "Type mapa any time to see this again.",
+        ("👉 Tap /menu to see everything EspaLuz can do for you." if platform == "telegram"
+         else "👉 Type menu to see everything EspaLuz can do for you."),
+        "Type mapa any time to see this map again.",
     ]
     return "\n".join(lines)
