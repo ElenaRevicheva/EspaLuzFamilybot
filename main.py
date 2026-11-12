@@ -2802,6 +2802,27 @@ def ask_claude_with_mcp(session, translated_input):
         )
         return honest, "Intenta de nuevo en unos minutos. Try again shortly.", ""
 
+
+# 12 Nov 2026 (Elena's test): a fallback model answered with **bold** markers; Telegram shows the reply as plain text, so
+# the stars appeared raw although the prompt forbids them. Stripped in code - every model, every path.
+def no_markdown_stars(text):
+    if not text:
+        return text
+    text = re.sub(r"\*\*(.+?)\*\*", r"\1", text, flags=re.S)
+    text = re.sub(r"__(.+?)__", r"\1", text, flags=re.S)
+    text = re.sub(r"(?m)^(\s*)\*\s+", r"\1• ", text)
+    text = re.sub(r"(?<![\w*])\*(?=\S)([^*\n]+?)(?<=\S)\*(?![\w*])", r"\1", text)
+    return text.replace("**", "")
+
+
+_ask_claude_with_mcp_raw = ask_claude_with_mcp
+
+
+def ask_claude_with_mcp(session, translated_input):
+    full_reply, short_reply, thinking = _ask_claude_with_mcp_raw(session, translated_input)
+    return no_markdown_stars(full_reply), no_markdown_stars(short_reply), thinking
+
+
 def transcribe_voice(file_path):
     """Transcribe voice message to text"""
     try:

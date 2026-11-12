@@ -698,6 +698,11 @@ def get_memory_context(memory_instance) -> str:
                                  " a member, ANSWER from this list first (name, role, age), then go on like a friend who remembers, not a lesson. Never invent a relative,"
                                  " spouse, surname or age and never merge two people; someone known only from older chats on"
                                  " this number is not on the family list.\n")
+                # 12 Nov 2026 (Elena's test): "tú, Elena, como la mamá" - the chat account's name became a family role.
+                family_block += ("The name on this chat account is only an account name: never give the person writing a"
+                                 " family role (mother, father, grandparent) and never add them to the family unless the"
+                                 " list above or 'You are talking with' says so. If they ask who is in the family, list only"
+                                 " the members above.\n")
                 family_block += (f"You are talking with {speaker}.\n" if speaker else
                                  "You do not yet know which family member is on this number: after helping, ask once, lightly, who you are talking with.\n")
                 if notes.get("lessons"):
