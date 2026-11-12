@@ -1155,3 +1155,34 @@ def fix_heard_names(text: str, names: list) -> str:
     if fixed:
         print(f"🎙️ heard names fixed: {', '.join(fixed)}", flush=True)
     return out
+
+
+# 12 Nov 2026 (Elena): the EspaLuz map - a stranger who got the number from a friend learns who EspaLuz is, where she
+# lives and how one family gets one memory. Sent once after onboarding and on "mapa"/"map" (Telegram also /mapa).
+# The menus are NOT changed. Only claims that are live today: no Android app (not public yet), no Russian classroom yet.
+ESPALUZ_WHATSAPP_URL = "https://wa.me/50766623757"
+ESPALUZ_TELEGRAM_URL = "https://t.me/EspaLuzFamily_bot"
+
+
+def espaluz_map_text(platform: str) -> str:
+    other = (f"📱 Also on Telegram: {ESPALUZ_TELEGRAM_URL} - the same EspaLuz." if platform == "whatsapp"
+             else f"📱 Also on WhatsApp: {ESPALUZ_WHATSAPP_URL} - the same EspaLuz.")
+    lines = [
+        "🗺️ EspaLuz map",
+        "",
+        "EspaLuz is your family's bilingual friend for living your new country in Spanish: she remembers your family, "
+        "speaks Spanish and English, and is with you right where life happens - the school gate, the doctor's office, "
+        "the bank window, the bus, the neighbour at the door - any hour, day or night, on the go.",
+        "",
+        "Where I live",
+        "💬 Here: write, send a voice note or a photo.",
+        other,
+        "🌐 app.espaluz.lat: your family dashboard and Pere & Titi's classroom for kids aged 6-7.",
+        "",
+        "One family, one memory",
+        "Create your family at app.espaluz.lat → Connect → send me the code. Then the web, WhatsApp and Telegram all "
+        "know your family.",
+        "",
+        "Type mapa any time to see this again.",
+    ]
+    return "\n".join(lines)

@@ -336,6 +336,11 @@ def finish_onboarding(user_id, message, onboarding):
         family_line=family_line
     )
     bot.send_message(message.chat.id, msg)
+    try:  # 12 Nov 2026: the EspaLuz map once, right after onboarding
+        from espaluz_enhancements import espaluz_map_text
+        bot.send_message(message.chat.id, espaluz_map_text("telegram"), disable_web_page_preview=True)
+    except Exception as _map_e:  # noqa: BLE001 - never block onboarding
+        print(f"⚠️ map message non-fatal: {_map_e}")
 
 ONBOARDING_MESSAGES = {
     "country": """👋 Welcome to EspaLuz!
@@ -4868,6 +4873,15 @@ def handle_card_tap(call):
         pass
     if kind in ("road", "life", "words"):
         _send_card_async(call.message.chat.id, call.from_user.id, kind)
+
+
+# 12 Nov 2026 (Elena): the EspaLuz map - who she is, where she lives, one family one memory. Own command and word;
+# /menu and the command list are NOT changed.
+@bot.message_handler(commands=["mapa", "map"])
+@bot.message_handler(func=lambda m: (m.text or "").strip().lower().strip("!.") in ("mapa", "map", "🗺️", "🗺"))
+def handle_espaluz_map(message):
+    from espaluz_enhancements import espaluz_map_text
+    bot.send_message(message.chat.id, espaluz_map_text("telegram"), disable_web_page_preview=True)
 
 
 @bot.message_handler(commands=["mama"])
