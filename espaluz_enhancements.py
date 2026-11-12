@@ -1190,7 +1190,7 @@ def espaluz_map_text(platform: str) -> str:
         "know your family.",
         "",
         ("👉 Tap /menu to see everything EspaLuz can do for you." if platform == "telegram"
-         else "👉 Type menu to see everything EspaLuz can do for you."),
+         else f"👉 Type menu - or tap {ESPALUZ_WHATSAPP_URL}?text=menu - to see everything EspaLuz can do for you."),
         "Type mapa any time to see this map again.",
     ]
     return "\n".join(lines)

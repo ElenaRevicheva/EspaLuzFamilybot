@@ -5581,6 +5581,8 @@ def handle_menu(message):
     if ENHANCED_BRAIN_AVAILABLE:
         # Plain text - no parse_mode to avoid underscore issues
         menu_clean = MENU_TEXT.replace('*', '').replace('_', ' ')
+        # 12 Nov 2026 (Elena): one line on top so the map is never lost; the menu itself is unchanged.
+        menu_clean = "🗺️ /mapa - who EspaLuz is and where to find her (web, WhatsApp, Telegram)\n\n" + menu_clean
         
         # Telegram limit is 4096 chars - split if needed
         if len(menu_clean) > 4000:
@@ -7084,6 +7086,7 @@ import os
 custom_commands = [
     BotCommand("start", "Welcome & quick start"),
     BotCommand("menu", "Full command menu"),
+    BotCommand("mapa", "🗺️ EspaLuz map: who she is, where to find her"),
     BotCommand("help", "Help and instructions"),
     BotCommand("trial", "Check your free trial status"),
     BotCommand("pagar", "Pay $11 via PagueloFacil — 30 days access"),
