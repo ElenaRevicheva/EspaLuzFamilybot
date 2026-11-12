@@ -1579,6 +1579,15 @@ def add_country_cultural_context(prompt, session):
     family_role = session["context"]["user"]["preferences"].get("family_role", "parent")
     user_name = session["context"]["user"]["preferences"].get("user_name")
     family_members = session["context"]["user"]["preferences"].get("family_members", {})
+    # 12 Nov 2026: a number linked to a web family takes its people ONLY from that family's list (the family block). The
+    # bot's own onboarding names (spouse/children) may belong to an earlier family on this number - not used then.
+    if family_members:
+        try:
+            from espaluz_memory import number_link_state
+            if number_link_state("telegram", _session_uid(session))[0]:
+                family_members = {}
+        except Exception:  # noqa: BLE001 - fail closed: no local names
+            family_members = {}
     
     # Country-specific contexts
     COUNTRY_CONTEXTS = {
@@ -1788,7 +1797,7 @@ def format_mcp_request(session, new_message, translated_input=None, use_extended
                         if _kids:
                             raise LookupError("kids mode: no adult RAG")
                         from espaluz_rag import retrieve_context, get_session_id_for_user
-                        _session_id = get_session_id_for_user('telegram', _mem.user_id)
+                        _session_id = _mem.get_session_uuid(_mem.user_id)  # 12 Nov 2026: family-scoped
                         _rag_ctx = retrieve_context(_session_id, new_message, top_k=3, exclude=_recent)
                         if _rag_ctx:
                             memory_block += f"\n\n{_rag_ctx}"
@@ -4554,7 +4563,7 @@ def process_message_with_tracking(user_input, chat_id, user_id, message_obj):
                 # RAG: embed and store both turns for semantic retrieval
                 try:
                     from espaluz_rag import save_turn, get_session_id_for_user
-                    _rag_sid = get_session_id_for_user('telegram', memory.user_id)
+                    _rag_sid = memory.get_session_uuid(memory.user_id)  # 12 Nov 2026: family-scoped
                     # 31 Oct 2026: this printed "saved" for 9 days while every embedding failed - log what happened.
                     _saved = int(save_turn(_rag_sid, 'user', user_input)) + int(save_turn(_rag_sid, 'assistant', full_reply))
                     print(f"{'✅' if _saved == 2 else '⚠️'} RAG embeddings saved {_saved}/2 for session {_rag_sid[:8]}...")

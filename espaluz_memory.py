@@ -173,6 +173,72 @@ class VocabularyItem:
     incorrect_count: int = 0
 
 
+# ===== 12 Nov 2026: per-number memory is scoped to the FAMILY the number is linked to =====
+# Elena re-linked her test number to another web family; the bot received the new family list but still answered with
+# the old family's names from this number's own memory (key facts, last turns, RAG). A number that moves to another family
+# must never show it the previous family's chats - a privacy rule, not only a test nuisance.
+# Rule: the FIRST family a number is ever linked to keeps the number's existing memory (no real family loses anything);
+# any OTHER family gets its own memory scope (new LangChain/RAG session id, no old key facts). Old rows are never deleted -
+# re-linking back to the first family brings them back. Bindings live in family_bindings.json next to this file.
+_LINK_CACHE = {}
+_BINDINGS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "family_bindings.json")
+
+
+def _load_bindings() -> dict:
+    try:
+        import json as _json
+        with open(_BINDINGS_PATH, encoding="utf-8") as f:
+            return _json.load(f)
+    except Exception:  # noqa: BLE001 - no file yet = no bindings
+        return {}
+
+
+def _save_bindings(b: dict) -> None:
+    import json as _json
+    tmp = _BINDINGS_PATH + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        _json.dump(b, f, indent=0)
+    os.replace(tmp, _BINDINGS_PATH)
+
+
+def link_state(platform: str, platform_user_id, family_call) -> tuple:
+    """(linked, scope) for this number. scope '' = the number's own memory; otherwise the new family's key.
+    Fail-closed: if the family service cannot be reached, the LAST known state of this number is used, never 'unscoped'."""
+    import time as _time
+    key = f"{platform}:{platform_user_id}"
+    hit = _LINK_CACHE.get(key)
+    if hit and _time.time() - hit[0] < 60:
+        return hit[1], hit[2]
+    b = _load_bindings()
+    got = family_call("facts_get")
+    if not got:  # service error ({}), not "unlinked" ({"linked": false})
+        last = b.get(key + "#last")
+        linked, scope = (bool(last), str(last or "")) if last is not None else (False, "")
+        if last == "linked":
+            scope = ""
+        return linked, scope
+    linked = bool(got.get("linked"))
+    fam = str(got.get("family") or "")
+    scope = ""
+    if linked and fam:
+        first = b.get(key)
+        if first is None:
+            b[key] = first = fam
+            print(f"🔐 memory bound: {platform} number -> its first family", flush=True)
+        scope = "" if first == fam else fam
+    last = (scope or "linked") if linked else None
+    if b.get(key + "#last") != last:
+        b[key + "#last"] = last
+        try:
+            _save_bindings(b)
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"family binding save failed: {e}")
+    if scope:
+        print(f"🔐 memory scoped: {platform} number is on a different family than its first one - old memory not used", flush=True)
+    _LINK_CACHE[key] = (_time.time(), linked, scope)
+    return linked, scope
+
+
 class EspaLuzMemory:
     """
     Main memory class for EspaLuz bots.
@@ -629,7 +695,19 @@ class EspaLuzMemory:
         """Deterministic UUID shared by LangChain, RAG, and SQL history."""
         return str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{platform}_{user_id}"))
 
+    def link_state(self) -> tuple:
+        """(linked, scope) - see link_state() above."""
+        if not self.platform_user_id:
+            return False, ""
+        return link_state(self.platform, self.platform_user_id, self._family_call)
+
+    def memory_scope(self) -> str:
+        return self.link_state()[1]
+
     def get_session_uuid(self, user_id: int) -> str:
+        scope = self.memory_scope()
+        if scope:  # a family other than the number's first one: its own LangChain + RAG session
+            return str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{self.platform}_{user_id}_fam_{scope}"))
         return self.session_uuid_for(self.platform, user_id)
 
     def get_legacy_session_id(self, user_id: int) -> str:
@@ -715,7 +793,7 @@ class EspaLuzMemory:
     def get_recent_messages(self, user_id: int, limit: int = 10) -> List[Dict]:
         """Get recent messages from conversation history (UUID + legacy string rows)."""
         session_uuid = self.get_session_uuid(user_id)
-        legacy_id = self.get_legacy_session_id(user_id)
+        legacy_id = session_uuid if self.memory_scope() else self.get_legacy_session_id(user_id)
         
         with self._get_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -810,7 +888,7 @@ class EspaLuzMemory:
             return ""
         
         user = self._row_to_user(user_row)
-        memories = self.get_user_memories(user_id, limit=10)
+        memories = [] if self.memory_scope() else self.get_user_memories(user_id, limit=10)
         
         # Build context string
         context_parts = []
@@ -1103,3 +1181,12 @@ if __name__ == "__main__":
         print(f"❌ Test failed: {e}")
         import traceback
         traceback.print_exc()
+
+
+def number_link_state(platform: str, platform_user_id) -> tuple:
+    """(linked, scope) for a number without opening the memory database (12 Nov 2026)."""
+    import types
+    if not platform_user_id:
+        return False, ""
+    me = types.SimpleNamespace(platform=platform, platform_user_id=platform_user_id)
+    return link_state(platform, platform_user_id, lambda mode, **kw: EspaLuzMemory._family_call(me, mode, **kw))
