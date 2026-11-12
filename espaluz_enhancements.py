@@ -701,7 +701,7 @@ def get_memory_context(memory_instance) -> str:
                 # 12 Nov 2026 (Elena's test): "tú, Elena, como la mamá" - the chat account's name became a family role.
                 family_block += ("The name on this chat account is only an account name: never give the person writing a"
                                  " family role (mother, father, grandparent) and never add them to the family unless the"
-                                 " list above or 'You are talking with' says so. If they ask who is in the family, list only"
+                                 " list above or 'You are talking with' says so. The list says only adult or child: never name how members are related (partner, husband, wife, son, daughter) unless the list says so. If they ask who is in the family, list only"
                                  " the members above.\n")
                 family_block += (f"You are talking with {speaker}.\n" if speaker else
                                  "You do not yet know which family member is on this number: after helping, ask once, lightly, who you are talking with.\n")

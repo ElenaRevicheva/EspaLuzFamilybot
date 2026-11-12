@@ -852,6 +852,10 @@ class EspaLuzMemory:
         limit: int = 20
     ) -> List[Dict]:
         """Retrieve user memories, optionally filtered by type"""
+        # 12 Nov 2026: the scope rule lives HERE, so every caller (prompt helpers, note writers, cards) obeys it - a
+        # number on a family other than its first one never reads the earlier family's key facts.
+        if self.platform_user_id and self.memory_scope():
+            return []
         with self._get_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cur:
                 if memory_type:
