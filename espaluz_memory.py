@@ -376,22 +376,51 @@ class EspaLuzMemory:
         """What the family told EspaLuz on another channel; empty if not linked."""
         return [str(f) for f in self.family_notes().get("facts", []) if f]
 
-    def _recognize(self, notes: dict, text: str = "") -> str:
-        """Who is on this number: a saved answer, their own display name matching the family, or what they just said."""
-        speaker = notes.get("speaker") or ""
-        if speaker or not notes:
-            return speaker
+    def _said_name(self, notes: dict, text: str, bare_ok: bool = False) -> str:
+        """The family member who names themself in this message: "Soy Ana", "I'm Alisa", "Я Алиса", "Me llamo Ana";
+        with bare_ok (EspaLuz has just asked who is writing) a reply of only the name counts too. "" when nobody
+        or more than one member could be meant - a guess would put one person's notes in another's mouth."""
         import re
+        members = [str(m.get("name") or "").strip() for m in notes.get("members", []) if m.get("name")]
+        t = _fold(text).strip()
+        if not members or not t:
+            return ""
+        t = re.sub(r"^(?:hola|hello|hi|hey|buenas|buenos dias|buenas tardes|buenas noches|privet|zdravstvuite)\b[\s,!.]*", "", t)
+        intro = re.search(r"(?:^|[\s,.!])(?:soy|i'?m|i am|it'?s|this is|habla|me llamo|my name is|aqui (?:esta|habla)|ya|eto|menya zovut)"
+                          r"\s+(?:la |el )?([a-z][a-z'-]+)", t)
+        cands = [intro.group(1)] if intro else []
+        words = re.sub(r"[^\w\s'-]", " ", t).split()
+        if not intro and bare_ok and 1 <= len(words) <= 2:
+            cands.append(words[0])
+        for c in cands:
+            hits = {n for n in members if _fold(n) == c or (_fold(n).split() or [""])[0] == c}
+            if len(hits) == 1:
+                return hits.pop()
+        return ""
+
+    def _recognize(self, notes: dict, text: str = "") -> str:
+        """Who is writing on this number NOW. Each family member may link their own phone, or several may share one:
+        a member who names themself is saved as the person on this number until someone else does (newest wins, see
+        kids-memory who_set). With nobody saved yet: a reply of just their name, or their account name matching an adult."""
+        if not notes:
+            return ""
+        speaker = notes.get("speaker") or ""
+        said = self._said_name(notes, text, bare_ok=not speaker)
+        if said and said != speaker:
+            self._family_call("who_set", speaker=said)
+            notes["speaker"] = said
+            print(f"👪 {'speaker switched' if speaker else 'number recognized as a family member'} on {self.platform}", flush=True)
+            return said
+        if speaker:
+            return speaker
         adults = [m["name"] for m in notes.get("members", []) if m.get("role") != "child" and m.get("name")]
-        said = re.search(r"\b(?:soy|i'?m|i am|habla|this is|me llamo|my name is)\s+(?:la |el )?([^\W\d_]{2,})", text or "", re.I)
         name = None
-        if said:
-            name = next((a for a in adults if a.lower() == said.group(1).lower()), None)
-        if not name and self._user and self._user.display_name:
-            first = str(self._user.display_name).split()[0].lower()
-            name = next((a for a in adults if a.lower() == first), None)
+        if self._user and self._user.display_name:
+            first = _fold(str(self._user.display_name).split()[0])
+            name = next((a for a in adults if (_fold(a).split() or [""])[0] == first), None)
         if name:
             self._family_call("who_set", speaker=name)
+            notes["speaker"] = name
             print(f"👪 number recognized as a family member on {self.platform}", flush=True)
             return name
         return ""

@@ -669,7 +669,7 @@ def get_family_context(memory_instance) -> str:
 # 8. ENHANCED MEMORY - Cross-session recall
 # ============================================================================
 
-def get_memory_context(memory_instance) -> str:
+def get_memory_context(memory_instance, current_message: str = "") -> str:
     """Get key memories about the user for context."""
     try:
         # get_user_memories(user_id, memory_type=None, limit=...) REQUIRES user_id.
@@ -689,7 +689,7 @@ def get_memory_context(memory_instance) -> str:
                 print(f"🔗 family memory: {len(shared)} fact(s) from other channels", flush=True)
             memories = [{"memory_type": "family", "content": f} for f in shared[:8]] + memories
             if notes.get("members"):
-                speaker = memory_instance._recognize(notes)
+                speaker = memory_instance._recognize(notes, current_message)
                 family_block = "\nTHIS FAMILY: " + "; ".join(
                     f"{m['name']} ({m.get('role')}" + (f", {m['age']}" if m.get("age") else "") + ")" for m in notes["members"]) + ". Use these exact name spellings.\n"
                 # 8 Nov 2026 (Elena's test): WhatsApp turned "Who is in my family?" into an exercise and Telegram added
@@ -703,8 +703,20 @@ def get_memory_context(memory_instance) -> str:
                                  " family role (mother, father, grandparent) and never add them to the family unless the"
                                  " list above or 'You are talking with' says so. The list says only adult or child: never name how members are related (partner, husband, wife, son, daughter) unless the list says so. If they ask who is in the family, list only"
                                  " the members above.\n")
-                family_block += (f"You are talking with {speaker}.\n" if speaker else
-                                 "You do not yet know which family member is on this number: after helping, ask once, lightly, who you are talking with.\n")
+                # 13 Nov 2026 (Elena: "truly know who is who"): the person is recognized in THIS message (espaluz_memory
+                # _recognize), so "Soy Ana" on a shared phone is answered as Ana at once, and a child gets a child's answer.
+                who = next((m for m in notes["members"] if m.get("name") == speaker), None) if speaker else None
+                if speaker:
+                    family_block += (f"You are talking with {speaker}" + (f" ({who.get('role')}" + (f", {who['age']}" if who.get("age") else "")
+                                     + ")" if who else "") + ".\n")
+                    if who and who.get("role") == "child":
+                        family_block += ("This is a child: short, simple, warm sentences, one idea at a time, a little play, and"
+                                         " the Spanish words a child that age can say back.\n")
+                    family_block += ("Family members may share this phone: if someone says who they are, from then on answer"
+                                     " them as that person.\n")
+                else:
+                    family_block += ("You do not yet know which family member is on this number: after helping, ask once, lightly,"
+                                     " who you are talking with - their name is enough.\n")
                 if notes.get("lessons"):
                     family_block += "Recent classroom lessons with the child: " + " | ".join(notes["lessons"]) + ". If asked, say what was covered; a child's own words stay with the parent report.\n"
             # 8 Nov 2026: "About your new life" - the family's own answers (twin of profileLine in espaluz-chat)
@@ -790,7 +802,7 @@ def build_enhanced_context(
         parts.append(family)
     
     # 8. Memory Context
-    memories = get_memory_context(memory_instance)
+    memories = get_memory_context(memory_instance, current_message)
     if memories:
         parts.append(memories)
     
