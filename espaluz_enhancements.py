@@ -1132,6 +1132,75 @@ def _tidy(text, user_text=""):
     return _re_polish.sub(r"^\s+", "", "\n".join(out))
 
 
+# 13 Nov 2026 (Elena: "it is a tutor, not chatting in Spanish - we fixed it several times"). Measured on Kira's Play test:
+# Claude is off on the free tier, the reply came from gemini-flash-lite, all Spanish, Cuban slang to a beginner; the rewrite
+# below (same small model) failed its check and the Spanish-only original went out. Every earlier fix was one more INSTRUCTION
+# to that model. This one does not ask: it builds the pairs. The model only TRANSLATES numbered lines (a task small models do
+# reliably), the code interleaves Spanish -> English, and checks the count. No fact is rewritten, so nothing can be invented.
+import json as _json_pair
+
+_SENT = _re_polish.compile(r"(?<=[.!?…])\s+|(?<=[\U0001F300-\U0001FAFF☀-➿️])\s+(?=[¡¿A-ZÁÉÍÓÚÑ])")
+
+
+def _lang_of(line):
+    words = _re_polish.findall(r"[a-záéíóúñü]+", (line or "").lower())
+    if not words:
+        return ""
+    if _re_polish.search(r"[ñ¿¡áéíóú]", line.lower()):
+        es_hint = 1
+    else:
+        es_hint = 0
+    en = sum(w in _EN_WORDS for w in words)
+    es = sum(w in _ES_WORDS for w in words) + es_hint
+    return "es" if es > en else ("en" if en > es else "")
+
+
+def pair_bilingual(main):
+    """Spanish-only (or English-only) text -> short Spanish/English pairs. Returns None when it cannot do it safely."""
+    units = []
+    for line in (main or "").split("\n"):
+        if not line.strip():
+            units.append(("", line))
+            continue
+        for s in _SENT.split(line.strip()):
+            if units and units[-1][1].strip() and not _re_polish.search(r"[A-Za-zÁÉÍÓÚÑáéíóúñü]", s):
+                units[-1] = (units[-1][0], units[-1][1] + " " + s)  # an emoji alone stays with its sentence
+            else:
+                units.append((_lang_of(s), s))
+    have = {lang for lang, _ in units if lang}
+    target = "en" if "es" in have else ("es" if "en" in have else "")
+    if not target:
+        return None
+    source = "es" if target == "en" else "en"
+    # Every line with words that is not already in the target language (a short "Hola amiga." has no telling words).
+    units = [(source if (s.strip() and lang != target and _re_polish.search(r"[A-Za-zÁÉÍÓÚÑáéíóúñü]{2,}", s)) else lang, s)
+             for lang, s in units]
+    todo = [s for lang, s in units if lang == source]
+    if not todo:
+        return None
+    from llm_chain import complete
+    name = "English" if target == "en" else "Spanish"
+    out, _ = complete(f"Translate each item of the JSON array into natural, simple {name}. Keep emojis and names. "
+                      f"Return ONLY a JSON array of strings with exactly {len(todo)} items, same order. No notes.",
+                      _json_pair.dumps(todo, ensure_ascii=False), max_tokens=1500)
+    m = _re_polish.search(r"\[.*\]", out or "", _re_polish.S)
+    tr = _json_pair.loads(m.group(0)) if m else None
+    if not isinstance(tr, list) or len(tr) != len(todo) or not all(isinstance(t, str) and t.strip() for t in tr):
+        print(f"🌐 pair_bilingual: translation unusable ({'count ' + str(len(tr)) if isinstance(tr, list) else 'no JSON'} vs {len(todo)})", flush=True)
+        return None
+    it, lines = iter(tr), []
+    for lang, s in units:
+        if not s.strip():
+            lines.append("")
+        elif lang == source:
+            t = _EMOJI.sub("", next(it)).strip()
+            # Spanish always first; the English line in italics (Telegram/WhatsApp both render _x_).
+            lines += [s, f"_{t}_"] if source == "es" else [t, f"_{s}_"]
+        else:
+            lines.append(s)
+    return _re_polish.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
+
+
 def polish_reply(full_reply, user_text=""):
     """Keeps the video script block as it is. Never blocks or loses a reply."""
     try:
@@ -1140,6 +1209,13 @@ def polish_reply(full_reply, user_text=""):
         both, alive = has_both_languages(main), bool(_EMOJI.search(main))
         if both and alive:
             return full_reply
+        found = _SCRIPT.search(full_reply or "")
+        if not both:
+            paired = pair_bilingual(main)
+            ok = bool(paired) and has_both_languages(paired)
+            print(f"🌐 reply polish both=False paired_ok={ok} emoji={alive}", flush=True)
+            if ok:
+                return paired + ("\n\n" + found.group(0) if found else "")
         from llm_chain import complete
         new, _ = complete("You rewrite a chat message from EspaLuz, a warm friend helping a family live in Spanish. Keep every fact, name and "
                           "phrase; add nothing new. A line that already has both languages stays as it is, once. "
