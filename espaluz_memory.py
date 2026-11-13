@@ -1194,3 +1194,31 @@ def number_link_state(platform: str, platform_user_id) -> tuple:
         return False, ""
     me = types.SimpleNamespace(platform=platform, platform_user_id=platform_user_id)
     return link_state(platform, platform_user_id, lambda mode, **kw: EspaLuzMemory._family_call(me, mode, **kw))
+
+# 12 Nov 2026 (Elena: "one family pays once, everything unlocks"): the bots' own payment record knows PayPal and
+# PagueloFacil only. A family that pays in the Google Play app (or on the website) is recorded in the website's paid
+# status, which kids-memory answers as `family_paying`. The bots' entry checks ask this when their own record says
+# "not paid" or "trial". 60 s cache; any error = False (the bots' own record still decides).
+_PAY_CACHE = {}
+
+
+def family_paying(platform: str, platform_user_id) -> bool:
+    import time as _time, types
+    if not platform_user_id:
+        return False
+    key = f"{platform}:{platform_user_id}"
+    hit = _PAY_CACHE.get(key)
+    if hit and _time.time() - hit[0] < 60:
+        return hit[1]
+    try:
+        me = types.SimpleNamespace(platform=platform, platform_user_id=platform_user_id)
+        got = EspaLuzMemory._family_call(me, "facts_get")
+    except Exception:  # noqa: BLE001
+        got = {}
+    paying = bool(got.get("family_paying"))
+    if got:
+        _PAY_CACHE[key] = (_time.time(), paying)
+    if paying:
+        print(f"💳 {platform} number: family pays on another channel (web/Play) - full access", flush=True)
+    return paying
+

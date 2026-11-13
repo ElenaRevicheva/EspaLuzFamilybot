@@ -942,6 +942,44 @@ _PROFILE_ASK = [("country_from", "which country their story began in"), ("native
                 ("miss_most", "what they miss most from home")]
 
 
+# 12 Nov 2026 (Elena: "no simulated questions"): four answers were only a sentence the model could ignore. Each now carries
+# an explicit rule. TWIN of profileRules() in espaluz-chat (web, ascent 1c44fac). The reply form stays Spanish + English
+# pairs; the level changes HOW the Spanish is pitched, never drops English.
+_LEVEL_RULES = {
+    "I'm just starting": "SPANISH LEVEL - just starting: very short, simple Spanish sentences (present tense, everyday words); at most 2 new words or phrases per reply, each shown once with its meaning; no idioms unless explained.",
+    "I get by": "SPANISH LEVEL - gets by: natural everyday Spanish in short sentences; 2-3 useful new phrases per reply; you may use past and future tenses; explain a local expression when you use one.",
+    "I'm comfortable": "SPANISH LEVEL - comfortable: speak like a local friend - natural speed, local expressions from the country facts, richer vocabulary; keep the English line short and only for the less obvious parts.",
+}
+_FOCUS_RULES = {
+    "The children's school": "the children's school (talking with teachers, school notes, homework, school days and holidays from the country facts)",
+    "Doctors and health": "doctors and health (booking, describing symptoms, the pharmacy; public and low-cost way first)",
+    "Work": "work (colleagues, messages, meetings, local work rhythm and time customs)",
+    "Papers and offices": "papers and offices (what to bring, phrases for the window, phone scripts; what newcomers find hard here)",
+    "Friends and neighbours": "friends and neighbours (greetings and courtesy, invitations, small talk from the country facts)",
+    "Feeling at home": "feeling at home (the rhythm of the year, holidays, food and folk culture from the country facts)",
+    "Speaking with confidence": "speaking with confidence (local expressions, short phrases to say out loud, gentle corrections)",
+}
+
+
+def profile_rules(p):
+    out = []
+    lang = str(p.get("native_language") or "").strip()
+    if lang and lang.lower() not in ("english", "spanish", "español", "espanol"):
+        out.append(f"HEART LANGUAGE - {lang}: when a Spanish word or grammar point is hard, add ONE short gloss in {lang} for that word only "
+                   f"(e.g. \"madrugar - {lang}: <the word>\"), then go on in Spanish + English. If they write in {lang}, understand it and answer as usual.")
+    if p.get("country_from"):
+        cf = p.get("country_from")
+        out.append(f"BRIDGES - their story began in {cf}: when it fits, compare ONE custom here (from the country facts) with home. "
+                   f"Say something about {cf} only if you are sure; otherwise ASK them how it is done there - that is the bridge.")
+    if p.get("spanish_feel") in _LEVEL_RULES:
+        out.append(_LEVEL_RULES[p.get("spanish_feel")])
+    focus = [_FOCUS_RULES[f] for f in (p.get("focus") if isinstance(p.get("focus"), list) else [p.get("focus")]) if f in _FOCUS_RULES]
+    if focus:
+        out.append("START FROM WHAT MATTERS NOW: " + "; ".join(focus) + ". When they start without a topic or ask what to practise, open with ONE "
+                   "useful phrase or tip for the first of these, and prefer country facts on these topics when you choose one to weave in.")
+    return ("\n" + "\n".join(out)) if out else ""
+
+
 def profile_line(profile):
     p = profile or {}
 
@@ -968,7 +1006,7 @@ def profile_line(profile):
     if known:
         out += ("\nTHIS FAMILY'S NEW LIFE (their own answers): " + "; ".join(known) + ". Let it shape what you bring up: build bridges between "
                 "where they come from and life here, start from what matters most to them now, and when Spanish gets hard you may explain a word "
-                "in their native language.")
+                "in their native language.") + profile_rules(p)
     if missing:
         out += ("\nNot known yet: " + "; ".join(missing[:4]) + ". Only when it truly fits - never as a form, at most ONE such question in a "
                 "conversation - you may ask one of these lightly, like a friend getting to know them.\n")

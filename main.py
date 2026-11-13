@@ -849,7 +849,13 @@ def is_subscribed(user_id):
     user_id = str(user_id)
 
     if PAYPAL_SYSTEM_AVAILABLE and paypal_system:
-        return paypal_system.is_user_allowed(user_id)["allowed"]
+        if paypal_system.is_user_allowed(user_id)["allowed"]:
+            return True
+        try:  # 12 Nov 2026: paying on the web or in the Google Play app counts here too
+            from espaluz_memory import family_paying
+            return family_paying("telegram", user_id)
+        except Exception:  # noqa: BLE001
+            return False
 
     # Fallback when PayPal system unavailable
     try:
@@ -899,6 +905,14 @@ def enforce_learning_access(message, user_id: str) -> bool:
         return True
 
     result = paypal_system.is_user_allowed(user_id)
+    # 12 Nov 2026: a family paying on the web or in the Google Play app is paying here too (one family pays once).
+    if not result.get("allowed") or str(result.get("reason", "")) in ("trial", "new_trial", "existing_user_grace"):
+        try:
+            from espaluz_memory import family_paying
+            if family_paying("telegram", user_id):
+                result = {"allowed": True, "reason": "family_paying", "message": ""}
+        except Exception as _fp_e:  # noqa: BLE001 - the bot's own record still decides
+            print(f"⚠️ family paying check non-fatal: {_fp_e}")
     if not result["allowed"]:
         _reply_markdown_or_plain(message, result["message"])
         return False
