@@ -938,6 +938,7 @@ def belonging_country(country):
 # still empty (profile_fill), and all three channels read the same note. TWIN of profileLine() in espaluz-chat.
 _PROFILE_ASK = [("country_from", "which country their story began in"), ("native_language", "which language their heart speaks"),
                 ("moved_when", "how long they have been here"), ("household", "who is on this adventure with them"),
+                ("work", "what they do for work"),  # 13 Nov 2026
                 ("spanish_feel", "how Spanish feels for them today"), ("focus", "what would make the biggest difference this month"),
                 ("miss_most", "what they miss most from home")]
 
@@ -977,6 +978,13 @@ def profile_rules(p):
     if focus:
         out.append("START FROM WHAT MATTERS NOW: " + "; ".join(focus) + ". When they start without a topic or ask what to practise, open with ONE "
                    "useful phrase or tip for the first of these, and prefer country facts on these topics when you choose one to weave in.")
+    # 13 Nov 2026 (Elena: most families here work, many online): their own field, lightly - never glued to every reply.
+    # TWIN of the WORK rule in espaluz-chat profileRules().
+    if p.get("work") in ("I work online, remotely", "A local job here", "My own business", "Studying") or p.get("profession"):
+        who = ", ".join(str(x) for x in (p.get("work"), p.get("profession")) if x)
+        out.append(f"WORK - {who}: now and then (not in every reply), when it fits what they are talking about, bring ONE word or phrase from "
+                   "their own work or field in Spanish, or work small talk here (e.g. \"¿A qué te dedicas?\"). Never repeat a work phrase you already "
+                   "gave them, never steer a conversation to work, and say nothing about visas, taxes or permits for working here unless it is in the country facts.")
     return ("\n" + "\n".join(out)) if out else ""
 
 
@@ -1000,7 +1008,8 @@ def profile_line(profile):
         now and f"they live in {now}", has("country_from") and f"their story began in {p.get('country_from')}",
         has("native_language") and f"their native language is {p.get('native_language')}", has("moved_when") and f"they moved: {p.get('moved_when')}",
         has("household") and f"household: {p.get('household')}", has("spanish_feel") and f"Spanish today: {p.get('spanish_feel')}",
-        has("focus") and "what matters most now: " + ", ".join(focus), has("miss_most") and f"they miss most from home: {p.get('miss_most')}"] if x]
+        has("focus") and "what matters most now: " + ", ".join(focus), has("miss_most") and f"they miss most from home: {p.get('miss_most')}",
+        (has("work") or has("profession")) and "work: " + ", ".join(str(x) for x in (p.get("work"), p.get("profession")) if x)] if x]
     missing = [q for k, q in _PROFILE_ASK if not has(k)]
     out = ""
     if known:
