@@ -1161,6 +1161,10 @@ def _lang_of(line):
         es_hint = 0
     en = sum(w in _EN_WORDS for w in words)
     es = sum(w in _ES_WORDS for w in words) + es_hint
+    # 13 Nov 2026 (Elena's Telegram screenshot): a phrase line that is ALREADY Spanish + English ("dar un paseo (take a walk) -
+    # to go for a walk") was translated again and shown twice. Such a line is "both" and is never touched.
+    if en >= 2 and es >= 2:
+        return "both"
     return "es" if es > en else ("en" if en > es else "")
 
 
@@ -1182,7 +1186,9 @@ def pair_bilingual(main):
         return None
     source = "es" if target == "en" else "en"
     # Every line with words that is not already in the target language (a short "Hola amiga." has no telling words).
-    units = [(source if (s.strip() and lang != target and _re_polish.search(r"[A-Za-zÁÉÍÓÚÑáéíóúñü]{2,}", s)) else lang, s)
+    # Never a line that already has both languages, nor one in another script (a Russian gloss stays as it is).
+    units = [(source if (s.strip() and lang not in (target, "both") and _re_polish.search(r"[A-Za-zÁÉÍÓÚÑáéíóúñü]{2,}", s)
+                         and not _re_polish.search(r"[Ѐ-ӿ֐-ۿऀ-ॿ一-鿿]", s)) else lang, s)
              for lang, s in units]
     todo = [s for lang, s in units if lang == source]
     if not todo:
@@ -1203,8 +1209,13 @@ def pair_bilingual(main):
             lines.append("")
         elif lang == source:
             t = _EMOJI.sub("", next(it)).strip()
-            # Spanish always first; the English line in italics (Telegram/WhatsApp both render _x_).
-            lines += [s, f"_{t}_"] if source == "es" else [t, f"_{s}_"]
+            # 13 Nov 2026: no _italics_ marks - Telegram here sends plain text and showed the underscores raw.
+            # A "translation" that is nearly the original (names, numbers, a mixed line) is dropped, never shown twice.
+            mine, theirs = _words(s), _words(t)
+            if mine and len(mine & theirs) / len(mine) >= 0.6:
+                lines.append(s)
+                continue
+            lines += [s, t] if source == "es" else [t, s]
         else:
             lines.append(s)
     return _re_polish.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
