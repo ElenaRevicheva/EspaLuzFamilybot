@@ -367,9 +367,11 @@ class EspaLuzMemory:
             logger.warning(f"family memory non-fatal: {str(e)[:120]}")
             return {}
 
-    def family_notes(self) -> dict:
-        """facts, members, speaker and recent lessons of a linked family; {} if not linked."""
-        got = self._family_call("facts_get")
+    def family_notes(self, with_callback: bool = False) -> dict:
+        """facts, members, speaker and recent lessons of a linked family; {} if not linked.
+        with_callback (15 Nov 2026): ask kids-memory for the one-time "how did it go?" follow-up of a dated family moment -
+        ONLY from the reply prompt; the link and payment checks call facts_get too and must never use the moment up."""
+        got = self._family_call("facts_get", with_callback=True) if with_callback else self._family_call("facts_get")
         return got if got.get("linked") else {}
 
     def shared_family_facts(self) -> list:

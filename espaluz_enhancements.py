@@ -682,7 +682,7 @@ def get_memory_context(memory_instance, current_message: str = "") -> str:
         # 6 Nov 2026: a linked family's notes from the web and the other bot come here too (espaluz_memory._family_call).
         family_block = ""
         try:
-            notes = memory_instance.family_notes()
+            notes = memory_instance.family_notes(with_callback=True)
             mine = {str(m.get("content", "")).lower().rstrip(".") for m in memories}
             shared = [str(f) for f in notes.get("facts", []) if str(f).lower().rstrip(".") not in mine]
             if shared:
@@ -722,6 +722,10 @@ def get_memory_context(memory_instance, current_message: str = "") -> str:
             # 8 Nov 2026: "About your new life" - the family's own answers (twin of profileLine in espaluz-chat)
             if notes.get("linked"):
                 family_block += profile_line(notes.get("profile") or {})
+                # 15 Nov 2026: "How did Alisa's first day back go?" - kids-memory hands it out once, at the start of a
+                # conversation, the same rule as the web (ascent supabase/functions/_shared/memory_callback.ts).
+                if notes.get("callback"):
+                    family_block += str(notes["callback"])
         except Exception:  # noqa: BLE001 - never lose a reply over this
             pass
         if not memories and not family_block:
