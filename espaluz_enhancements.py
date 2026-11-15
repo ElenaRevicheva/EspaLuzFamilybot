@@ -952,7 +952,10 @@ _PROFILE_ASK = [("country_from", "which country their story began in"), ("native
                 ("moved_when", "how long they have been here"), ("household", "who is on this adventure with them"),
                 ("work", "what they do for work"),  # 13 Nov 2026
                 ("spanish_feel", "how Spanish feels for them today"), ("focus", "what would make the biggest difference this month"),
-                ("miss_most", "what they miss most from home")]
+                ("miss_most", "what they miss most from home"),
+                # 15 Nov 2026 - TWIN of PROFILE_ASK in espaluz-chat (cto-aipa docs/espaluz/QUESTIONNAIRE_GAPS_2026-11-15.md)
+                ("why_here", "what brought them to this country"), ("stay_plan", "how long they plan to stay"),
+                ("spanish_at_home", "whether anyone in the family already speaks Spanish"), ("arrived", "when they arrived (month and year)")]
 
 
 # 12 Nov 2026 (Elena: "no simulated questions"): four answers were only a sentence the model could ignore. Each now carries
@@ -997,6 +1000,37 @@ def profile_rules(p):
         out.append(f"WORK - {who}: now and then (not in every reply), when it fits what they are talking about, bring ONE word or phrase from "
                    "their own work or field in Spanish, or work small talk here (e.g. \"¿A qué te dedicas?\"). Never repeat a work phrase you already "
                    "gave them, never steer a conversation to work, and say nothing about visas, taxes or permits for working here unless it is in the country facts.")
+    # 15 Nov 2026: the five new answers - TWIN of profileRules() in espaluz-chat. Typed answers are used word for word.
+    import re  # noqa: PLC0415 - this module has no top-level plain `re`
+    def _lst(v):
+        return [str(x) for x in v if x] if isinstance(v, list) else ([str(v)] if v else [])
+    why = _lst(p.get("why_here"))
+    if why:
+        out.append(f"WHY THEY CAME - {', '.join(why)}: this is the reason that keeps them going when Spanish is hard. Now and then, when "
+                   "it fits, connect what they practise to it (e.g. a calmer life -> how families here slow down; the children -> school and play). "
+                   "Never lecture about it and never assume anything beyond their own words.")
+    stay = str(p.get("stay_plan") or "")
+    if re.search(r"few months|year or two", stay, re.I):
+        out.append(f"SHORT STAY ({stay}): favour what helps right away and travels well - greetings, errands, getting around, making "
+                   "friends - over long-term settling (school enrolment, long contracts) unless they ask.")
+    elif re.search(r"home now", stay, re.I):
+        out.append("STAYING FOR GOOD: they are building a home here - lean into belonging: traditions, neighbours, the rhythm of the year, "
+                   "the children's school life, and their \"firsts\" (first holidays and seasons here).")
+    elif stay:
+        out.append(f"STAY PLAN - in their words: \"{stay}\". Let it shape what is useful now.")
+    home = _lst(p.get("spanish_at_home"))
+    if any(re.search(r"partner|from here|pareja", h, re.I) for h in home):
+        out.append("A SPANISH SPEAKER AT HOME: when a phrase or custom is uncertain, suggest they try it with their partner tonight - that "
+                   "partner is their best bridge. Never put them down for needing help.")
+    if any(re.search(r"children|school|niños", h, re.I) for h in home):
+        out.append("THE CHILDREN SPEAK SPANISH AT SCHOOL: now and then invite the parent to ask the child how to say something - children "
+                   "love teaching their parents, and it builds Spanish at home.")
+    if p.get("school"):
+        out.append(f"THE CHILDREN'S SCHOOL - {p.get('school')}: when school comes up, speak to that kind of school (a local public or private "
+                   "school follows the country's calendar from the country facts; a bilingual or international school may follow its own - ask, never guess).")
+    if p.get("arrived"):
+        out.append(f"ARRIVED: {p.get('arrived')}. A holiday, season or custom they have not lived here yet is their FIRST one - you may say so "
+                   "warmly (\"your first rainy season here!\") only when the date makes it true.")
     return ("\n" + "\n".join(out)) if out else ""
 
 
@@ -1021,7 +1055,12 @@ def profile_line(profile):
         has("native_language") and f"their native language is {p.get('native_language')}", has("moved_when") and f"they moved: {p.get('moved_when')}",
         has("household") and f"household: {p.get('household')}", has("spanish_feel") and f"Spanish today: {p.get('spanish_feel')}",
         has("focus") and "what matters most now: " + ", ".join(focus), has("miss_most") and f"they miss most from home: {p.get('miss_most')}",
-        (has("work") or has("profession")) and "work: " + ", ".join(str(x) for x in (p.get("work"), p.get("profession")) if x)] if x]
+        (has("work") or has("profession")) and "work: " + ", ".join(str(x) for x in (p.get("work"), p.get("profession")) if x),
+        # 15 Nov 2026 - TWIN of profileLine in espaluz-chat
+        has("why_here") and "what brought them here: " + ", ".join(str(x) for x in (p.get("why_here") if isinstance(p.get("why_here"), list) else [p.get("why_here")]) if x),
+        has("stay_plan") and f"plan to stay: {p.get('stay_plan')}", has("arrived") and f"arrived: {p.get('arrived')}",
+        has("spanish_at_home") and "Spanish at home: " + ", ".join(str(x) for x in (p.get("spanish_at_home") if isinstance(p.get("spanish_at_home"), list) else [p.get("spanish_at_home")]) if x),
+        has("school") and f"the children's school: {p.get('school')}"] if x]
     missing = [q for k, q in _PROFILE_ASK if not has(k)]
     out = ""
     if known:
