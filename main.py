@@ -597,60 +597,34 @@ SAAS_FUNCTIONS_URL = "https://euyidvolwqmzijkfrplh.supabase.co/functions/v1"
 
 
 def track_telegram_conversation(user_id, user_message, bot_reply, session_data):
-    """Track Telegram conversation in Supabase database (404 = this Telegram user never linked the web app)."""
+    """Send one answered turn to the web app - the family's ONE brain (404 = this Telegram user never linked the web app).
+
+    15 Nov 2026 (Elena: "the app is the brain - it should collect WhatsApp, Telegram, the app and the classroom, with
+    true logs"): this used to send the first 500 characters of the reply, an invented "30 minutes" and five junk
+    "words" (English words, typos, names). Now it sends EspaLuz's full reply with the bots' shared secret; the brain
+    (submit-progress) keeps only the day, the channel and the Spanish phrases she taught - never the message text,
+    so a member's private worry never lands on the family dashboard. Same call as EspaLuz WhatsApp.
+    """
     try:
-        learning_progress = session_data.get("context", {}).get("learning", {}).get("progress", {})
-        emotional_state = session_data.get("context", {}).get("emotional_state", {})
-        user_preferences = session_data.get("context", {}).get("user", {}).get("preferences", {})
-        
-        vocabulary_learned = extract_conversation_vocabulary(user_message, bot_reply)
-        message_count = session_data.get("context", {}).get("conversation", {}).get("message_count", 1)
-        estimated_duration = min(max(message_count * 0.5, 1), 30)
-        
-        session_payload = {
-            "platform_user_id": str(user_id),
-            "platform": "telegram",
-            "session_type": "conversation",
-            "source": "telegram_bot",
-            "content": {
-                "user_message": user_message[:500],
-                "bot_response": bot_reply[:500],
-                "family_role": user_preferences.get("family_role", "unknown"),
-                "emotional_state": emotional_state.get("current_emotion", "neutral"),
-                "message_count": message_count
-            },
-            "progress_data": {
-                "vocabulary_learned": vocabulary_learned,
-                "spanish_words_total": len(learning_progress.get("vocabulary", {}).get("spanish", {}).get("learned", [])),
-                "grammar_points_total": len(learning_progress.get("grammar", {}).get("spanish", {}).get("learned", [])),
-                "learning_level": user_preferences.get("learning_level", "beginner"),
-                "session_emotions": emotional_state.get("last_emotions", [])
-            },
-            "emotional_tone": emotional_state.get("current_emotion", "neutral"),
-            "duration_minutes": estimated_duration
-        }
-        
         response = requests.post(
             f"{SAAS_FUNCTIONS_URL}/submit-progress",
-            json=session_payload,
+            json={"platform": "telegram", "platform_user_id": str(user_id), "reply": (bot_reply or "")[:6000]},
             headers={
                 "Authorization": f"Bearer {os.environ.get('SUPABASE_ANON_KEY')}",
-                "Content-Type": "application/json"
+                "x-espaluz-bot-secret": os.environ.get("ESPALUZ_BOT_SECRET", ""),
+                "Content-Type": "application/json",
             },
-            timeout=10
+            timeout=10,
         )
-        
         if response.status_code == 200:
-            print(f"✅ Telegram conversation tracked for user {user_id}")
+            print(f"[brain] telegram turn saved phrases={response.json().get('phrases')}")
             return True
-        elif response.status_code == 404:
+        if response.status_code == 404:
             return False  # not linked to the web app - nothing to sync
-        else:
-            print(f"⚠️ Failed to track conversation: {response.status_code} - {response.text}")
-            return False
-            
+        print(f"⚠️ [brain] telegram turn not saved: {response.status_code} - {response.text[:200]}")
+        return False
     except Exception as e:
-        print(f"❌ Error tracking Telegram conversation: {e}")
+        print(f"❌ [brain] telegram turn error: {e}")
         return False
 
 def extract_conversation_vocabulary(user_message, bot_reply):
