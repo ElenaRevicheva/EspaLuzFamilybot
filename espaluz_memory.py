@@ -1246,10 +1246,12 @@ def family_paying(platform: str, platform_user_id) -> bool:
         got = EspaLuzMemory._family_call(me, "facts_get")
     except Exception:  # noqa: BLE001
         got = {}
-    paying = bool(got.get("family_paying"))
+    # 16 Nov 2026: the entry gate reads family_access = paid OR the web's free days (14 days from sign-up, or a Google
+    # Play tester's access_until) - one clock with the dashboard. family_paying (paid only) stays for paid extras.
+    paying = bool(got.get("family_access", got.get("family_paying")))
     if got:
         _PAY_CACHE[key] = (_time.time(), paying)
     if paying:
-        print(f"💳 {platform} number: family pays on another channel (web/Play) - full access", flush=True)
+        print(f"💳 {platform} number: family has access on the web/Play (paid, free days or tester) - full access", flush=True)
     return paying
 
