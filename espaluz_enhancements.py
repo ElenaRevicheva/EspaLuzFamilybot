@@ -20,6 +20,7 @@ Date: January 22, 2026
 """
 
 import os
+import re
 import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
@@ -959,7 +960,8 @@ _PROFILE_ASK = [("country_from", "which country their story began in"), ("native
                 ("miss_most", "what they miss most from home"),
                 # 15 Nov 2026 - TWIN of PROFILE_ASK in espaluz-chat (cto-aipa docs/espaluz/QUESTIONNAIRE_GAPS_2026-11-15.md)
                 ("why_here", "what brought them to this country"), ("stay_plan", "how long they plan to stay"),
-                ("spanish_at_home", "whether anyone in the family already speaks Spanish"), ("arrived", "when they arrived (month and year)")]
+                ("spanish_at_home", "whether anyone in the family already speaks Spanish"), ("arrived", "when they arrived (month and year)"),
+                ("learn", "whether they want to learn Spanish, English, or both")]  # 16 Nov 2026
 
 
 # 12 Nov 2026 (Elena: "no simulated questions"): four answers were only a sentence the model could ignore. Each now carries
@@ -981,6 +983,70 @@ _FOCUS_RULES = {
 }
 
 
+# 16 Nov 2026 (Michael, an English teacher, and Elena: "high quality, fluent English - professional and everyday").
+# The English-for-Spanish-speakers mode above was never switched on (0 of 28 families). The family's answer to "What do
+# you want to learn?" (learn) now switches it on everywhere. TWIN of englishRules() in espaluz-chat - change all three.
+WANTS_ENGLISH_SAID = re.compile(
+    r"\b(quiero|quisiera|me gustar[ií]a|necesito|deseo)\s+(aprender|mejorar|practicar|hablar)(\s+(mi|el))?\s+ingl[eé]s"
+    r"|\b(want|need|would like)\s+to\s+(learn|improve|practi[cs]e)\s+(my\s+)?english"
+    r"|хочу\s+(выучить|учить|подтянуть|улучшить)\s+английский", re.I)
+
+
+def _wants_english(p):
+    return bool(re.search(r"english|ingl[eé]s|англ", str(p.get("learn") or ""), re.I))
+
+
+def _english_only(p):
+    return _wants_english(p) and not re.search(r"spanish|espa[nñ]ol|испан|both|ambos|оба", str(p.get("learn") or ""), re.I)
+
+
+_ENGLISH_LEVEL = {
+    "I'm just starting": "short, clear English sentences in the present tense; at most 2 new phrases per reply, each with its meaning in Spanish and a simple way to say it.",
+    "I get by": "natural everyday English; 2-3 new phrases per reply; explain phrasal verbs and the difference between similar words when they come up.",
+    "I'm comfortable": "speak like a fluent colleague: natural speed, idioms, collocations and nuance; point out what sounds translated from Spanish and give the native way.",
+    "Fluent, I want to polish it": "polish: precise word choice, register (formal vs friendly-professional), rhythm and stress, idioms and the small words natives use; correct only what a native would notice.",
+}
+_ENGLISH_GOALS = [
+    (r"work|career|trabajo|работ", "WORK ENGLISH - emails (clear openings, polite requests \"Could you...\", \"I'd appreciate it if...\", natural closings - never stiff word-for-word Spanish formulas), meetings (agreeing, disagreeing politely, interrupting, summing up), job interviews (\"Tell me about yourself\", answers with a short example and a result), calls and video calls, small talk with international clients and colleagues"),
+    (r"conversation|conversaci|разговор|fluent|fluid", "FLUENT CONVERSATION - natural chunks instead of word-by-word translation, linking words (\"actually\", \"by the way\", \"on the other hand\"), follow-up questions that keep a conversation going, thinking in English instead of translating"),
+    (r"travel|viaj|путеш", "TRAVEL - airports, hotels, directions, problems and complaints said politely"),
+    (r"exam|ielts|toefl|cambridge|examen|экзам", "AN EXAM - practise the task types of the exam they name; never promise a score or a level"),
+    (r"child|niñ|hij|дет", "ENGLISH WITH THE CHILDREN - short, warm phrases a parent can use at home for homework, play and bedtime"),
+]
+
+
+def english_rules(p):
+    if not _wants_english(p):
+        return []
+    only = _english_only(p)
+    out = [
+        f"ENGLISH COACH - this person wants to learn ENGLISH{'' if only else ' (and Spanish)'}. This overrides any line above that "
+        f"says the user is an English speaker. Teach the English that fluent, educated people really use today - never textbook English, never "
+        f"translated Spanish. {'Every phrase to learn is ENGLISH, with its meaning in Spanish.' if only else 'Alternate: some phrases in English (meaning in Spanish), some in Spanish (meaning in English).'} "
+        f"The reply keeps both languages, as always.",
+        "ENGLISH CORRECTIONS - when they write or speak English, first give the correct natural sentence (\"Better: ...\"), then ONE short "
+        "reason in Spanish. At most 2 corrections per reply: the ones that matter most for being understood and sounding natural. Praise "
+        "what was right in their own words, never generically.",
+        "SPANISH-SPEAKER TRAPS - fix them when they appear, never as a lecture: \"I have 30 years\" -> \"I'm 30\"; a missing subject (\"Is "
+        "raining\" -> \"It's raining\"); \"people is\" -> \"people are\"; false friends (actually/actualmente, assist/asistir, realize/realizar, "
+        "embarrassed/embarazada, career/carrera, library/librería, sensible/sensato); make/do, say/tell; for/since with the present perfect; "
+        "adjectives never take a plural (\"red cars\"). Pronunciation, in simple Spanish-friendly spelling: \"th\" (tongue between the teeth), "
+        "b/v, ship/sheep, no \"e\" before s- (\"student\", not \"estudent\"), the -ed ending (worked = \"workt\", wanted = \"wan-ted\"), final consonants.",
+    ]
+    lvl = _ENGLISH_LEVEL.get(p.get("english_feel"))
+    out.append("ENGLISH LEVEL - " + (lvl or f"in their words: \"{p.get('english_feel') or 'not told yet'}\"; start clear and natural, then follow how they write."))
+    goals = [str(g) for g in (p.get("english_goal") if isinstance(p.get("english_goal"), list) else [p.get("english_goal")]) if g]
+    picked = [r for pat, r in _ENGLISH_GOALS if any(re.search(pat, g, re.I) for g in goals)]
+    own = [g for g in goals if not any(re.search(pat, g, re.I) for pat, _ in _ENGLISH_GOALS)]
+    if picked or own:
+        out.append("WHAT THEIR ENGLISH IS FOR: " + "; ".join(picked + [f"in their words: \"{g}\"" for g in own]) + ". When they start without a "
+                   "topic or ask what to practise, open with ONE useful phrase for the first of these.")
+    out.append("ENGLISH PRACTICE - now and then (not every reply) offer a 2-minute role-play in English for their goal (a job interview, a "
+               "meeting, a call, a conversation): you play the other person, they answer, you correct gently. Voice notes are welcome. Never claim a "
+               "certificate, a CEFR level or \"fluent in X weeks\".")
+    return out
+
+
 def profile_rules(p):
     out = []
     lang = str(p.get("native_language") or "").strip()
@@ -991,8 +1057,9 @@ def profile_rules(p):
         cf = p.get("country_from")
         out.append(f"BRIDGES - their story began in {cf}: when it fits, compare ONE custom here (from the country facts) with home. "
                    f"Say something about {cf} only if you are sure; otherwise ASK them how it is done there - that is the bridge.")
-    if p.get("spanish_feel") in _LEVEL_RULES:
+    if p.get("spanish_feel") in _LEVEL_RULES and not _english_only(p):
         out.append(_LEVEL_RULES[p.get("spanish_feel")])
+    out.extend(english_rules(p))  # 16 Nov 2026
     focus = [_FOCUS_RULES[f] for f in (p.get("focus") if isinstance(p.get("focus"), list) else [p.get("focus")]) if f in _FOCUS_RULES]
     if focus:
         out.append("START FROM WHAT MATTERS NOW: " + "; ".join(focus) + ". When they start without a topic or ask what to practise, open with ONE "
@@ -1064,7 +1131,10 @@ def profile_line(profile):
         has("why_here") and "what brought them here: " + ", ".join(str(x) for x in (p.get("why_here") if isinstance(p.get("why_here"), list) else [p.get("why_here")]) if x),
         has("stay_plan") and f"plan to stay: {p.get('stay_plan')}", has("arrived") and f"arrived: {p.get('arrived')}",
         has("spanish_at_home") and "Spanish at home: " + ", ".join(str(x) for x in (p.get("spanish_at_home") if isinstance(p.get("spanish_at_home"), list) else [p.get("spanish_at_home")]) if x),
-        has("school") and f"the children's school: {p.get('school')}"] if x]
+        has("school") and f"the children's school: {p.get('school')}",
+        # 16 Nov 2026 - the English coach switch (TWIN of profileLine in espaluz-chat)
+        has("learn") and f"they want to learn: {p.get('learn')}", has("english_feel") and f"English today: {p.get('english_feel')}",
+        has("english_goal") and "English for: " + ", ".join(str(x) for x in (p.get("english_goal") if isinstance(p.get("english_goal"), list) else [p.get("english_goal")]) if x)] if x]
     missing = [q for k, q in _PROFILE_ASK if not has(k)]
     out = ""
     if known:
@@ -1109,6 +1179,51 @@ def profile_fill(platform, platform_user_id, **fields):
             _PROFILE_CACHE.pop((platform, str(platform_user_id)), None)
     except Exception:  # noqa: BLE001
         pass
+
+
+_DIRECTION_CACHE = {}
+
+
+def learning_direction_for(platform, platform_user_id, fallback="spanish"):
+    """16 Nov 2026: which language this person learns. The family's own answer (profile 'learn', web questionnaire or said
+    in a chat) wins; otherwise the bots' own record (users.learning_direction). Cached 2 minutes."""
+    import time as _time_ld
+    key = (platform, str(platform_user_id))
+    hit = _DIRECTION_CACHE.get(key)
+    if hit and _time_ld.time() - hit[0] < 120:
+        return hit[1] or fallback
+    direction = ""
+    try:
+        from espaluz_memory import EspaLuzMemory
+        mem = EspaLuzMemory(platform=platform, platform_user_id=str(platform_user_id))
+        prof = (mem.family_notes() or {}).get("profile") or {}
+        if prof.get("learn"):
+            direction = "english" if _english_only(prof) else ("both" if _wants_english(prof) else "spanish")
+        elif (getattr(mem.user, "learning_direction", None) or "") == "english":
+            direction = "english"  # said in a chat by a family with no web account (english_switch)
+    except Exception:  # noqa: BLE001 - the profile is a bonus, never a failure
+        direction = ""
+    _DIRECTION_CACHE[key] = (_time_ld.time(), direction)
+    return direction or fallback
+
+
+def english_switch(platform, platform_user_id, text):
+    """16 Nov 2026: "quiero aprender inglés" / "I want to improve my English" said in a chat switches the English coach on:
+    the bots' own record (users.learning_direction = english, read by get_learning_direction_context) for every user, and
+    the shared family profile (learn = English, only if still empty) for a family linked to the web."""
+    if not text or not WANTS_ENGLISH_SAID.search(str(text)):
+        return False
+    try:
+        from espaluz_memory import EspaLuzMemory
+        mem = EspaLuzMemory(platform=platform, platform_user_id=str(platform_user_id))
+        if (getattr(mem.user, "learning_direction", None) or "spanish") != "english":
+            mem.update_user(learning_direction="english")
+    except Exception as e:  # noqa: BLE001
+        print(f"⚠️ english switch (bot record): {e}", flush=True)
+    profile_fill(platform, platform_user_id, learn="English")
+    _DIRECTION_CACHE.pop((platform, str(platform_user_id)), None)
+    print(f"🇬🇧 {platform}: English coach switched on (said in chat)", flush=True)
+    return True
 
 
 # 3 Nov 2026 (approved by Elena): a money-amount safeguard. Tested on the free chain: an instruction alone did not stop

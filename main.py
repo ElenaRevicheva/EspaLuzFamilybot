@@ -147,10 +147,13 @@ try:
     from espaluz_enhancements import family_names, names_hint, fix_heard_names
     from espaluz_enhancements import belonging_block  # 8 Nov 2026: LIFE IN <family's country>
     from espaluz_enhancements import profile_country, profile_fill  # 8 Nov 2026: "About your new life"
+    from espaluz_enhancements import english_switch, learning_direction_for  # 16 Nov 2026: the English coach switch
 except Exception:  # noqa: BLE001
     belonging_block = lambda country="panama": ""
     profile_country = lambda platform, uid: ""
     profile_fill = lambda platform, uid, **fields: None
+    english_switch = lambda platform, uid, text: False
+    learning_direction_for = lambda platform, uid, fallback="spanish": fallback
     family_names = lambda platform, user_id: []
     names_hint = lambda names: ""
     fix_heard_names = lambda text, names: text
@@ -1869,7 +1872,8 @@ Provide nuanced language assistance focused on natural conversation, idioms, and
                 
                 user_country = session["context"]["user"]["preferences"].get("country", "panama")
                 user_type_val = session["context"]["user"]["preferences"].get("user_type", "expat")
-                learning_dir = session["context"]["user"]["preferences"].get("learning_direction", "spanish")
+                learning_dir = learning_direction_for("telegram", _session_uid(session),
+                                                      session["context"]["user"]["preferences"].get("learning_direction", "spanish"))
                 
                 enhancement_ctx = build_enhanced_context(
                     memory_instance=memory,
@@ -6650,6 +6654,7 @@ def handle_text(message):
     print(f">>> HANDLE_TEXT ENTERED: {message.from_user.id} - {message.text[:30] if message.text else 'None'}", flush=True)
     user_id = str(message.from_user.id)
     text = message.text.strip()
+    english_switch("telegram", user_id, text)  # 16 Nov 2026: "quiero aprender inglés" -> English coach on
     if looks_like_web_code(text, typed=True):  # 8 Nov 2026: the web code typed alone links, not chats (see WEB_CODE_RE)
         link_web_code(message, text)
         return
