@@ -670,6 +670,48 @@ def get_family_context(memory_instance) -> str:
 # 8. ENHANCED MEMORY - Cross-session recall
 # ============================================================================
 
+
+# 17 Nov 2026 (Elena's test: "my SON has a fever" got "tu hija Alisa"; "our PANAMANIAN neighbours" got "aquí en Cuba").
+# TWIN of MESSAGE_FIRST in espaluz-chat. This answer follows the message; ONE warm check at the end; the remembered family
+# stays as it is (the fact writer does not save a passing mention - see _FACTS_SYSTEM).
+MESSAGE_FIRST_RULE = (
+    "\nTHE MESSAGE COMES FIRST: if THIS message names a family member, relation, age or country that differs from what you "
+    "remember (they write 'my son' and you remember only a daughter; they say 'our Panamanian neighbours' and the notes say "
+    "another country), answer THEIR question exactly as they wrote it - never swap in the remembered name, child or country. "
+    "At the very end add ONE short warm check in both languages, e.g. 'Is this someone new? I have <remembered name> as your "
+    "daughter.' or 'Are you in Panama now?'. Do not treat the new detail as settled and do not repeat it later unless they "
+    "confirm it; the family you remember stays the same.\n")
+
+
+def keep_own_language(original, spanish, english):
+    """17 Nov 2026 (Telegram translated "...What do I say in Spanish?" as a Spanish instruction on the English line).
+    The person's own words are the translation in their own language: English input -> the English line IS the input;
+    Spanish input -> the Spanish line IS the input. An 'English' line that reads as Spanish (or the reverse) is dropped."""
+    def lang(t):
+        w = re.findall(r"[a-záéíóúñü']+", str(t or "").lower())
+        if len(w) < 3:
+            return ""
+        en = sum(x in _EN_WORDS for x in w) / len(w)
+        es = sum(x in _ES_WORDS for x in w) / len(w)
+        return "en" if en >= 0.08 and en > es * 1.5 else "es" if es >= 0.08 and es > en * 1.5 else ""
+    own = lang(original)
+    if own == "en":
+        english = str(original).strip()
+    elif own == "es":
+        spanish = str(original).strip()
+    if english and lang(english) == "es":
+        english = None
+    if spanish and lang(spanish) == "en":
+        spanish = None
+    return spanish, english
+
+
+_EN_WORDS = set("the and you your with for this that what can how is are to of in it when say do need my has have i we our "
+                "since there please would should".split())
+_ES_WORDS = set("el la los las y que de en para con tu una un es por como cuando puedes hoy mi necesito tengo qué cómo digo "
+                "desde hay quiero nuestros".split())
+
+
 def get_memory_context(memory_instance, current_message: str = "") -> str:
     """Get key memories about the user for context."""
     try:
@@ -739,6 +781,7 @@ def get_memory_context(memory_instance, current_message: str = "") -> str:
         for mem in memories[:10]:
             context += f"- [{mem['memory_type']}] {mem['content']}\n"
         context += family_block
+        context += MESSAGE_FIRST_RULE  # 17 Nov 2026
         
         context += """
 ⚠️ USE THESE MEMORIES:

@@ -2582,6 +2582,13 @@ def translate_to_es_en(text):
 
     spanish = _one("Spanish")
     english = _one("English")
+    # 17 Nov 2026 (Elena's test): an English message came back with Spanish on the "English:" line - the model answered
+    # "What do I say in Spanish?" instead of translating it. The person's own words are the line in their own language.
+    try:
+        from espaluz_enhancements import keep_own_language
+        spanish, english = keep_own_language(text, spanish, english)
+    except Exception:  # noqa: BLE001 - the old checks below still run
+        pass
     if not spanish or not english:
         return None
 

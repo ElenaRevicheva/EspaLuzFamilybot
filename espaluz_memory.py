@@ -344,6 +344,7 @@ class EspaLuzMemory:
         " Use the exact spellings in FAMILY NAMES: if a name sounds like one of them (Elisa for Alisa), write the family spelling. Write the SPEAKER's name, never 'the user'. If a fact has a natural end (this week's holiday, Monday's appointment), end its line with [until YYYY-MM-DD], working from TODAY. Start the line with [private] for any worry, money or health matter. If the message corrects a KNOWN FACT, write instead: REPLACES: <the known fact, exactly> => <the corrected fact>."
         " A question is not a fact. Never restate, combine or guess from KNOWN FACTS: write only what THIS message newly"
         " says, and never join two people into one name."
+        " A detail mentioned in passing inside a question or a request for help (\"my son has a fever, what do I say?\") that differs from FAMILY NAMES or KNOWN FACTS is NOT a fact and NOT a REPLACES - EspaLuz asks first. Write REPLACES or a new family member only when the message itself states it plainly (\"yes, Igor is my son, he is 3\", \"we moved from Cuba to Panama\")."
     )
 
     # 6 Nov 2026 (Elena: "firstly it is about memory, because it will follow the long road"): a family linked to the web
