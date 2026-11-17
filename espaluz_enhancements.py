@@ -779,6 +779,8 @@ def build_enhanced_context(
     
     # 2. Learning Direction (Spanish or English)
     learning = get_learning_direction_context(user_type, learning_direction)
+    if learning_direction in ("english", "both"):  # 17 Nov 2026: the one English coach (TWIN of espaluz-chat englishRules)
+        learning += "\n" + "\n".join(english_rules({"learn": _LEARN_VALUE[learning_direction]}))
     parts.append(learning)
     
     # 3. Country Context
@@ -1199,8 +1201,8 @@ def learning_direction_for(platform, platform_user_id, fallback="spanish"):
         prof = (mem.family_notes() or {}).get("profile") or {}
         if prof.get("learn"):
             direction = "english" if _english_only(prof) else ("both" if _wants_english(prof) else "spanish")
-        elif (getattr(mem.user, "learning_direction", None) or "") == "english":
-            direction = "english"  # said in a chat by a family with no web account (english_switch)
+        elif (getattr(mem.user, "learning_direction", None) or "") in ("english", "both"):
+            direction = mem.user.learning_direction  # chosen in a chat or the menu by a family with no web account
     except Exception:  # noqa: BLE001 - the profile is a bonus, never a failure
         direction = ""
     _DIRECTION_CACHE[key] = (_time_ld.time(), direction)
@@ -1211,19 +1213,64 @@ def english_switch(platform, platform_user_id, text):
     """16 Nov 2026: "quiero aprender inglés" / "I want to improve my English" said in a chat switches the English coach on:
     the bots' own record (users.learning_direction = english, read by get_learning_direction_context) for every user, and
     the shared family profile (learn = English, only if still empty) for a family linked to the web."""
-    if not text or not WANTS_ENGLISH_SAID.search(str(text)):
-        return False
+    # 17 Nov 2026: both directions ("quiero aprender español" switches back), through the one learn_switch below; the
+    # message itself is still answered as usual - only the menu commands answer with a confirmation instead.
+    return bool(learn_switch_said(platform, platform_user_id, text))
+
+
+# 17 Nov 2026 (Elena: "a WhatsApp/Telegram-only family must not be stuck in English mode; wire it into the menus").
+# ONE switch for both directions, said in a chat or chosen from the menu (Telegram /english /spanish /both, WhatsApp the
+# single words english / spanish / both). It sets the bots' own record (users.learning_direction, for families with no web
+# account) AND the shared family profile (kids-memory learn_set: the newest choice wins, on every channel).
+WANTS_SPANISH_SAID = re.compile(
+    r"\b(quiero|quisiera|me gustar[ií]a|necesito|deseo)\s+(aprender|mejorar|practicar|volver\s+al?)(\s+(mi|el))?\s+espa[nñ]ol"
+    r"|\b(want|need|would like)\s+to\s+(learn|improve|practi[cs]e|go\s+back\s+to)\s+(my\s+)?spanish"
+    r"|хочу\s+(выучить|учить|подтянуть|улучшить|вернуться\s+к)\s+испанск", re.I)
+_LEARN_VALUE = {"english": "English", "spanish": "Spanish", "both": "Both Spanish and English"}
+_LEARN_REPLY = {
+    "english": ("🇬🇧 ¡Listo! Ahora practicamos inglés natural y profesional, con explicaciones en español. Escríbeme o mándame "
+                "una nota de voz en inglés y te corrijo con cariño. Para volver al español: escribe spanish.\n"
+                "🇬🇧 Done! Now we practise natural, professional English, explained in Spanish. Write or send a voice note in "
+                "English and I'll correct you gently. To go back to Spanish: type spanish."),
+    "spanish": ("🇪🇸 ¡Listo! Volvemos al español para tu vida aquí. Para practicar inglés otra vez: escribe english.\n"
+                "🇪🇸 Done! We're back to Spanish for your life here. To practise English again: type english."),
+    "both": ("🇪🇸🇬🇧 ¡Listo! Practicamos los dos: español para tu vida aquí e inglés para el trabajo y el mundo. "
+             "Solo español: spanish · solo inglés: english.\n"
+             "🇪🇸🇬🇧 Done! We practise both: Spanish for your life here and English for work and the world. "
+             "Only Spanish: spanish · only English: english."),
+}
+
+
+def learn_switch(platform, platform_user_id, target):
+    """Switch what this person learns: 'english', 'spanish' or 'both'. Returns the reply to send (or '' if unknown)."""
+    if target not in _LEARN_VALUE:
+        return ""
     try:
         from espaluz_memory import EspaLuzMemory
         mem = EspaLuzMemory(platform=platform, platform_user_id=str(platform_user_id))
-        if (getattr(mem.user, "learning_direction", None) or "spanish") != "english":
-            mem.update_user(learning_direction="english")
+        if (getattr(mem.user, "learning_direction", None) or "spanish") != target:
+            mem.update_user(learning_direction=target)
+        mem._family_call("learn_set", learn=_LEARN_VALUE[target])
     except Exception as e:  # noqa: BLE001
-        print(f"⚠️ english switch (bot record): {e}", flush=True)
-    profile_fill(platform, platform_user_id, learn="English")
+        print(f"⚠️ learn switch: {e}", flush=True)
     _DIRECTION_CACHE.pop((platform, str(platform_user_id)), None)
-    print(f"🇬🇧 {platform}: English coach switched on (said in chat)", flush=True)
-    return True
+    print(f"🧭 {platform}: learning direction -> {target}", flush=True)
+    return _LEARN_REPLY[target]
+
+
+def learn_switch_said(platform, platform_user_id, text):
+    """A chat phrase ("quiero aprender español" / "I want to learn English" ...) -> the same switch. '' = not a switch."""
+    t = str(text or "")
+    if WANTS_ENGLISH_SAID.search(t):
+        return learn_switch(platform, platform_user_id, "english")
+    if WANTS_SPANISH_SAID.search(t):
+        return learn_switch(platform, platform_user_id, "spanish")
+    return ""
+
+
+LEARN_COMMANDS = {"english": "english", "inglés": "english", "ingles": "english", "английский": "english",
+                  "spanish": "spanish", "español": "spanish", "espanol": "spanish", "испанский": "spanish",
+                  "both": "both", "ambos": "both", "los dos": "both", "оба": "both"}
 
 
 # 3 Nov 2026 (approved by Elena): a money-amount safeguard. Tested on the free chain: an instruction alone did not stop

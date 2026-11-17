@@ -4897,6 +4897,18 @@ def handle_espaluz_map(message):
     bot.send_message(message.chat.id, espaluz_map_text("telegram"), disable_web_page_preview=True)
 
 
+# 17 Nov 2026 (Elena: "a family must never be stuck in English mode; wire it into the menu"): /english /spanish /both,
+# also the same single words typed alone. One switch for the bot record + the shared family profile (learn_switch).
+@bot.message_handler(commands=["english", "spanish", "both"])
+@bot.message_handler(func=lambda m: (m.text or "").strip().lower().strip("!.") in ("english", "inglés", "ingles", "spanish", "español", "espanol", "both", "ambos", "los dos"))
+def handle_learn_switch(message):
+    from espaluz_enhancements import learn_switch, LEARN_COMMANDS
+    word = (message.text or "").strip().lower().lstrip("/").split("@")[0].strip("!.")
+    reply = learn_switch("telegram", str(message.from_user.id), LEARN_COMMANDS.get(word, word))
+    if reply:
+        bot.send_message(message.chat.id, reply)
+
+
 @bot.message_handler(commands=["mama"])
 def handle_mama(message):
     """Back from Pere + Titi to the parent's own role (the role saved by /kids is restored)."""
@@ -5575,6 +5587,9 @@ def handle_menu(message):
         menu_clean = MENU_TEXT.replace('*', '').replace('_', ' ')
         # 12 Nov 2026 (Elena): one line on top so the map is never lost; the menu itself is unchanged.
         menu_clean = "🗺️ /mapa - who EspaLuz is and where to find her (web, WhatsApp, Telegram)\n\n" + menu_clean
+        # 17 Nov 2026 (Elena): what you learn - one more line on top; the menu below is unchanged.
+        menu_clean = ("🇬🇧 /english - practise English, explained in Spanish · 🇪🇸 /spanish - back to Spanish · "
+                      "🇪🇸🇬🇧 /both - both languages\n") + menu_clean
         
         # Telegram limit is 4096 chars - split if needed
         if len(menu_clean) > 4000:
@@ -7096,6 +7111,10 @@ custom_commands = [
     BotCommand("camino", "🌴 Your family's road card"),
     BotCommand("vida", "🌎 Life in your country: checked facts"),
     BotCommand("palabras", "💬 Local words, tap to reveal"),
+    # 17 Nov 2026 (Elena): what you learn - added at the end, every command above unchanged.
+    BotCommand("english", "🇬🇧 Practise English (explained in Spanish)"),
+    BotCommand("spanish", "🇪🇸 Back to Spanish"),
+    BotCommand("both", "🇪🇸🇬🇧 Spanish and English"),
 ]
 
 def register_commands_with_retry(max_retries=5, initial_delay=10):
