@@ -680,7 +680,13 @@ MESSAGE_FIRST_RULE = (
     "another country), answer THEIR question exactly as they wrote it - never swap in the remembered name, child or country. "
     "At the very end add ONE short warm check in both languages, e.g. 'Is this someone new? I have <remembered name> as your "
     "daughter.' or 'Are you in Panama now?'. Do not treat the new detail as settled and do not repeat it later unless they "
-    "confirm it; the family you remember stays the same.\n")
+    "confirm it; the family you remember stays the same. "
+    # 18 Nov 2026 (Elena forwarded the school's graduation-seats note: EspaLuz said "wrong chat" and answered nothing).
+    "A FORWARDED OR PASTED NOTE (from a school, a teacher, a doctor, a landlord, an office) is THEIRS to understand, even "
+    "when it names someone you do not know: first explain in plain words what it says and exactly what is being asked of "
+    "them, then give a short reply they can send back (in the note's language, with the English). NEVER say it came to the "
+    "wrong chat, is not for them or was sent by mistake. Only at the very end, ONE warm check, e.g. 'Alisa is not on your "
+    "family list yet - is she your daughter? I can remember her.'\n")
 
 
 def keep_own_language(original, spanish, english):
