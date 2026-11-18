@@ -1292,7 +1292,8 @@ WANTS_SPANISH_SAID = re.compile(
     r"\b(quiero|quisiera|me gustar[ií]a|necesito|deseo)\s+(aprender|mejorar|practicar|volver\s+al?)(\s+(mi|el))?\s+espa[nñ]ol"
     r"|\b(want|need|would like)\s+to\s+(learn|improve|practi[cs]e|go\s+back\s+to)\s+(my\s+)?spanish"
     r"|хочу\s+(выучить|учить|подтянуть|улучшить|вернуться\s+к)\s+испанск", re.I)
-_LEARN_VALUE = {"english": "English", "spanish": "Spanish", "both": "Both Spanish and English"}
+_LEARN_VALUE = {"english": "English", "spanish": "Spanish", "both": "Both Spanish and English",
+                "settle": "I already speak Spanish - help us settle in, and practise English"}  # 18 Nov 2026: + settling in (native Spanish speakers)
 _LEARN_REPLY = {
     "english": ("🇬🇧 ¡Listo! Ahora practicamos inglés natural y profesional, con explicaciones en español. Escríbeme o mándame "
                 "una nota de voz en inglés y te corrijo con cariño. Para volver al español: escribe spanish.\n"
@@ -1300,6 +1301,11 @@ _LEARN_REPLY = {
                 "English and I'll correct you gently. To go back to Spanish: type spanish."),
     "spanish": ("🇪🇸 ¡Listo! Volvemos al español para tu vida aquí. Para practicar inglés otra vez: escribe english.\n"
                 "🇪🇸 Done! We're back to Spanish for your life here. To practise English again: type english."),
+    # 18 Nov 2026 (Elena): native Spanish speakers moving between countries - this country's own words and ways + English.
+    "settle": ("🧭 ¡Listo! Como ya hablas español, nada de español básico: te cuento las palabras, costumbres y la forma de ser de "
+               "este país, y practicamos inglés de verdad. Para volver: spanish · english · both.\n"
+               "🧭 Done! You already speak Spanish, so no basic Spanish: I'll bring this country's own words, customs and ways, "
+               "and we practise real English. To switch back: spanish · english · both."),
     "both": ("🇪🇸🇬🇧 ¡Listo! Practicamos los dos: español para tu vida aquí e inglés para el trabajo y el mundo. "
              "Solo español: spanish · solo inglés: english.\n"
              "🇪🇸🇬🇧 Done! We practise both: Spanish for your life here and English for work and the world. "
@@ -1308,14 +1314,15 @@ _LEARN_REPLY = {
 
 
 def learn_switch(platform, platform_user_id, target):
-    """Switch what this person learns: 'english', 'spanish' or 'both'. Returns the reply to send (or '' if unknown)."""
+    """Switch what this person learns: 'english', 'spanish', 'both' or 'settle'. Returns the reply to send (or '' if unknown)."""
     if target not in _LEARN_VALUE:
         return ""
     try:
         from espaluz_memory import EspaLuzMemory
         mem = EspaLuzMemory(platform=platform, platform_user_id=str(platform_user_id))
-        if (getattr(mem.user, "learning_direction", None) or "spanish") != target:
-            mem.update_user(learning_direction=target)
+        local = "english" if target == "settle" else target  # the bots' own record knows english/spanish/both; settle = English practice
+        if (getattr(mem.user, "learning_direction", None) or "spanish") != local:
+            mem.update_user(learning_direction=local)
         mem._family_call("learn_set", learn=_LEARN_VALUE[target])
     except Exception as e:  # noqa: BLE001
         print(f"⚠️ learn switch: {e}", flush=True)
@@ -1336,7 +1343,8 @@ def learn_switch_said(platform, platform_user_id, text):
 
 LEARN_COMMANDS = {"english": "english", "inglés": "english", "ingles": "english", "английский": "english",
                   "spanish": "spanish", "español": "spanish", "espanol": "spanish", "испанский": "spanish",
-                  "both": "both", "ambos": "both", "los dos": "both", "оба": "both"}
+                  "both": "both", "ambos": "both", "los dos": "both", "оба": "both",
+                  "settle": "settle", "instalarme": "settle", "obzhitsya": "settle", "обжиться": "settle"}  # 18 Nov 2026
 
 
 # 3 Nov 2026 (approved by Elena): a money-amount safeguard. Tested on the free chain: an instruction alone did not stop

@@ -4906,8 +4906,8 @@ def handle_espaluz_map(message):
 
 # 17 Nov 2026 (Elena: "a family must never be stuck in English mode; wire it into the menu"): /english /spanish /both,
 # also the same single words typed alone. One switch for the bot record + the shared family profile (learn_switch).
-@bot.message_handler(commands=["english", "spanish", "both"])
-@bot.message_handler(func=lambda m: (m.text or "").strip().lower().strip("!.") in ("english", "inglés", "ingles", "spanish", "español", "espanol", "both", "ambos", "los dos"))
+@bot.message_handler(commands=["english", "spanish", "both", "settle"])  # 18 Nov 2026: + /settle
+@bot.message_handler(func=lambda m: (m.text or "").strip().lower().strip("!.") in ("english", "inglés", "ingles", "spanish", "español", "espanol", "both", "ambos", "los dos", "settle", "instalarme", "обжиться"))
 def handle_learn_switch(message):
     from espaluz_enhancements import learn_switch, LEARN_COMMANDS
     word = (message.text or "").strip().lower().lstrip("/").split("@")[0].strip("!.")
@@ -5596,7 +5596,9 @@ def handle_menu(message):
         menu_clean = "🗺️ /mapa - who EspaLuz is and where to find her (web, WhatsApp, Telegram)\n\n" + menu_clean
         # 17 Nov 2026 (Elena): what you learn - one more line on top; the menu below is unchanged.
         menu_clean = ("🇬🇧 /english - practise English, explained in Spanish · 🇪🇸 /spanish - back to Spanish · "
-                      "🇪🇸🇬🇧 /both - both languages\n") + menu_clean
+                      "🇪🇸🇬🇧 /both - both languages\n"
+                      # 18 Nov 2026 (Elena): native Spanish speakers - one more line; every line above and below unchanged.
+                      "🧭 /settle - I already speak Spanish: this country's own words and ways + English practice\n") + menu_clean
         
         # Telegram limit is 4096 chars - split if needed
         if len(menu_clean) > 4000:
@@ -7122,6 +7124,8 @@ custom_commands = [
     BotCommand("english", "🇬🇧 Practise English (explained in Spanish)"),
     BotCommand("spanish", "🇪🇸 Back to Spanish"),
     BotCommand("both", "🇪🇸🇬🇧 Spanish and English"),
+    # 18 Nov 2026 (Elena): settling in - added at the end, every command above unchanged.
+    BotCommand("settle", "🧭 I speak Spanish: settle in + English"),
 ]
 
 def register_commands_with_retry(max_retries=5, initial_delay=10):
