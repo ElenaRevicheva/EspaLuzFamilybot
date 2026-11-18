@@ -1391,6 +1391,15 @@ def money_caveat(reply, known=""):
 # reply is checked. A failed check gets one rewrite through the same chain; if that fails too, the original goes out.
 import re as _re_polish
 
+# 18 Nov 2026 (Elena forwarded the school's graduation-seats note twice; EspaLuz twice answered "wrong chat"). The
+# MESSAGE_FIRST rule sits mid-prompt, and the RECENT CONVERSATION below it held her own two "wrong chat" answers to the same
+# note - she copied herself. This line goes LAST, after BILINGUAL_LAST, in both bots' prompts (twin of espaluz-chat).
+MESSAGE_FIRST_LAST = """ANSWER THIS MESSAGE: if it is a note someone else wrote to them (a school, a teacher, a doctor, a landlord, an office)
+that they forwarded or pasted, it is THEIRS: explain what it says and what is being asked, then give a short reply they can
+send. If an earlier reply of yours in this chat called such a note a wrong chat or not theirs, that was a mistake - do not
+repeat it; answer the note now. Ask about anyone you do not know only at the very end, in one warm line."""
+
+
 BILINGUAL_LAST = """LAST AND MOST IMPORTANT - THE FORM OF THIS REPLY:
 - Both languages, always, even if everything above is in Spanish: each idea in Spanish, and right after it the same idea in English, in short pairs.
 - 2 to 4 emojis across the reply where they fit: the opening, a phrase to learn, the closing. Never zero, never one on every line.

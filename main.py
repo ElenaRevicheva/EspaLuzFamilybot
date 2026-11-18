@@ -144,6 +144,7 @@ except ImportError as e:
 # 3 Nov 2026: one companion text for every grown-up reply (espaluz_enhancements.ESPALUZ_COMPANION_RULES)
 try:
     from espaluz_enhancements import ESPALUZ_COMPANION_RULES, money_caveat, BILINGUAL_LAST, polish_reply, display_reply
+    from espaluz_enhancements import MESSAGE_FIRST_LAST  # 18 Nov 2026
     from espaluz_enhancements import family_names, names_hint, fix_heard_names
     from espaluz_enhancements import belonging_block  # 8 Nov 2026: LIFE IN <family's country>
     from espaluz_enhancements import profile_country, profile_fill  # 8 Nov 2026: "About your new life"
@@ -159,6 +160,7 @@ except Exception:  # noqa: BLE001
     fix_heard_names = lambda text, names: text
     ESPALUZ_COMPANION_RULES = ""
     BILINGUAL_LAST = ""
+    MESSAGE_FIRST_LAST = ""
     polish_reply = lambda text, user_text="": text
     display_reply = lambda text: text
     def money_caveat(reply, known=""):  # noqa: E306 - safe no-op if the module is older
@@ -2208,7 +2210,7 @@ I'll adjust my tone to be: {emotional_calibration.get('response_tone', 'supporti
     """
 
     # Today's date for context
-    system_content += f"\n\nToday is {datetime.now().strftime('%Y-%m-%d')}.\n\n{BILINGUAL_LAST}"
+    system_content += f"\n\nToday is {datetime.now().strftime('%Y-%m-%d')}.\n\n{BILINGUAL_LAST}\n\n{MESSAGE_FIRST_LAST}"
 
     # Prepare messages without system prompt
     messages = session["messages"][-MAX_HISTORY_MESSAGES:]
