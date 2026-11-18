@@ -1051,12 +1051,19 @@ WANTS_ENGLISH_SAID = re.compile(
     r"|хочу\s+(выучить|учить|подтянуть|улучшить)\s+английский", re.I)
 
 
+def _settles(p):
+    # 18 Nov 2026 (Elena): a native Spanish speaker moving between Spanish-speaking countries - no beginner Spanish; the Spanish
+    # half carries this country's own words and ways, the English half is real English practice. Twin of settles() in espaluz-chat.
+    return bool(re.search(r"already speak spanish|ya hablo espa[nñ]ol|уже говорю по-испански", str(p.get("learn") or ""), re.I)
+                or re.fullmatch(r"(spanish|espa[nñ]ol|castellano|испанский)", str(p.get("native_language") or "").strip(), re.I))
+
+
 def _wants_english(p):
-    return bool(re.search(r"english|ingl[eé]s|англ", str(p.get("learn") or ""), re.I))
+    return _settles(p) or bool(re.search(r"english|ingl[eé]s|англ", str(p.get("learn") or ""), re.I))
 
 
 def _english_only(p):
-    return _wants_english(p) and not re.search(r"spanish|espa[nñ]ol|испан|both|ambos|оба", str(p.get("learn") or ""), re.I)
+    return _settles(p) or (_wants_english(p) and not re.search(r"spanish|espa[nñ]ol|испан|both|ambos|оба", str(p.get("learn") or ""), re.I))
 
 
 _ENGLISH_LEVEL = {
@@ -1108,6 +1115,8 @@ def english_rules(p):
 
 def profile_rules(p):
     out = []
+    if _settles(p):
+        out.append("""SETTLING IN - this family already speaks Spanish natively and is moving between Spanish-speaking countries. Never teach beginner Spanish and never explain ordinary Spanish words (this overrides YOU TEACH IN EVERY REPLY above: the phrases they get are this country's own words and English phrases, never basic Spanish). In the Spanish half of every reply, bring what THIS country does differently: its own words and expressions from the country facts (each explained in plain Spanish, with its English meaning), its customs, rhythm and mentality - and, when it fits, the bridge to how it is said or done in """ + str(p.get("country_from") or "their home country") + """. The English half stays real English practice at their level (the ENGLISH COACH below). The reply keeps both languages, as always.""")
     lang = str(p.get("native_language") or "").strip()
     if lang and lang.lower() not in ("english", "spanish", "español", "espanol"):
         out.append(f"HEART LANGUAGE - {lang}: when a Spanish word or grammar point is hard, add ONE short gloss in {lang} for that word only "
