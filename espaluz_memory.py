@@ -73,13 +73,14 @@ def names_grounded(fact: str, text: str, allowed) -> bool:
     return True
 
 
-_RELATION_SAID = _re.compile(
-    r"\b(my|our|mi|mis|nuestr[oa]s?|мо[йяи]|наш[аи]?)\s+(daughter|son|kids?|child(ren)?|wife|husband|partner|mom|mother|dad|"
-    r"father|grand\w*|hij[oa]s?|niñ[oa]s?|esposa|esposo|pareja|mam[aá]|madre|pap[aá]|padre|abuel[oa]s?|дочь|дочка|сын|жена|"
-    r"муж|мама|папа|бабушка|дедушка)\b", _re.I)
+_RELATION_NOUNS = r"(?:daughters?|sons?|kids?|child(?:ren)?|wife|husband|partner|mom|mum|mother|dad|father|grand\w*|nephews?|nieces?|cousins?|aunts?|uncles?|godmother|godfather|godson|goddaughter|step\w+|\w+-in-law|babysitter|nanny|pediatrician|paediatrician|doctor|dentist|teacher|tutor|therapist|psychologist|coach|friends?|best friend|neighbou?rs?|hij[oa]s?|niñ[oa]s?|esposa|esposo|pareja|mam[aá]|madre|pap[aá]|padre|abuel[oa]s?|niet[oa]s?|sobrin[oa]s?|prim[oa]s?|t[ií][oa]s?|madrina|padrino|ahijad[oa]|suegr[oa]|cuñad[oa]|niñera|pediatra|m[eé]dic[oa]|doctora|dentista|maestr[oa]|profesor[a]?|terapeuta|psic[oó]log[oa]|amig[oa]s?|vecin[oa]s?|дочь|дочка|сын|жена|муж|мама|папа|бабушка|дедушка|внук|внучка|племянни\w+|двоюродн\w+|тётя|тетя|дядя|крёстн\w+|крестн\w+|няня|педиатр|врач|учитель\w*|терапевт|психолог|подруга|друг|сосед\w*)"
+_RELATION_SAID = _re.compile(r"\b(?:my|our|mi|mis|nuestr[oa]s?|мо[йяи]|наш[аи]?)\s+(?:\w+\s+)?" + _RELATION_NOUNS + r"\b|\b(?:like family|close to (?:us|the family|our family)|como de la familia|muy cercan[oa]|de confianza|как родн\w+|близк\w+ (?:друг|подруга|человек))\b", _re.I)
+_RELATION_ASKED = _re.compile(r"\b(?:your|tu|tus|su|sus|tuy[oa]|тво[йяи]|ваш[аи]?)\s+(?:\w+\s+)?" + _RELATION_NOUNS + r"\b|\b(?:like family|close to (?:us|the family|our family)|como de la familia|muy cercan[oa]|de confianza|как родн\w+|близк\w+ (?:друг|подруга|человек))\b", _re.I)
+_YES = _re.compile(r"^\W*(s[ií]|yes|yeah|yep|claro|exacto|correcto|así es|asi es|да|ага|конечно|верно)\b", _re.I)
+_RELATION_IN_FACT = _re.compile(r"\b(?:" + _RELATION_NOUNS + r"|close to the family|like family|trusted)\b", _re.I)
 
 
-def stranger_unstated(fact: str, text: str, allowed) -> bool:
+def stranger_unstated(fact: str, text: str, allowed, asked: str = "") -> bool:
     """18 Nov 2026 (a forwarded school note saved 'Alisa is graduating' into a family that has no Alisa, so EspaLuz stopped
     asking who she is): a note naming someone NOT on the family list is kept only when the message says who they are
     ('my daughter Alisa'). Twin of strangerUnstated() in espaluz-chat."""
@@ -88,8 +89,26 @@ def stranger_unstated(fact: str, text: str, allowed) -> bool:
         w = _fold(tok).split("'")[0]
         if w in ok or w in _PLAIN_WORDS:
             continue
-        return not _RELATION_SAID.search(str(text or ""))
+        said = str(text or "")
+        # 18 Nov 2026: "Kevin is my nephew", "nuestra pediatra la Dra. Ana", "like family" - or a yes to EspaLuz's own
+        # question ("¿Alisa es tu hija?" -> "Sí, es mi hija").
+        return not (_RELATION_SAID.search(said) or (_YES.search(said) and _RELATION_ASKED.search(str(asked or ""))))
     return False
+
+
+def circle_names(facts) -> list:
+    """18 Nov 2026: the people the family told EspaLuz about - a relative or someone close (pediatrician, teacher, friend).
+    Names in notes that say who someone is to the family. They count as KNOWN: EspaLuz does not ask about them again."""
+    out = []
+    for f in facts or []:
+        f = str(f or "")
+        if not _RELATION_IN_FACT.search(f):
+            continue
+        for tok in _re.findall(r"\b[A-ZÁÉÍÓÚÑ][A-Za-zÁÉÍÓÚÑáéíóúñü'-]+", f):
+            w = tok.split("'")[0]
+            if _fold(w) not in _PLAIN_WORDS and len(w) >= 3 and w not in out:
+                out.append(w)
+    return out
 
 # Configure logging first
 logging.basicConfig(level=logging.INFO)
@@ -361,6 +380,11 @@ class EspaLuzMemory:
         "passport or cédula numbers, phone numbers, emails, street addresses, card or bank details; and no health "
         "details beyond 'has a doctor's appointment'. If nothing lasting: reply NONE."
         " Use the exact spellings in FAMILY NAMES: if a name sounds like one of them (Elisa for Alisa), write the family spelling. Write the SPEAKER's name, never 'the user'. If a fact has a natural end (this week's holiday, Monday's appointment), end its line with [until YYYY-MM-DD], working from TODAY. Start the line with [private] for any worry, money or health matter. If the message corrects a KNOWN FACT, write instead: REPLACES: <the known fact, exactly> => <the corrected fact>."
+        " A person the user names as family OR as someone close to the family (their pediatrician or doctor, a teacher,"
+        " a therapist, a nanny, a close friend, 'like family') IS a lasting fact: write who they are to the family, e.g."
+        " 'Kevin is Elena's nephew', 'Dra. Ana is the family's pediatrician, a trusted person'. If the USER MESSAGE answers"
+        " a question in ESPALUZ JUST ASKED about who someone is ('sí, es mi hija'), write that person with the name from the"
+        " question ('Alisa is Elena's daughter')."
         " A question is not a fact. Never restate, combine or guess from KNOWN FACTS: write only what THIS message newly"
         " says, and never join two people into one name."
         " A detail mentioned in passing inside a question or a request for help (\"my son has a fever, what do I say?\") that differs from FAMILY NAMES or KNOWN FACTS is NOT a fact and NOT a REPLACES - EspaLuz asks first. Write REPLACES or a new family member only when the message itself states it plainly (\"yes, Igor is my son, he is 3\", \"we moved from Cuba to Panama\")."
@@ -450,7 +474,15 @@ class EspaLuzMemory:
     def remember_facts(self, user_text: str) -> int:
         """Note 0-3 lasting facts from what the user just wrote; returns how many new ones were saved."""
         text = (user_text or "").strip()
-        if not self._user or len(text) < 15 or text.startswith("/"):
+        # 18 Nov 2026: what EspaLuz just asked (her last replies), so "Sí, es mi hija" answers "¿Alisa es tu hija?".
+        asked = ""
+        try:
+            ai = [str(m.content) for m in (self.chat_history.messages if self.chat_history else []) if "AI" in type(m).__name__]
+            asked = " ".join(x[-400:] for x in ai[-2:])
+        except Exception:  # noqa: BLE001
+            asked = ""
+        answering = bool(asked and "?" in asked and _YES.search(text))
+        if not self._user or (len(text) < 15 and not answering) or text.startswith("/"):
             return 0
         if not has_statement(text):  # 8 Nov 2026: a question gives no notes (see has_statement)
             return 0
@@ -466,7 +498,9 @@ class EspaLuzMemory:
             shared = [str(f) for f in notes.get("facts", [])]
             listing = "\n".join(f"- {f}" for f in (shared + own)[:20]) or "none"
             prompt = (f"TODAY: {datetime.now().date().isoformat()}\nSPEAKER: {speaker or (self._user.display_name or 'unknown')}\n"
-                      f"FAMILY NAMES: {names}\nKNOWN FACTS:\n{listing}\nUSER MESSAGE:\n{text[:1200]}")
+                      f"FAMILY NAMES: {names}\nKNOWN FACTS:\n{listing}\n"
+                      + (f"ESPALUZ JUST ASKED:\n{asked[-600:]}\n" if asked else "")
+                      + f"USER MESSAGE:\n{text[:1200]}")
             out, _errors = complete(self._FACTS_SYSTEM, prompt, max_tokens=220,
                                     order=("gemini", "groq", "grok", "openai"))
             if not out or out.strip().upper().startswith("NONE"):
@@ -487,12 +521,12 @@ class EspaLuzMemory:
                 fact = re.sub(r"\s*\[until \d{4}-\d{2}-\d{2}\]\s*$", "", fact, flags=re.I).strip()
                 if not (8 <= len(fact) <= 160) or fact.upper().startswith("NONE"):
                     continue
-                if not names_grounded(fact, text, [m.get("name") for m in notes.get("members", [])]
+                if not names_grounded(fact, text + " " + asked, [m.get("name") for m in notes.get("members", [])]
                                       + [speaker, (self._user.display_name or "").split(" ")[0]]):
                     print("🧠 note dropped: names someone the message did not", flush=True)
                     continue
-                if stranger_unstated(fact, text, [m.get("name") for m in notes.get("members", [])]
-                                     + [speaker, (self._user.display_name or "").split(" ")[0]]):
+                if stranger_unstated(fact, text, [m.get("name") for m in notes.get("members", [])] + list(notes.get("circle") or [])
+                                     + [speaker, (self._user.display_name or "").split(" ")[0]], asked):
                     print("🧠 note dropped: names someone not in the family - EspaLuz asks first", flush=True)
                     continue
                 key = fact.lower().rstrip(".")

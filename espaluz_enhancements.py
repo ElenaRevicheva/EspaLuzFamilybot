@@ -1579,7 +1579,9 @@ def family_names(platform: str, user_id) -> list:
     try:
         from espaluz_memory import EspaLuzMemory
         notes = EspaLuzMemory(platform=platform, platform_user_id=str(user_id)).family_notes()
-        return [m["name"] for m in notes.get("members", []) if m.get("name") and len(m["name"]) >= 3]
+        names = [m["name"] for m in notes.get("members", []) if m.get("name") and len(m["name"]) >= 3]
+        # 18 Nov 2026: + the people the family told EspaLuz about (a relative or someone close) - she knows them now.
+        return names + [n for n in (notes.get("circle") or []) if n and n not in names]
     except Exception as e:  # noqa: BLE001
         print(f"🎙️ family names non-fatal: {str(e)[:100]}", flush=True)
         return []
