@@ -72,6 +72,25 @@ def names_grounded(fact: str, text: str, allowed) -> bool:
         return False
     return True
 
+
+_RELATION_SAID = _re.compile(
+    r"\b(my|our|mi|mis|nuestr[oa]s?|мо[йяи]|наш[аи]?)\s+(daughter|son|kids?|child(ren)?|wife|husband|partner|mom|mother|dad|"
+    r"father|grand\w*|hij[oa]s?|niñ[oa]s?|esposa|esposo|pareja|mam[aá]|madre|pap[aá]|padre|abuel[oa]s?|дочь|дочка|сын|жена|"
+    r"муж|мама|папа|бабушка|дедушка)\b", _re.I)
+
+
+def stranger_unstated(fact: str, text: str, allowed) -> bool:
+    """18 Nov 2026 (a forwarded school note saved 'Alisa is graduating' into a family that has no Alisa, so EspaLuz stopped
+    asking who she is): a note naming someone NOT on the family list is kept only when the message says who they are
+    ('my daughter Alisa'). Twin of strangerUnstated() in espaluz-chat."""
+    ok = {_fold(a) for a in allowed if a}
+    for tok in _re.findall(r"\b[A-ZÁÉÍÓÚÑ][A-Za-zÁÉÍÓÚÑáéíóúñü'-]+", str(fact or "")):
+        w = _fold(tok).split("'")[0]
+        if w in ok or w in _PLAIN_WORDS:
+            continue
+        return not _RELATION_SAID.search(str(text or ""))
+    return False
+
 # Configure logging first
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -471,6 +490,10 @@ class EspaLuzMemory:
                 if not names_grounded(fact, text, [m.get("name") for m in notes.get("members", [])]
                                       + [speaker, (self._user.display_name or "").split(" ")[0]]):
                     print("🧠 note dropped: names someone the message did not", flush=True)
+                    continue
+                if stranger_unstated(fact, text, [m.get("name") for m in notes.get("members", [])]
+                                     + [speaker, (self._user.display_name or "").split(" ")[0]]):
+                    print("🧠 note dropped: names someone not in the family - EspaLuz asks first", flush=True)
                     continue
                 key = fact.lower().rstrip(".")
                 words = set(re.findall(r"[a-z0-9]+", key))

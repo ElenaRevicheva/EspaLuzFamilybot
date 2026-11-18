@@ -1400,6 +1400,15 @@ send. If an earlier reply of yours in this chat called such a note a wrong chat 
 repeat it; answer the note now. Ask about anyone you do not know only at the very end, in one warm line."""
 
 
+def message_first_last(names):
+    """18 Nov 2026 (Elena: "clarifying questions after the answer show EspaLuz has a brain and a memory"): the final line
+    carries the family list, so a person the message names who is not on it ALWAYS gets one warm question at the end.
+    Twin of messageFirstLast() in espaluz-chat."""
+    known = [str(n) for n in (names or []) if n]
+    lst = (f"THE FAMILY LIST (the people you really know): {', '.join(known)}. " if known else "THE FAMILY LIST is empty so far. ")
+    return MESSAGE_FIRST_LAST + "\n" + lst + "If THIS message names a person who is NOT on this list (a note or an earlier chat does not count as knowing them), your LAST line MUST be ONE warm question in both languages about who they are, e.g. 'Alisa no está en tu lista familiar todavía, ¿es tu hija? Así la recuerdo. / Alisa is not on your family list yet - is she your daughter? Then I will remember her.'"
+
+
 BILINGUAL_LAST = """LAST AND MOST IMPORTANT - THE FORM OF THIS REPLY:
 - Both languages, always, even if everything above is in Spanish: each idea in Spanish, and right after it the same idea in English, in short pairs.
 - 2 to 4 emojis across the reply where they fit: the opening, a phrase to learn, the closing. Never zero, never one on every line.
