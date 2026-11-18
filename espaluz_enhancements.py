@@ -778,6 +778,11 @@ def get_memory_context(memory_instance, current_message: str = "") -> str:
                 # conversation, the same rule as the web (ascent supabase/functions/_shared/memory_callback.ts).
                 if notes.get("callback"):
                     family_block += str(notes["callback"])
+                # 18 Nov 2026 (Elena: one brain - each part's learning feeds the others): phrases taught on any channel, what
+                # the child did in class, the last rehearsal. kids-memory renders it ONCE for web and both bots (brain_share.ts).
+                if notes.get("share_text"):
+                    print(f"🧠 shared learning in this reply: {str(notes['share_text']).count(chr(10)) - 1} part(s)", flush=True)
+                    family_block += str(notes["share_text"])
         except Exception:  # noqa: BLE001 - never lose a reply over this
             pass
         if not memories and not family_block:
