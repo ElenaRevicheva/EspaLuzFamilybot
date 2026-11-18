@@ -1342,6 +1342,29 @@ def learn_switch(platform, platform_user_id, target):
     return _LEARN_REPLY[target]
 
 
+# 18 Nov 2026 (Elena: "go plan step 1 - surgical, additive, no new engines"): /plan (Telegram) and the word plan (WhatsApp)
+# send "Your plan this week" - the SAME plan as the dashboard. kids-memory plan_get reads it from what the brain already
+# saved (_shared/week_plan.ts); this bot only relays the text. Twin of the same function in the other bot.
+PLAN_WORDS = {"plan", "mi plan", "my plan", "plan semanal", "план", "мой план"}
+_PLAN_NOT_LINKED = ("🗓 Tu plan semanal vive en tu panel familiar: app.espaluz.lat (crea tu cuenta gratis y conecta este chat). "
+                    "Luego escribe plan y te lo muestro aquí.\n"
+                    "🗓 Your weekly plan lives on your family dashboard: app.espaluz.lat (free account, then connect this chat). "
+                    "Then type plan and I'll show it here.")
+
+
+def week_plan_text(platform, platform_user_id):
+    """The family's plan this week as bilingual text; a gentle pointer to the dashboard when the chat is not linked."""
+    try:
+        from espaluz_memory import EspaLuzMemory
+        got = EspaLuzMemory(platform=platform, platform_user_id=str(platform_user_id))._family_call("plan_get", lang="es")
+        if got.get("text"):
+            print(f"🗓 {platform}: weekly plan sent", flush=True)
+            return got["text"]
+    except Exception as e:  # noqa: BLE001
+        print(f"⚠️ week plan: {e}", flush=True)
+    return _PLAN_NOT_LINKED
+
+
 def learn_switch_said(platform, platform_user_id, text):
     """A chat phrase ("quiero aprender español" / "I want to learn English" ...) -> the same switch. '' = not a switch."""
     t = str(text or "")

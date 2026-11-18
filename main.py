@@ -4920,6 +4920,14 @@ def handle_learn_switch(message):
         bot.send_message(message.chat.id, reply)
 
 
+# 18 Nov 2026 (Elena: "go plan step 1"): /plan and the word plan - "Your plan this week", the same plan as the dashboard.
+@bot.message_handler(commands=["plan"])
+@bot.message_handler(func=lambda m: (m.text or "").strip().lower().strip("!.") in ("plan", "mi plan", "my plan", "plan semanal", "план", "мой план"))
+def handle_week_plan(message):
+    from espaluz_enhancements import week_plan_text
+    bot.send_message(message.chat.id, week_plan_text("telegram", str(message.from_user.id)), disable_web_page_preview=True)
+
+
 @bot.message_handler(commands=["mama"])
 def handle_mama(message):
     """Back from Pere + Titi to the parent's own role (the role saved by /kids is restored)."""
@@ -5602,7 +5610,9 @@ def handle_menu(message):
         menu_clean = ("🇬🇧 /english - practise English, explained in Spanish · 🇪🇸 /spanish - back to Spanish · "
                       "🇪🇸🇬🇧 /both - both languages\n"
                       # 18 Nov 2026 (Elena): native Spanish speakers - one more line; every line above and below unchanged.
-                      "🧭 /settle - I already speak Spanish: this country's own words and ways + English practice\n") + menu_clean
+                      "🧭 /settle - I already speak Spanish: this country's own words and ways + English practice\n"
+                      # 18 Nov 2026 (Elena): the weekly plan - one more line; every line above and below unchanged.
+                      "🗓 /plan - your plan this week (the same as on your dashboard)\n") + menu_clean
         
         # Telegram limit is 4096 chars - split if needed
         if len(menu_clean) > 4000:
@@ -7130,6 +7140,8 @@ custom_commands = [
     BotCommand("both", "🇪🇸🇬🇧 Spanish and English"),
     # 18 Nov 2026 (Elena): settling in - added at the end, every command above unchanged.
     BotCommand("settle", "🧭 I speak Spanish: settle in + English"),
+    # 18 Nov 2026 (Elena): weekly plan - added at the end, every command above unchanged.
+    BotCommand("plan", "🗓 Your plan this week"),
 ]
 
 def register_commands_with_retry(max_retries=5, initial_delay=10):
