@@ -762,6 +762,15 @@ def get_memory_context(memory_instance, current_message: str = "") -> str:
                                      " who you are talking with - their name is enough.\n")
                 if notes.get("lessons"):
                     family_block += "Recent classroom lessons with the child: " + " | ".join(notes["lessons"]) + ". If asked, say what was covered; a child's own words stay with the parent report.\n"
+            # 18 Nov 2026 (Elena: a ticked family-world note must be IRONCLAD in the brain and USED in learning): twin of the
+            # THEIR WORLD rule in espaluz-chat; kids-memory sends these notes first and apart as `world`.
+            world = [str(f) for f in (notes.get("world") or []) if f]
+            if world:
+                print(f"🏡 their world: {len(world)} note(s) in this reply", flush=True)
+                family_block += ("THEIR WORLD - things this family showed you from their home (true, the parent confirmed each one): "
+                                 + "; ".join(world[:6]) + ". Their Spanish is learned best around their own life: when you teach a"
+                                 " phrase or give an example, build it around ONE of these whenever it fits the question - never"
+                                 " list them, never invent details beyond them.\n")
             # 8 Nov 2026: "About your new life" - the family's own answers (twin of profileLine in espaluz-chat)
             if notes.get("linked"):
                 family_block += profile_line(notes.get("profile") or {})
