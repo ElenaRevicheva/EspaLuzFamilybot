@@ -1365,6 +1365,150 @@ def week_plan_text(platform, platform_user_id):
     return _PLAN_NOT_LINKED
 
 
+# ===== 19 Nov 2026 - opt-in MORNING REMINDERS (weekly plan, step 2) =====
+# Elena (Table 2, cto-aipa docs/espaluz/WEEKLY_PLAN_RESEARCH_2026-11-18.md): opt-in only, 2-3 MORNINGS a week
+# (7:45-9:00), ONE concrete line, never after 7 pm, never daily, never streak guilt. The line is the first step of
+# "Your plan this week" not done yet - the same plan as the dashboard and /plan (kids-memory plan_get). Nothing new is
+# generated. Twin of the same block in the other bot; each bot keeps its own opt-in list (morning_reminders.json).
+import json as _json_rem
+import threading as _threading_rem
+
+REMIND_ON_WORDS = {"remind", "remind me", "reminders", "reminders on", "recordatorios", "recuérdame", "recuerdame",
+                   "напоминания", "напоминай"}
+REMIND_OFF_WORDS = {"remind off", "reminders off", "stop reminders", "sin recordatorios", "no recordatorios",
+                    "stop recordatorios", "без напоминаний", "stop remind"}
+_REMIND_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "morning_reminders.json")
+_REMIND_LOCK = _threading_rem.Lock()
+_REMIND_DAYS = (0, 2, 4)            # Monday, Wednesday, Friday (Panamá time)
+_REMIND_FROM, _REMIND_TO = 7 * 60 + 45, 9 * 60  # 7:45 - 9:00
+
+
+def _remind_load():
+    try:
+        with open(_REMIND_FILE, encoding="utf-8") as f:
+            data = _json_rem.load(f)
+            return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _remind_save(data):
+    tmp = _REMIND_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        _json_rem.dump(data, f, ensure_ascii=False)
+    os.replace(tmp, _REMIND_FILE)
+
+
+def _plan_for(platform, platform_user_id):
+    from espaluz_memory import EspaLuzMemory
+    got = EspaLuzMemory(platform=platform, platform_user_id=str(platform_user_id))._family_call("plan_get", lang="es")
+    return got if got.get("linked") else {}
+
+
+def reminders_set(platform, platform_user_id, on):
+    """Turn the morning reminders on/off for this chat. Returns the bilingual reply."""
+    pid = str(platform_user_id)
+    if on:
+        try:
+            linked = bool(_plan_for(platform, pid))
+        except Exception:  # noqa: BLE001
+            linked = False
+        if not linked:
+            return ("⏰ Los recordatorios siguen tu plan semanal, que vive en tu panel familiar: app.espaluz.lat (cuenta "
+                    "gratis, luego conecta este chat). Después escribe remind otra vez.\n"
+                    "⏰ Reminders follow your weekly plan, which lives on your family dashboard: app.espaluz.lat (free "
+                    "account, then connect this chat). Then type remind again.")
+    with _REMIND_LOCK:
+        data = _remind_load()
+        entry = data.get(pid, {})
+        entry.update({"on": bool(on), "changed": datetime.utcnow().isoformat(timespec="seconds")})
+        data[pid] = entry
+        _remind_save(data)
+    print(f"⏰ {platform}: morning reminders {'ON' if on else 'OFF'}", flush=True)
+    if not on:
+        return ("🔕 Listo, sin recordatorios. Tu plan sigue aquí: plan. Para volver a activarlos: remind.\n"
+                "🔕 Done, no reminders. Your plan is still here: plan. To turn them on again: remind.")
+    wa = ("\n(WhatsApp solo me deja escribirte primero si me escribiste en las últimas 24 horas. / WhatsApp only lets me "
+          "write first if you wrote to me in the last 24 hours.)") if platform == "whatsapp" else ""
+    return ("⏰ ¡Listo! Lunes, miércoles y viernes por la mañana (7:45-9:00, hora de Panamá) te mando UNA línea con el "
+            "próximo paso de tu plan. Nunca de noche. Para pararlos: remind off.\n"
+            "⏰ Done! Monday, Wednesday and Friday mornings (7:45-9:00 Panamá time) I send you ONE line with the next "
+            "step of your plan. Never at night. To stop them: remind off." + wa)
+
+
+_REMIND_LINE = {
+    "spanish_moment": ("🌴 Hoy, 5 minutos: pregúntame cómo decir algo que vas a necesitar hoy.",
+                       "Today, 5 minutes: ask me how to say something you'll need today."),
+    "english_step": ("🇬🇧 Hoy, 5 minutos de inglés: escríbeme una frase en inglés sobre «{topic}».",
+                     "Today, 5 minutes of English: write me one sentence in English about «{topic}»."),
+    "english_week": ("🇬🇧 Hoy, 5 minutos de inglés: «{topic}» - escríbeme una frase en inglés y te la corrijo.",
+                     "Today, 5 minutes of English: «{topic}» - write me one sentence and I'll correct it."),
+    "rehearse": ("🎭 Hoy, 10 minutos: ensaya un momento que viene (web, Preparación cara a cara){scene_es}.",
+                 "Today, 10 minutes: rehearse a moment that is coming (web, Face-to-face prep){scene_en}."),
+    "rehearse_en": ("🎭 Hoy, 10 minutos: ensáyalo en inglés - «{topic}» (web, Preparación cara a cara).",
+                    "Today, 10 minutes: rehearse it in English - «{topic}» (web, Face-to-face prep)."),
+    "child_class": ("🦥🐒 Pere y Titi esperan: 10 minutos de clase para tu peque - app.espaluz.lat/classroom",
+                    "Pere and Titi are waiting: 10 minutes of class for your child - app.espaluz.lat/classroom"),
+    "family_note": ("💬 Hoy: cuéntame una cosa nueva de tu familia (una persona, una mascota, un plan).",
+                    "Today: tell me one new thing about your family (a person, a pet, a plan)."),
+    "belong": ("📖 Hoy, 8 minutos: una lección sobre tu país - app.espaluz.lat",
+               "Today, 8 minutes: one lesson about your country - app.espaluz.lat"),
+}
+
+
+def reminder_line(plan):
+    """ONE concrete line: the first step of this week's plan not done yet. '' when the week is done (no message)."""
+    steps = (plan or {}).get("steps") or []
+    todo = next((s for s in steps if not s.get("done")), None)
+    if not todo or todo.get("key") not in _REMIND_LINE:
+        return ""
+    es, en = _REMIND_LINE[todo["key"]]
+    topic = str(todo.get("topic") or "")
+    scene = str(todo.get("scene") or "")
+    fill = {"topic": topic, "scene_es": f": «{scene}»" if scene else "", "scene_en": f": «{scene}»" if scene else ""}
+    done = sum(1 for s in steps if s.get("done"))
+    return (f"{es.format(**fill)}\n{en.format(**fill)}\n\n"
+            f"Tu plan / Your plan: {done}/{len(steps)} ✓ · plan · remind off")
+
+
+def morning_reminder_pass(platform, send, can_send=None, now=None):
+    """Called from the bot's existing 10-minute loop. Sends at most one line per opted-in chat per reminder morning.
+    `send(platform_user_id, text)`; `can_send(platform_user_id)` = WhatsApp's 24 h window (always True on Telegram)."""
+    now = now or datetime.utcnow()
+    local = now - timedelta(hours=5)                        # Panamá (UTC-5, no DST)
+    minute = local.hour * 60 + local.minute
+    if local.weekday() not in _REMIND_DAYS or not (_REMIND_FROM <= minute < _REMIND_TO):
+        return 0
+    day = local.strftime("%Y-%m-%d")
+    with _REMIND_LOCK:
+        data = _remind_load()
+    sent = 0
+    for pid, entry in data.items():
+        if not entry.get("on") or entry.get("last_sent") == day:
+            continue
+        if can_send is not None and not can_send(pid):
+            continue
+        try:
+            line = reminder_line((_plan_for(platform, pid) or {}).get("plan"))
+        except Exception as e:  # noqa: BLE001
+            print(f"⚠️ morning reminder plan: {e}", flush=True)
+            continue
+        with _REMIND_LOCK:  # mark first: a crash after sending must never send it twice
+            data = _remind_load()
+            data.setdefault(pid, entry)["last_sent"] = day
+            _remind_save(data)
+        if not line:
+            continue                                         # the week is done - no message
+        try:
+            send(pid, line)
+            sent += 1
+        except Exception as e:  # noqa: BLE001
+            print(f"⚠️ morning reminder send: {e}", flush=True)
+    if sent:
+        print(f"⏰ {platform}: {sent} morning reminder(s) sent ({day})", flush=True)
+    return sent
+
+
 def learn_switch_said(platform, platform_user_id, text):
     """A chat phrase ("quiero aprender español" / "I want to learn English" ...) -> the same switch. '' = not a switch."""
     t = str(text or "")

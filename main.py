@@ -942,8 +942,30 @@ FAMILY_MEMBERS = {
         "tone": "conversational",
         "language_balance": {"spanish": 0.5, "english": 0.5},
         "russian_variants": ["елена", "еленa", "лена"]
+    },
+    # 19 Nov 2026 (Elena: "the hidden 'Elena, 39' default"): the bot began as the founder's family bot, so anyone it
+    # could not place became "elena, parent, 39" in the AI's instructions. Strangers now get a neutral persona with no
+    # age until they tell EspaLuz who they are (/family, onboarding). The three family personas above are unchanged.
+    "learner": {
+        "role": "learner",
+        "age": None,
+        "learning_level": "intermediate",
+        "interests": [],
+        "tone": "conversational",
+        "language_balance": {"spanish": 0.5, "english": 0.5},
+        "russian_variants": []
+    },
+    "parent": {
+        "role": "parent",
+        "age": None,
+        "learning_level": "intermediate",
+        "interests": ["parenting", "daily life"],
+        "tone": "conversational",
+        "language_balance": {"spanish": 0.5, "english": 0.5},
+        "russian_variants": []
     }
 }
+_DEFAULT_PERSONA = FAMILY_MEMBERS["learner"]
 
 def detect_emotion(text):
     """Simple emotion detection from text"""
@@ -1285,13 +1307,13 @@ def detect_family_member(user_info, message_text=""):
 
     # Check message patterns
     if any(word in message_lower for word in ["мама", "mama", "mother"]):
-        return "elena"
+        return "parent"  # 19 Nov 2026: was "elena" (the founder) - any parent, no age
     elif any(word in message_lower for word in ["бабушка", "abuela", "grandmother"]):
         return "marina"
     # 6 Nov 2026: a short message or the word "hija" is a parent talking as often as a child; a child comes in by /kids or "soy Alisa".
 
-    # Default to elena if we can't determine
-    return "elena"
+    # 19 Nov 2026: default to a neutral learner (was "elena" - every stranger became the founder, parent, 39)
+    return "learner"
 
 def identify_language_learning_content(text, family_member):
     """Extract words or phrases that should be tracked as learning progress"""
@@ -1320,7 +1342,7 @@ def identify_language_learning_content(text, family_member):
         learned_items["grammar_points"].append("ser_vs_estar")
 
     # Limit to recent words based on level
-    member_info = FAMILY_MEMBERS.get(family_member, FAMILY_MEMBERS["elena"])
+    member_info = FAMILY_MEMBERS.get(family_member, _DEFAULT_PERSONA)  # 19 Nov 2026: was FAMILY_MEMBERS["elena"]
     if member_info["learning_level"] == "beginner":
         learned_items["spanish_words"] = learned_items["spanish_words"][:3]
         learned_items["english_words"] = learned_items["english_words"][:3]
@@ -1438,7 +1460,7 @@ def create_initial_session(user_id, user_info, chat_info, message_text=""):
     
     # Detect family member
     family_member = saved_role or detect_family_member(user_info, message_text) 
-    member_info = FAMILY_MEMBERS.get(family_member, FAMILY_MEMBERS["elena"])
+    member_info = FAMILY_MEMBERS.get(family_member, _DEFAULT_PERSONA)  # 19 Nov 2026: was FAMILY_MEMBERS["elena"]
 
     return {
         "messages": [],
@@ -1741,7 +1763,7 @@ def format_mcp_request(session, new_message, translated_input=None, use_extended
 
     # Get family member info
     family_role = session["context"]["user"]["preferences"]["family_role"]
-    member_info = FAMILY_MEMBERS.get(family_role, FAMILY_MEMBERS["elena"])
+    member_info = FAMILY_MEMBERS.get(family_role, _DEFAULT_PERSONA)  # 19 Nov 2026: was FAMILY_MEMBERS["elena"]
 
     # Customize system prompt based on family member and emotional state
     # 3 Nov 2026: the companion rules replace "a tutor" + "Use EMOJIS GENEROUSLY for structure" (measured: 61% of replies
@@ -1830,7 +1852,7 @@ Focus on practical, everyday phrases that would be useful in Panama.
         if user_name:
             system_content += f"""
 👤 USER: {user_name} from {user_country}
-👶 AGE: {user_age} years old
+{f"👶 AGE: {user_age} years old" if user_age else "👶 AGE: not told yet - talk to them as an adult"}
 🎭 ROLE: {user_role}
 Role: {user_role}. Level: intermediate.
 Use their name now and then, not in every reply (never "friend" or "amigo" instead of it).
@@ -2317,7 +2339,7 @@ def adapt_learning_path(session, user_input, response):
     """Dynamically adapt learning path based on user progress and interactions"""
     # Get family member profile
     family_role = session["context"]["user"]["preferences"]["family_role"]
-    member_info = FAMILY_MEMBERS.get(family_role, FAMILY_MEMBERS["elena"])
+    member_info = FAMILY_MEMBERS.get(family_role, _DEFAULT_PERSONA)  # 19 Nov 2026: was FAMILY_MEMBERS["elena"]
 
     # Calculate current proficiency metrics
     vocabulary_size = len(session["context"]["learning"]["progress"]["vocabulary"]["spanish"]["learned"])
@@ -3812,10 +3834,16 @@ def kids_report_telegram():
         save_persistent_sessions()
 
 
+def morning_reminders_telegram():
+    """19 Nov 2026: opt-in morning line from the weekly plan (espaluz_enhancements.morning_reminder_pass - twin)."""
+    from espaluz_enhancements import morning_reminder_pass
+    morning_reminder_pass("telegram", lambda pid, text: bot.send_message(int(pid), text, disable_web_page_preview=True))
+
+
 def kids_report_loop():
     time.sleep(60)
     while True:
-        for job in (kids_report_web, kids_report_telegram):
+        for job in (kids_report_web, kids_report_telegram, morning_reminders_telegram):  # 19 Nov 2026: + reminders
             try:
                 job()
             except Exception as e:
@@ -4593,6 +4621,19 @@ def process_message_with_tracking(user_input, chat_id, user_id, message_obj):
                     print(f"{'✅' if _saved == 2 else '⚠️'} RAG embeddings saved {_saved}/2 for session {_rag_sid[:8]}...")
                 except Exception as _rag_e:
                     print(f"⚠️ RAG save non-fatal: {_rag_e}")
+            # 19 Nov 2026 (Elena: "saving word meanings for /review"): the phrases EspaLuz really taught in this reply,
+            # WITH their English - the same finder as the web and the progress counter (espaluz_phrases = twin of
+            # _shared/phrases.ts). The word tracker below stays as it was (it feeds /progress); it can no longer overwrite
+            # a real meaning (espaluz_memory add_vocabulary).
+            try:
+                from espaluz_phrases import phrases_in
+                _taught = [p for p in phrases_in(full_reply) if p["en"]]
+                for _p in _taught:
+                    memory.add_vocab(_p["es"], _p["en"], "phrase")
+                if _taught:
+                    print(f"📚 saved {len(_taught)} phrase(s) with meanings for /review", flush=True)
+            except Exception as _ph_e:  # noqa: BLE001 - review words are a bonus, never a failure
+                print(f"⚠️ phrase meanings non-fatal: {_ph_e}", flush=True)
             # Track vocabulary learned
             if learned_items.get("spanish_words"):
                 for word in learned_items["spanish_words"][:5]:
@@ -4718,7 +4759,7 @@ def handle_progress(message):
 
     # Get family member info
     family_member = session["context"]["user"]["preferences"]["family_role"]
-    member_info = FAMILY_MEMBERS.get(family_member, FAMILY_MEMBERS["elena"])
+    member_info = FAMILY_MEMBERS.get(family_member, _DEFAULT_PERSONA)  # 19 Nov 2026: was FAMILY_MEMBERS["elena"]
 
     # Extract learning stats
     spanish_words = len(session["context"]["learning"]["progress"]["vocabulary"]["spanish"]["learned"])
@@ -4923,6 +4964,21 @@ def handle_learn_switch(message):
     reply = learn_switch("telegram", str(message.from_user.id), LEARN_COMMANDS.get(word, word))
     if reply:
         bot.send_message(message.chat.id, reply)
+
+
+# 19 Nov 2026 (weekly plan step 2): /remind turns on ONE morning line (Mon/Wed/Fri 7:45-9:00) from the plan;
+# "/remind off" (or the words) turns it off. Opt-in only.
+@bot.message_handler(commands=["remind"])
+@bot.message_handler(func=lambda m: (m.text or "").strip().lower().strip("!.") in (
+    "remind", "remind me", "reminders", "reminders on", "recordatorios", "recuérdame", "recuerdame", "напоминания",
+    "напоминай", "remind off", "reminders off", "stop reminders", "sin recordatorios", "no recordatorios",
+    "stop recordatorios", "без напоминаний", "stop remind"))
+def handle_remind(message):
+    from espaluz_enhancements import reminders_set, REMIND_OFF_WORDS
+    words = (message.text or "").strip().lower().lstrip("/").split("@")[0].strip("!.")
+    off = words in REMIND_OFF_WORDS or words.replace("remind", "").strip() in ("off", "stop", "no")
+    bot.send_message(message.chat.id, reminders_set("telegram", str(message.from_user.id), not off),
+                     disable_web_page_preview=True)
 
 
 # 18 Nov 2026 (Elena: "go plan step 1"): /plan and the word plan - "Your plan this week", the same plan as the dashboard.
@@ -5681,7 +5737,9 @@ def handle_menu(message):
                       # 18 Nov 2026 (Elena): native Spanish speakers - one more line; every line above and below unchanged.
                       "🧭 /settle - I already speak Spanish: this country's own words and ways + English practice\n"
                       # 18 Nov 2026 (Elena): the weekly plan - one more line; every line above and below unchanged.
-                      "🗓 /plan - your plan this week (the same as on your dashboard)\n") + menu_clean
+                      "🗓 /plan - your plan this week (the same as on your dashboard)\n"
+                      # 19 Nov 2026: opt-in reminders - one more line; every line above and below unchanged.
+                      "⏰ /remind - one morning line from your plan (Mon/Wed/Fri), /remind off to stop\n") + menu_clean
         
         # Telegram limit is 4096 chars - split if needed
         if len(menu_clean) > 4000:
@@ -7213,6 +7271,8 @@ custom_commands = [
     BotCommand("settle", "🧭 I speak Spanish: settle in + English"),
     # 18 Nov 2026 (Elena): weekly plan - added at the end, every command above unchanged.
     BotCommand("plan", "🗓 Your plan this week"),
+    # 19 Nov 2026: opt-in morning reminders - added at the end, every command above unchanged.
+    BotCommand("remind", "⏰ Morning reminders from your plan (on/off)"),
 ]
 
 def register_commands_with_retry(max_retries=5, initial_delay=10):

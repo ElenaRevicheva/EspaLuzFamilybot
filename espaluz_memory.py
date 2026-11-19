@@ -1028,7 +1028,9 @@ class EspaLuzMemory:
                         category, country_context, is_slang, next_review, learned_at
                     ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW() + INTERVAL '1 day', NOW())
                     ON CONFLICT (user_id, word, language) DO UPDATE SET
-                        translation = EXCLUDED.translation,
+                        -- 19 Nov 2026: a word saved as its own "translation" (the old tracker) never overwrites a real meaning
+                        translation = CASE WHEN lower(trim(EXCLUDED.translation)) = lower(trim(EXCLUDED.word))
+                                           THEN vocabulary.translation ELSE EXCLUDED.translation END,
                         example_sentence = COALESCE(EXCLUDED.example_sentence, vocabulary.example_sentence)
                     RETURNING id
                 """, (user_id, word.lower(), translation, language, example_sentence,
