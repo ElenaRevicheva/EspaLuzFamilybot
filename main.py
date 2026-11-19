@@ -5555,6 +5555,29 @@ def handle_invite(message):
                  disable_web_page_preview=True)
 
 
+# 19 Nov 2026: the default /menu - one line per command, each with its description (and its exit where it has one).
+TG_SHORT_MENU = """EspaLuz 🇪🇸🇬🇧 - your family's Spanish & English companion.
+Just write, send a voice note or a photo (English, Spanish or Russian): I answer in both, with voice, and I remember your family.
+
+Tap a command - each one explains itself and how to get out:
+🗓 /plan - your plan this week · ⏰ /remind - a morning line from it (/remind off to stop)
+🗺️ /mapa - who EspaLuz is, where to find her
+🇬🇧 /english · 🇪🇸 /spanish · /both - what we practise · 🧭 /settle - you already speak Spanish
+🎙️ /convo on - fast voice translation (/convo off to return)
+👧 /kids - Pere & Titi for your child (/mama to come back)
+🃏 /tarjetas - cards: /camino your road · /vida life here · /palabras local words
+📚 /review - practise your words · 📊 /progress - how you are doing
+🆘 /help_banking · /help_medical · /help_school · /help_shopping · /help_transport · /help_emergency
+🌎 /country - set your country · /slang - local words · /culture - life here
+👤 /family Name Role Age - your profile (/profile to see it)
+🔗 /connect CODE - join your family account from app.espaluz.lat
+💳 /trial - free days left · /pagar - $11 / 30 days · /subscribe - PayPal · /link - link a PayPal ID
+💛 /invite - give a family 14 days free · /feedback - tell us how it goes
+🏢 /org CODE - a code from your school or company
+🎬 /demo - workshop mode (/demo off to exit) · /scenarios - demo ideas
+🔄 /reset - a fresh conversation
+📖 /menu full - everything with details"""
+
 # ===== 18 Nov 2026 - menu audit (cto-aipa docs/espaluz/TELEGRAM_MENU_AUDIT_2026-11-18.md) =====
 _ADMIN_TG_IDS = {"1494063516"}  # the same id /admin and /addsub use
 # Twin of _is_real_question() in the WhatsApp bridge: a real question is never a name, a country or feedback.
@@ -5724,6 +5747,12 @@ Try: /slang to see local expressions."""
 @bot.message_handler(commands=["menu"])
 def handle_menu(message):
     """Show the complete menu - split if too long for Telegram"""
+    # 19 Nov 2026 (Elena: short menu, each command with a description - same approach as WhatsApp): one short message by
+    # default; every command's own first reply says what it does and how to get out. "/menu full" = the full menu below,
+    # unchanged.
+    if not re.search(r"\b(full|complet[oa]|полное|todo)\b", (message.text or "").lower()):
+        bot.send_message(message.chat.id, TG_SHORT_MENU, disable_web_page_preview=True)
+        return
     if ENHANCED_BRAIN_AVAILABLE:
         # Plain text - no parse_mode to avoid underscore issues
         # 18 Nov 2026 (menu audit): keep underscores INSIDE a word (/help_banking, SU_CODIGO); the old .replace('_', ' ')
