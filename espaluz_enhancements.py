@@ -1310,17 +1310,20 @@ _LEARN_REPLY = {
                 "una nota de voz en inglés y te corrijo con cariño. Para volver al español: escribe spanish.\n"
                 "🇬🇧 Done! Now we practise natural, professional English, explained in Spanish. Write or send a voice note in "
                 "English and I'll correct you gently. To go back to Spanish: type spanish."),
-    "spanish": ("🇪🇸 ¡Listo! Volvemos al español para tu vida aquí. Para practicar inglés otra vez: escribe english.\n"
-                "🇪🇸 Done! We're back to Spanish for your life here. To practise English again: type english."),
+    # 19 Nov 2026 (landing path buttons open with this word): neutral for a first visit + what to do next.
+    "spanish": ("🇪🇸 ¡Listo! Practicamos español para tu vida aquí, siempre explicado en inglés. Escríbeme o mándame una nota "
+                "de voz sobre lo que necesitas hoy. Para practicar inglés: escribe english.\n"
+                "🇪🇸 Done! We practise Spanish for your life here, always explained in English. Write or send a voice note "
+                "about what you need today. To practise English: type english."),
     # 18 Nov 2026 (Elena): native Spanish speakers moving between countries - this country's own words and ways + English.
     "settle": ("🧭 ¡Listo! Como ya hablas español, nada de español básico: te cuento las palabras, costumbres y la forma de ser de "
                "este país, y practicamos inglés de verdad. Para volver: spanish · english · both.\n"
                "🧭 Done! You already speak Spanish, so no basic Spanish: I'll bring this country's own words, customs and ways, "
                "and we practise real English. To switch back: spanish · english · both."),
     "both": ("🇪🇸🇬🇧 ¡Listo! Practicamos los dos: español para tu vida aquí e inglés para el trabajo y el mundo. "
-             "Solo español: spanish · solo inglés: english.\n"
+             "Escríbeme o mándame una nota de voz sobre lo que necesitas hoy. Solo español: spanish · solo inglés: english.\n"
              "🇪🇸🇬🇧 Done! We practise both: Spanish for your life here and English for work and the world. "
-             "Only Spanish: spanish · only English: english."),
+             "Write or send a voice note about what you need today. Only Spanish: spanish · only English: english."),
 }
 
 
