@@ -4779,6 +4779,10 @@ def handle_profile(message):
     name = prefs.get("name", "Not set")
     role = prefs.get("family_role", "Not set")
     age = prefs.get("age", "Not set")
+    # 18 Nov 2026 (menu audit): until the person sets a profile, family_role/age are the bot's built-in default persona
+    # (FAMILY_MEMBERS: alisa / marina / elena) - never show those as the stranger's own details.
+    if "name" not in prefs and str(role).lower() in FAMILY_MEMBERS:
+        role, age = "Not set", "Not set"
 
     profile_msg = (
         f"👤 *Tu perfil actual / Your current profile:*\n\n"
@@ -4853,7 +4857,8 @@ def handle_clase(message):
 
 # === 10 Nov 2026 (Elena: "integrate as many cards as makes sense"): live cards in the chat (Telegram widgets, Bot API 10.4).
 # Built by code from the family notebook and the checked belonging pack - see espaluz_cards.py. Free for everyone.
-_CARD_CMDS = {"camino": "road", "road": "road", "vida": "life", "life": "life", "palabras": "words", "words": "words"}
+_CARD_CMDS = {"camino": "road", "road": "road", "vida": "life", "life": "life", "palabras": "words", "words": "words",
+              "culture": "life"}  # 18 Nov 2026 (menu audit): /culture = the life-in-your-country card
 
 
 def _refresh_road_card(uid):
@@ -4875,7 +4880,7 @@ def _send_card_async(chat_id, user_id, kind):
                      args=(bot, chat_id, str(user_id), kind, _card_country(user_id) if kind != "road" else "")).start()
 
 
-@bot.message_handler(commands=["tarjetas", "cards", "camino", "road", "vida", "life", "palabras", "words"])
+@bot.message_handler(commands=["tarjetas", "cards", "camino", "road", "vida", "life", "palabras", "words", "culture"])
 @bot.message_handler(func=lambda m: (m.text or "").strip() == "🃏 Tarjetas · Cards"
                      or (m.text or "").strip().lower().strip("!.") in ("tarjetas", "cards", "mi camino", "my road"))
 def handle_cards(message):
@@ -5401,6 +5406,11 @@ def handle_pending_feedback(message, user_id, text):
             analytics.data["pending_feedback"].pop(user_id, None)
             analytics._save_data()
             return False
+        if pending.get("step") == "text" and _is_real_question(text):
+            # 18 Nov 2026 (menu audit): a question is not feedback - answer it; /feedback can be sent again any time
+            analytics.data["pending_feedback"].pop(user_id, None)
+            analytics._save_data()
+            return False
         if pending.get("step") == "text":
             analytics.add_testimonial(user_id, text[:1000], rating=_feedback_rating(text))
             analytics.data["testimonials"][-1].update({"quote_consent": False, "published": False})
@@ -5488,9 +5498,66 @@ def handle_invite(message):
                  f"Give another family {days} days of EspaLuz free.",
                  disable_web_page_preview=True)
 
+
+# ===== 18 Nov 2026 - menu audit (cto-aipa docs/espaluz/TELEGRAM_MENU_AUDIT_2026-11-18.md) =====
+_ADMIN_TG_IDS = {"1494063516"}  # the same id /admin and /addsub use
+# Twin of _is_real_question() in the WhatsApp bridge: a real question is never a name, a country or feedback.
+_QUESTION_START = re.compile(
+    r"^\s*(how|what|where|when|why|who|which|can|could|do|does|is|are|should|would|will|"
+    r"c[oó]mo|qu[eé]|d[oó]nde|cu[aá]ndo|por\s*qu[eé]|qui[eé]n|cu[aá]l|cu[aá]nto|puedo|puedes|se\s+puede|"
+    r"как|что|где|когда|почему|кто|можно)\b", re.I)
+
+
+def _is_real_question(text):
+    t = str(text or "").strip()
+    return bool(t) and not t.startswith("/") and ("?" in t or "¿" in t or bool(_QUESTION_START.match(t)) and len(t.split()) >= 3)
+
+
+@bot.message_handler(commands=["review"])
+def handle_review(message):
+    """/review was in the menu with NO handler (a new person got "I didn't recognize '/review' as a country").
+    It now shows words this person learned that are due, from the spaced-repetition schedule espaluz_memory already
+    keeps (vocabulary.next_review). Read-only: tap to reveal the meaning."""
+    import html, random
+    words = []
+    try:
+        mem = EspaLuzMemory(platform="telegram", platform_user_id=str(message.from_user.id))
+        if mem.user_id:
+            # Only words saved WITH a meaning: the tutor's tracker stores most words as their own "translation"
+            # (main.py add_vocab(word, word) - 140 of 141 on 18 Nov), and "está - está" is not a review.
+            meant = lambda w: str(w.translation or "").strip().lower() not in ("", str(w.word).strip().lower())
+            due = [w for w in mem.get_words_for_review(mem.user_id, limit=200) if meant(w)]
+            words = random.sample(due, min(6, len(due)))
+            if not words:  # words learned today are due tomorrow - show the newest ones instead of "nothing yet"
+                from types import SimpleNamespace
+                with mem._get_connection() as conn, conn.cursor() as cur:
+                    cur.execute("SELECT word, translation FROM vocabulary WHERE user_id = %s AND coalesce(translation, '') <> '' "
+                                "AND lower(trim(translation)) <> lower(trim(word)) ORDER BY learned_at DESC LIMIT 6",
+                                (mem.user_id,))
+                    words = [SimpleNamespace(word=w, translation=t) for w, t in cur.fetchall()]
+    except Exception as e:  # noqa: BLE001
+        print(f"⚠️ review: {e}", flush=True)
+    if not words:
+        bot.send_message(message.chat.id,
+                         "📚 Todavía no hay palabras para repasar. Escríbeme o mándame una nota de voz: las palabras que "
+                         "aprendes se guardan aquí.\n📚 No words to review yet. Write or send me a voice note: the words "
+                         "you learn are saved here for review.")
+        return
+    lines = [f"• <b>{html.escape(str(w.word))}</b> — <tg-spoiler>{html.escape(str(w.translation or ''))}</tg-spoiler>"
+             for w in words]
+    bot.send_message(message.chat.id,
+                     "📚 Repaso · Review\n¿Recuerdas qué significan? Toca para ver. / Remember what they mean? Tap to see.\n\n"
+                     + "\n".join(lines) + "\n\nOtra ronda / Another round: /review", parse_mode="HTML")
+    print(f"📚 review: {len(words)} words shown", flush=True)
+
+
 @bot.message_handler(commands=["metrics"])
 def handle_metrics(message):
     """Show analytics metrics (for admin/pilots)"""
+    if str(message.from_user.id) not in _ADMIN_TG_IDS:  # 18 Nov 2026 (menu audit): "(admin)" in the menu, now true
+        bot.reply_to(message, "📊 Estos números son para el equipo de EspaLuz. / These numbers are for the EspaLuz team.\n"
+                              "Tu progreso / Your progress: /progress")
+        return
     if not ENHANCED_BRAIN_AVAILABLE:
         bot.reply_to(message, "Metrics not available.")
         return
@@ -5603,7 +5670,9 @@ def handle_menu(message):
     """Show the complete menu - split if too long for Telegram"""
     if ENHANCED_BRAIN_AVAILABLE:
         # Plain text - no parse_mode to avoid underscore issues
-        menu_clean = MENU_TEXT.replace('*', '').replace('_', ' ')
+        # 18 Nov 2026 (menu audit): keep underscores INSIDE a word (/help_banking, SU_CODIGO); the old .replace('_', ' ')
+        # broke six /help_ commands and the /org format. Only stray Markdown underscores are dropped.
+        menu_clean = re.sub(r'(?<!\w)_|_(?!\w)', '', MENU_TEXT.replace('*', ''))
         # 12 Nov 2026 (Elena): one line on top so the map is never lost; the menu itself is unchanged.
         menu_clean = "🗺️ /mapa - who EspaLuz is and where to find her (web, WhatsApp, Telegram)\n\n" + menu_clean
         # 17 Nov 2026 (Elena): what you learn - one more line on top; the menu below is unchanged.
@@ -6739,7 +6808,9 @@ def handle_text(message):
     onboarding = get_user_onboarding(user_id)
     current_step = onboarding.get("step", "country")
     
-    if current_step != "complete":
+    if current_step != "complete" and _is_real_question(text):
+        print(f"❓ {user_id}: a question during setup step '{current_step}' - answered, the step waits", flush=True)
+    elif current_step != "complete":
         # User is in onboarding mode
         
         if current_step == "country":
