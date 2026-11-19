@@ -4685,6 +4685,15 @@ def handle_start(message):
     except Exception as e:
         print(f"⚠️ start payload {start_arg[:4]}: {e}")
 
+    # 19 Nov 2026 (landing "Find your family's path"): t.me/EspaLuzFamily_bot?start=settle|english|both|spanish = the
+    # same switch as typing /settle, /english ... (learn_switch); the usual welcome below still follows.
+    if start_arg.lower() in ("settle", "english", "both", "spanish"):
+        try:
+            from espaluz_enhancements import learn_switch
+            bot.send_message(message.chat.id, learn_switch("telegram", user_id, start_arg.lower()))
+        except Exception as e:  # noqa: BLE001 - never blocks /start
+            print(f"⚠️ start path {start_arg}: {e}")
+
     if looks_like_web_code(start_arg):
         link_web_code(message, start_arg.upper())
 
