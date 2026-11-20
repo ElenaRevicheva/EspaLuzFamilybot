@@ -760,6 +760,8 @@ def generate_speech(text: str, lang: str = "es", message_id=None) -> str:
 
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
+import pro_english_tg  # Pro English, a separate layer on the shared brain (20 Nov 2026)
+pro_english_tg.BOT = bot
 
 # =============================================================================
 # 💾 PERSISTENT SESSION STORAGE (NEW - Upgrade #3)
@@ -4687,6 +4689,12 @@ def handle_start(message):
 
     # 19 Nov 2026 (landing "Find your family's path"): t.me/EspaLuzFamily_bot?start=settle|english|both|spanish = the
     # same switch as typing /settle, /english ... (learn_switch); the usual welcome below still follows.
+    # 20 Nov 2026: Pro English door (?start=proen...), a separate layer behind the same access check (pro_english_tg.py).
+    if start_arg.lower().startswith("proen"):
+        if enforce_learning_access(message, user_id):
+            pro_english_tg.start(user_id, message.chat.id)
+        return
+
     if start_arg.lower() in ("settle", "english", "both", "spanish"):
         try:
             from espaluz_enhancements import learn_switch
@@ -6807,6 +6815,10 @@ def handle_voice(message):
     if not enforce_learning_access(message, user_id):
         return
 
+    if pro_english_tg.is_active(user_id):  # 20 Nov 2026: Pro English voice note (pronunciation score on the shared brain)
+        pro_english_tg.voice(user_id, message.chat.id, message.voice.file_id)
+        return
+
     try:
         file_info = bot.get_file(message.voice.file_id)
         voice_file = bot.download_file(file_info.file_path)
@@ -6898,6 +6910,14 @@ def handle_text(message):
         return
 
     if not enforce_learning_access(message, user_id):
+        return
+
+    # 20 Nov 2026: Pro English (pro_english_tg.py) - its own door; everything below unchanged for everyone else.
+    if pro_english_tg.PRO_ON.match(text):
+        pro_english_tg.start(user_id, message.chat.id)
+        return
+    if pro_english_tg.is_active(user_id):
+        pro_english_tg.turn(user_id, message.chat.id, text)
         return
 
     # === ONBOARDING FLOW ===
@@ -7455,6 +7475,8 @@ except Exception as e:
     print("❌ Could not read subscribers.json:", e)
 
 # === Start the bot with polling mode ===
+pro_english_tg.TRANSCRIBE = transcribe_audio  # 20 Nov 2026: the bot's own Whisper chain
+
 if __name__ == "__main__":
     threading.Thread(target=kids_report_loop, daemon=True).start()  # the parent report after each kids lesson
     threading.Thread(target=payment_reminder_loop, daemon=True).start()  # trial / PágueloFácil reminders on time
