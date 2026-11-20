@@ -396,7 +396,8 @@ def whatsapp_buttons(user_id, sender):
 
 
 # ---------- Which film brought this person (6 Nov 2026, Elena: track who clicks) ----------
-PROMO_REF = re.compile(r"\b(f\d{8}[0-9a-f]{4})[-_](fb|ig|yt)\b")
+# 20 Nov 2026: g<n> = a Facebook group, so each group posted by hand has its own answer (espaluz_catch.py).
+PROMO_REF = re.compile(r"\b(f\d{8}[0-9a-f]{4})[-_](fb|ig|yt|g\d{1,3})\b")
 
 
 def note_promo_arrival(platform, who, text):
@@ -407,5 +408,7 @@ def note_promo_arrival(platform, who, text):
     try:
         _note(platform, str(who), "promo_arrival", f"{found.group(1)}-{found.group(2)}")
         print(f"📣 promo arrival {found.group(1)}-{found.group(2)} channel={platform}", flush=True)
+        import espaluz_catch  # 20 Nov 2026: the person becomes a HubSpot deal carrying the film code
+        espaluz_catch.push_arrival(platform, str(who), found.group(1), found.group(2), text)
     except Exception as e:  # noqa: BLE001
         logging.warning(f"promo arrival non-fatal: {str(e)[:160]}")

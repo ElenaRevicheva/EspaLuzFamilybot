@@ -4670,6 +4670,15 @@ def handle_start(message):
         espaluz_talking.note_promo_arrival("telegram", user_id, start_arg)
     except Exception as promo_err:  # 6 Nov 2026: never blocks /start
         print(f"promo arrival non-fatal: {promo_err}")
+    if "android" in start_arg.lower():  # 20 Nov 2026: ?start=<film>-android opens the Google Play beta door
+        try:
+            import espaluz_catch
+            beta_reply = espaluz_catch.android("telegram", user_id, "ANDROID " + start_arg, {})
+            if beta_reply:
+                bot.send_message(message.chat.id, beta_reply, disable_web_page_preview=True)
+                return
+        except Exception as beta_err:
+            print(f"android beta non-fatal: {beta_err}")
     is_ref = start_arg.lower().startswith("ref_")
     is_org = start_arg.lower().startswith("org_")
     atlas_concept_id = (start_arg if start_arg and "_" in start_arg and len(start_arg) <= 64
@@ -6894,6 +6903,12 @@ def handle_text(message):
 
     # /feedback's answer (and its consent reply) is stored before the access gate: a lapsed family can still tell us
     if handle_pending_feedback(message, user_id, text):
+        return
+    # 20 Nov 2026: Google Play beta door (ANDROID + their Gmail -> free until 31 Dec), before the access gate.
+    import espaluz_catch
+    beta_reply = espaluz_catch.android("telegram", user_id, text, {})
+    if beta_reply:
+        bot.send_message(message.chat.id, beta_reply, disable_web_page_preview=True)
         return
 
     # 6 Nov 2026: "video" = her real talking clip of the last reply (paying families; espaluz_talking.py says so otherwise).
