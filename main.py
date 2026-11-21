@@ -5589,6 +5589,7 @@ Tap a command - each one explains itself and how to get out:
 🗓 /plan - your plan this week · ⏰ /remind - a morning line from it (/remind off to stop)
 🗺️ /mapa - who EspaLuz is, where to find her
 🇬🇧 /english · 🇪🇸 /spanish · /both - what we practise · 🧭 /settle - you already speak Spanish
+💼 pro english - English for your work: scenes, level, pronunciation (exit to return)
 🎙️ /convo on - fast voice translation (/convo off to return)
 👧 /kids - Pere & Titi for your child (/mama to come back)
 🃏 /tarjetas - cards: /camino your road · /vida life here · /palabras local words
@@ -5776,6 +5777,11 @@ def handle_menu(message):
     # 19 Nov 2026 (Elena: short menu, each command with a description - same approach as WhatsApp): one short message by
     # default; every command's own first reply says what it does and how to get out. "/menu full" = the full menu below,
     # unchanged.
+    # 21 Nov 2026 (Elena, live test: /menu inside Pro English showed the family menu, with no word on how to leave): while
+    # Pro English is on, /menu is ITS menu (scenes + progress + exit), the same answer as typing "menu" on WhatsApp.
+    if pro_english_tg.is_active(str(message.from_user.id)):
+        pro_english_tg.turn(str(message.from_user.id), message.chat.id, "menu")
+        return
     if not re.search(r"\b(full|complet[oa]|полное|todo)\b", (message.text or "").lower()):
         bot.send_message(message.chat.id, TG_SHORT_MENU, disable_web_page_preview=True)
         return
